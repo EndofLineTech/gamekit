@@ -3,6 +3,20 @@
 A native macOS launcher for installing and running Windows Steam through
 Apple's Game Porting Toolkit 4.
 
+## Build the native foundation
+
+With Xcode 27 and XcodeGen 2.46.0 or later installed:
+
+```bash
+make check
+make ui-test
+make run
+```
+
+The SwiftUI foundation app and separate `GamekitCore` module are in place.
+See [native development](docs/development.md) for setup, local signing, module
+boundaries, CI and generated-file handling.
+
 ## Initial scope
 
 The first release is a personal SwiftUI prototype targeting macOS 27 on Apple
@@ -10,7 +24,8 @@ silicon. It will validate prerequisites, manage a dedicated Wine environment,
 install Windows Steam, and provide launch, stop, recovery, and diagnostic controls.
 Game evaluation follows the Steam milestone; game-specific fixes are future work.
 
-The project is currently in planning. Work is tracked locally with Beads (`bd`).
+The project is building its native application foundation. Work is tracked with
+Beads (`bd`).
 
 ## Development workflow
 
@@ -33,7 +48,7 @@ See [AGENTS.md](AGENTS.md) for agent workflow instructions.
 The original candidate failed prerequisite validation. The
 [tested runtime revision](docs/runtime-revision.md) selects Sikarugir Wine 10.0
 revision 6 with Apple's unchanged D3DMetal 4.0b2; its prerequisite checks pass.
-Steam installation and rendering/launcher acceptance are the next milestone.
+Full Steam installation and rendering/launcher results are recorded below.
 
 The [E2.1 prerequisite validation report](docs/prerequisite-validation.md)
 preserves the initial Wine/graphics ABI blocker and installed-tool evidence.
@@ -42,5 +57,5 @@ preserves the initial Wine/graphics ABI blocker and installed-tool evidence.
 
 The [Steam feasibility evaluation](docs/steam-evaluation.md) passed in two fresh
 environments: rendering/readback, current-client installation, login, Library
-stability and three exit/relaunch cycles per environment. E2 is accepted; the
-next phase builds the native Gamekit application around this validated recipe.
+stability and three exit/relaunch cycles per environment. E2 is accepted; E3
+builds the native Gamekit application around this validated recipe.
