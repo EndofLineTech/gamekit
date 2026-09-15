@@ -40,6 +40,7 @@ preserves the initial Wine/graphics ABI blocker and installed-tool evidence.
 
 ## Steam feasibility
 
-The [first Steam evaluation](docs/steam-evaluation.md) passed rendering/readback,
-current-client installation, login, Library navigation and exit/relaunch checks.
-The second fresh installation is the remaining E2 acceptance gate.
+The [Steam feasibility evaluation](docs/steam-evaluation.md) passed in two fresh
+environments: rendering/readback, current-client installation, login, Library
+stability and three exit/relaunch cycles per environment. E2 is accepted; the
+next phase builds the native Gamekit application around this validated recipe.

@@ -7,6 +7,7 @@ composition in [the runtime contract](runtime-contract.md).
 E2 prerequisite validation revised the engine to Sikarugir 10.0 revision 6 with
 Apple 4.0b2. Commands below use [that passing revision](runtime-revision.md).
 Its device/queue probe is not the clear/present rendering test specified here.
+Completed first-run and reproduction evidence is in [the E2 evaluation](steam-evaluation.md).
 
 ## Purpose and boundaries
 

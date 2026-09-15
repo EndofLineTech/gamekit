@@ -1,12 +1,13 @@
-# E2.2 — First Windows Steam evaluation
+# E2 — Windows Steam feasibility and reproduction
 
-Date: 2026-09-15. Bead: `gamekit-9jv.2`.
+Date: 2026-09-15. Beads: `gamekit-9jv.2` and `gamekit-9jv.3`.
 
 ## Status
 
-**E2.2 passed in the first fresh environment.** Independent rendering, interactive
-installation, automatic updates, user login/Library and three normal exit/relaunch
-cycles completed. E2.3 still requires a second complete fresh installation.
+**E2.2 and E2.3 passed; the user accepted E2 as complete.** Rendering, installation,
+automatic updates, login, Library stability and three-cycle lifecycle checks
+succeeded in two independently created prefixes. This is a GO for the native-app
+foundation, not a claim of general game compatibility.
 
 ## Configuration and isolation
 
@@ -134,8 +135,93 @@ Raw evidence remains in `installer.log`, `steam-first-launch.log`,
 `relaunch-1.log` through `relaunch-3.log`, `render.log`, and this prefix's Steam
 `logs/bootstrap_log.txt`. The final client was left open for the user.
 
-## Next gate
+## E2.3 — Second fresh environment
 
-E2.3 must repeat the complete installation, rendering and Steam acceptance in a
-second fresh prefix. These successful first-environment results do not yet close
-the E2 epic or establish game compatibility.
+The first client was normally exited and its scoped file handles verified closed
+before starting the reproduction. The path `Environments/steam-eval-b` was checked
+to be absent before Wine created it. No prefix, registry, Steam installation or
+authenticated session was copied from environment A. Only the identical runtime,
+installer artifact and compiled rendering probe were reused.
+
+- Both Windows command architectures run and report Windows 10.0.19043.
+- Rendering repeated with **1,811 Present calls over 15,007 ms**, nine correct GPU
+  readback samples, and the same exact 4.0b2 loaded-image path. The user confirmed
+  the second visible blue window. The submission-count difference is not a
+  benchmark or a claimed rendering regression; display refresh was not measured.
+- The user completed the installer again, with default folder and Run Steam
+  unchecked. One orchestration shell timed out after reporting the installer PID;
+  subsequent checks found the installer complete and no installer process active.
+  The user confirmed they performed the dialog clicks. This was not an unattended
+  installer test or evidence that the installer itself timed out.
+- The user signed in separately and confirmed responsive Library navigation.
+- No new compatibility flags, renderer changes or update pinning were introduced.
+
+Second bootstrap sequence (local time, UTC−05:00):
+
+| Time | Observation |
+|---|---|
+| 14:15:32 | Original 2024 bootstrapper starts |
+| 14:16:19 | Win32 manifest 1769731672 received |
+| 14:16:49 | First update completes |
+| 14:16:50 | January 2026 updater starts |
+| 14:17:36 | Win64 manifest **1788652215** received |
+| 14:17:54 | Second update completes |
+| 14:17:55 | September 2, 2026 updater starts the final client |
+
+The final Steam executable and active `cef.win64/steamwebhelper.exe` are again
+PE32+ x64. Lifecycle observations:
+
+| Cycle | Normal shutdown | Relaunch | Result |
+|---|---|---|---|
+| 1 | 14:20:04 | 14:21:49 | Library responsive, login retained |
+| 2 | 14:25:48 | 14:26:27 | Library responsive, login retained |
+| 3 | 14:27:42 | 14:27:57 | Library responsive, login retained |
+
+Every exit was checked with prefix-scoped `lsof` before the next launch. The user
+confirmed all final checks and no unexpected effect on native macOS Steam.
+The second run's captured logs have no matched unhandled-exception/page-fault,
+assertion-failure or fatal signature. At **19:33:25 UTC**, the final client process
+had been continuously running for **5 minutes 30 seconds**. The user then
+reconfirmed responsive Library navigation and explicitly accepted E2. This final
+timed session supplies the uninterrupted five-minute stability evidence for B;
+the earlier initial session was shorter despite the earlier user confirmation.
+
+## Comparison and minimal recipe
+
+| Property | Environment A | Environment B |
+|---|---|---|
+| Fresh Wine prefix | Yes | Yes |
+| Wine / Windows | Sikarugir 10.0 rev6 / 10.0.19043 | Same |
+| Apple graphics | D3DMetal 4.0b2 | Same |
+| Installer and rendering-probe hashes | Recorded above | Identical artifacts |
+| Final Steam manifest | 1788652215 (win64) | Same |
+| Final Steam / active CEF architecture | x64 / x64 | Same |
+| Blue presentation + fenced GPU readback | Pass | Pass |
+| User login and Library | Pass | Pass |
+| Normal exit/relaunch cycles | 3 | 3 |
+| Login retained across relaunches | Yes | Yes |
+| Uninterrupted five-minute Library stability | Pass, initial session | Pass, final relaunch session |
+| Prefix size after checks | About 2.8 GiB | About 2.6 GiB |
+| Compatibility flags/registry workarounds | None | None |
+
+The reproducible recipe for automation is:
+
+1. Validate the pinned runtime and artifacts in `runtime-revision.md`.
+2. Create a previously absent win64 prefix with the exact dependency environment;
+   confirm Windows 10 and both PE architectures.
+3. Execute the rendering probe through the crash-aware runner and confirm visible
+   output and correct readback/loaded-image evidence.
+4. Run the official Windows installer in that prefix, keeping the default folder.
+   This feasibility run uses user clicks; automation is an E4 deliverable.
+5. Launch the installed `Steam.exe` with an explicit argument array, the same
+   environment, and **its installation directory as working directory**. Allow
+   both automatic update stages and identify the final client/helpers afterward.
+6. Have the user perform sign-in/Steam Guard in Steam. Check Library and session
+   persistence, then verify real process shutdown before each relaunch.
+7. Retain raw logs locally and publish only the normalized evidence. Preserve
+   updater behavior; the observed manifest identifies the tested version and is
+   not an instruction to freeze future Steam updates.
+
+The complete command-level procedure is in `steam-feasibility-test.md`. Both
+prefixes are retained; A is closed and the final B client is left open for the
+user. Game installation and game-specific compatibility remain outside E2.
