@@ -30,5 +30,10 @@ See [AGENTS.md](AGENTS.md) for agent workflow instructions.
 - [Selected runtime and prerequisite checklist](docs/runtime-contract.md)
 - [Steam and graphics feasibility test](docs/steam-feasibility-test.md)
 
-These documents define the candidate configuration. Installation and actual
-Steam compatibility verification are the next milestone.
+The original candidate failed prerequisite validation. The
+[tested runtime revision](docs/runtime-revision.md) selects Sikarugir Wine 10.0
+revision 6 with Apple's unchanged D3DMetal 4.0b2; its prerequisite checks pass.
+Steam installation and rendering/launcher acceptance are the next milestone.
+
+The [E2.1 prerequisite validation report](docs/prerequisite-validation.md)
+preserves the initial Wine/graphics ABI blocker and installed-tool evidence.

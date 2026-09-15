@@ -4,7 +4,38 @@ Decision for `gamekit-wxz.2`, 2026-09-15. Selected **for the E2 feasibility test
 runtime/Steam compatibility is not yet validated. Package evidence is in
 [the inspection report](gptk-package-inspection.md).
 
-## Selected composition
+**Current E2.1 result (2026-09-15): prerequisites pass with the revised
+Sikarugir 10.0 revision 6 runtime and Apple 4.0b2.** Use
+[the tested runtime revision](runtime-revision.md) for all subsequent work.
+The original E1 selection and checklist below are retained as historical context.
+
+**Initial E2.1 result: BLOCKED (subsequently resolved).** The original composition preserves the
+expected files but fails Windows graphics DLL initialization. Apple 4.0b2's
+D3D11 bridge requests `__wine_unix_call_dispatcher`, which this Wine 7.7 runtime
+does not export. D3D11/D3D12/DXGI loader probes fail with error 1114. See
+[prerequisite validation](prerequisite-validation.md) and blocker `gamekit-8sc`.
+This E1 candidate is retained as a reproducible failed result, not a recommended
+working runtime. The replacement has passed architecture, dependency loading and
+hardware-device checks; rendering and Steam acceptance remain E2.2/E2.3 work.
+
+## OS support horizon
+
+[Apple's 2026-09-14 guidance](https://support.apple.com/en-us/102527) states that
+general Rosetta availability ends after macOS 27. Under macOS 28 it remains only
+for certain older, unmaintained games relying on Intel frameworks. There is no
+verified entitlement for this Steam/Wine/GPTK combination to use that exception.
+Both selected host Wine and D3DMetal are x86_64. ARM-native Gamekit UI code does
+not remove their CPU-translation requirement; ARM-native Wine alone also does
+not translate Intel Windows binaries.
+
+Keep this prototype explicitly targeted at macOS 27. Runtime capability checks
+must represent untested/unsupported OS versions rather than treating every newer
+macOS as compatible. Preserve the runtime adapter boundary so another supported
+translation path can be integrated if one becomes viable. Investigate and test
+macOS 28 separately under `gamekit-6v1` before promising support; no replacement
+path or exception coverage has been established.
+
+## Initial composition (superseded)
 
 Use the **GCenx Game-Porting-Toolkit-3.0-3 prebuilt Wine distribution**, with the
 user's **Apple D3DMetal 4.0b2** libraries overlaid into a dedicated local copy.

@@ -4,6 +4,10 @@ Test design for `gamekit-wxz.3`, executed later by E2.1–E2.3. Nothing below ha
 been executed as an installation test during E1. Use the pinned artifacts and
 composition in [the runtime contract](runtime-contract.md).
 
+E2 prerequisite validation revised the engine to Sikarugir 10.0 revision 6 with
+Apple 4.0b2. Commands below use [that passing revision](runtime-revision.md).
+Its device/queue probe is not the clear/present rendering test specified here.
+
 ## Purpose and boundaries
 
 Prove that this Mac can run the current Windows Steam client through the selected
@@ -39,9 +43,10 @@ After E2.1 has installed and validated prerequisites:
 
 ```bash
 ROOT="$HOME/Library/Application Support/Gamekit"
-APP="$ROOT/Runtimes/gcenx-3.0-3-d3dmetal-4.0b2/Game Porting Toolkit.app"
-WINE="$APP/Contents/Resources/wine/bin/wine64"
-SERVER="$APP/Contents/Resources/wine/bin/wineserver"
+APP="$ROOT/Runtimes/sikarugir10.0_6-d3dmetal4.0b2/Template-1.0.11.app"
+WINE="$APP/Contents/SharedSupport/wine/bin/wine"
+SERVER="$APP/Contents/SharedSupport/wine/bin/wineserver"
+FRAMEWORKS="$APP/Contents/Frameworks"
 PREFIX="$ROOT/Environments/steam-eval-a"
 
 /usr/bin/arch -x86_64 /usr/bin/uname -m
@@ -56,6 +61,8 @@ environment; unset inherited `WINEPREFIX`, `WINEDLLOVERRIDES`, `WINEDLLPATH`,
 variables unless they are explicitly part of the test recipe.
 
 ```bash
+export DYLD_FALLBACK_LIBRARY_PATH="$APP/Contents/SharedSupport/wine/lib:$FRAMEWORKS:$FRAMEWORKS/GStreamer.framework/Libraries"
+export DYLD_FALLBACK_FRAMEWORK_PATH="$APP/Contents/SharedSupport/wine/lib/external:$FRAMEWORKS"
 WINEPREFIX="$PREFIX" WINEARCH=win64 "$WINE" wineboot -u
 WINEPREFIX="$PREFIX" "$WINE" winecfg
 ```
