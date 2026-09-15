@@ -32,3 +32,6 @@ See [AGENTS.md](AGENTS.md) for agent workflow instructions.
 
 These documents define the candidate configuration. Installation and actual
 Steam compatibility verification are the next milestone.
+
+The [E2.1 prerequisite validation report](docs/prerequisite-validation.md)
+records installed tools and a Wine/graphics ABI blocker in that candidate.
