@@ -1,0 +1,5 @@
+# Machine-local Beads database, audit records, credentials/config and logs.
+# Backed up by Dolt to refs/dolt/data, not by ordinary source commits.
+.beads/
+__pycache__/
+*.pyc
