@@ -2,6 +2,10 @@
 
 Date: 2026-09-15. Work: `gamekit-8sc`, unblocking `gamekit-9jv.1`.
 
+Follow-up: [E2.2/E2.3 subsequently passed](steam-evaluation.md), including rendering
+and Steam acceptance in two fresh prefixes. The results below describe the
+prerequisite-validation step and its narrower test coverage.
+
 ## Decision and verification boundary
 
 Use **WS12WineSikarugir10.0_6 + Template-1.0.11 dependencies + the complete,

@@ -7,6 +7,7 @@ composition in [the runtime contract](runtime-contract.md).
 E2 prerequisite validation revised the engine to Sikarugir 10.0 revision 6 with
 Apple 4.0b2. Commands below use [that passing revision](runtime-revision.md).
 Its device/queue probe is not the clear/present rendering test specified here.
+Completed first-run and reproduction evidence is in [the E2 evaluation](steam-evaluation.md).
 
 ## Purpose and boundaries
 
@@ -15,9 +16,9 @@ Wine runtime, with Apple 4.0b2 graphics integration independently verified. Repe
 from a second fresh prefix before building the application. Steam login is an
 interactive user step. The test does not download games or diagnose anti-cheat.
 
-The independent graphics diagnostic is a small **project-owned x64 D3D12 clear /
-present probe**, to be implemented as part of E2.2 test preparation. It is not an
-already available executable. This avoids making a commercial game or external
+The independent graphics diagnostic is the **project-owned x64 D3D12 clear /
+present/readback probe** at `diagnostics/d3d12_render_probe.cpp`, implemented and
+exercised in E2.2. This avoids making a commercial game or external
 binary of uncertain provenance a prerequisite for validating graphics loading.
 
 ## Evidence record (one directory per run)
@@ -84,7 +85,7 @@ an equivalent actual-PE execution test rather than skipping the 32-bit gate.
 
 ## 2. Independent D3D12 diagnostic
 
-Implement and retain `d3d12-probe.cpp` with the E2 evidence/test source. It must:
+Build `diagnostics/d3d12_render_probe.cpp` from the repository. It must:
 
 1. Create a Win32 window and hardware DXGI adapter (explicitly reject WARP).
 2. Create a D3D12 device with feature level 11_0, command queue and flip swapchain.
@@ -92,17 +93,19 @@ Implement and retain `d3d12-probe.cpp` with the E2 evidence/test source. It must
    submit commands, present and wait on a fence correctly.
 4. Repeat for at least 120 frames while processing messages; keep the window
    alive for at least 15 seconds so loaded-image diagnostics can be captured.
-5. Print adapter name, device creation results, frame count, HRESULT failures and
+5. Verify fenced GPU readback at nine pixel positions against the expected color.
+6. Print adapter name, device creation results, Present-call count, HRESULT failures and
    exit status. Return nonzero on graphics creation/submission failure.
 
 No shaders, assets or shader-converter installation are necessary for a clear.
 Build with the ARM-hosted cross-compiler installed for this diagnostic:
 
 ```bash
-x86_64-w64-mingw32-g++ -std=c++17 -O2 -static \
-  d3d12-probe.cpp -o d3d12-probe.exe -ld3d12 -ldxgi -luser32 -lgdi32
-file d3d12-probe.exe
-shasum -a 256 d3d12-probe.exe
+x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -Wextra -Werror -static \
+  diagnostics/d3d12_render_probe.cpp -o "$ROOT/Diagnostics/d3d12-render-probe.exe" \
+  -ld3d12 -ldxgi -ldxguid -luser32 -lgdi32
+file "$ROOT/Diagnostics/d3d12-render-probe.exe"
+shasum -a 256 "$ROOT/Diagnostics/d3d12-render-probe.exe"
 ```
 
 The source will define a normal `main` and report to stdout. Record any actual
@@ -111,7 +114,7 @@ toolchain/link adjustments; do not download an unrelated replacement probe.
 Run in the same prefix with diagnostic module logging:
 
 ```bash
-WINEPREFIX="$PREFIX" WINEDEBUG=+loaddll "$WINE" d3d12-probe.exe
+WINEPREFIX="$PREFIX" WINEDEBUG=+loaddll "$WINE" "$ROOT/Diagnostics/d3d12-render-probe.exe"
 ```
 
 Capture stdout/stderr and the corresponding D3DMetal system-log messages. While

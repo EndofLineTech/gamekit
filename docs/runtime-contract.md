@@ -15,8 +15,9 @@ D3D11 bridge requests `__wine_unix_call_dispatcher`, which this Wine 7.7 runtime
 does not export. D3D11/D3D12/DXGI loader probes fail with error 1114. See
 [prerequisite validation](prerequisite-validation.md) and blocker `gamekit-8sc`.
 This E1 candidate is retained as a reproducible failed result, not a recommended
-working runtime. The replacement has passed architecture, dependency loading and
-hardware-device checks; rendering and Steam acceptance remain E2.2/E2.3 work.
+working runtime. The replacement passed architecture, dependency loading and
+hardware-device checks. Subsequent rendering and Steam acceptance in two fresh
+prefixes are recorded in [the E2 evaluation](steam-evaluation.md).
 
 ## OS support horizon
 

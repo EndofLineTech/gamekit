@@ -37,3 +37,10 @@ Steam installation and rendering/launcher acceptance are the next milestone.
 
 The [E2.1 prerequisite validation report](docs/prerequisite-validation.md)
 preserves the initial Wine/graphics ABI blocker and installed-tool evidence.
+
+## Steam feasibility
+
+The [Steam feasibility evaluation](docs/steam-evaluation.md) passed in two fresh
+environments: rendering/readback, current-client installation, login, Library
+stability and three exit/relaunch cycles per environment. E2 is accepted; the
+next phase builds the native Gamekit application around this validated recipe.
