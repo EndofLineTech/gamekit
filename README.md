@@ -37,3 +37,9 @@ Steam installation and rendering/launcher acceptance are the next milestone.
 
 The [E2.1 prerequisite validation report](docs/prerequisite-validation.md)
 preserves the initial Wine/graphics ABI blocker and installed-tool evidence.
+
+## Steam feasibility
+
+The [first Steam evaluation](docs/steam-evaluation.md) passed rendering/readback,
+current-client installation, login, Library navigation and exit/relaunch checks.
+The second fresh installation is the remaining E2 acceptance gate.
