@@ -1,0 +1,138 @@
+import Darwin
+import Foundation
+
+/// Per-record atomic metadata storage. It never creates, deletes or resets Wine prefixes.
+public actor EnvironmentStore {
+    public nonisolated let root: URL
+    private let beforeCommit: @Sendable () throws -> Void
+
+    public static var applicationSupportRoot: URL {
+        URL.applicationSupportDirectory.appendingPathComponent("Gamekit", isDirectory: true)
+    }
+
+    public init(root: URL = EnvironmentStore.applicationSupportRoot) throws {
+        self.root = try Self.canonicalRoot(root)
+        beforeCommit = {}
+    }
+
+    /// Fault injection at the boundary between the completed temporary write and publication.
+    init(root: URL, beforeCommit: @escaping @Sendable () throws -> Void) throws {
+        self.root = try Self.canonicalRoot(root)
+        self.beforeCommit = beforeCommit
+    }
+
+    private static func canonicalRoot(_ supplied: URL) throws -> URL {
+        guard supplied.isFileURL, supplied.path.hasPrefix("/"), supplied.path != "/" else {
+            throw EnvironmentStoreError.unsafePath
+        }
+        let standardized = supplied.standardizedFileURL
+        guard standardized.path != "/" else { throw EnvironmentStoreError.unsafePath }
+        // Resolve OS/user aliases in the trusted parent (e.g. /var -> /private/var),
+        // but never resolve the app root itself: a symlink there must be rejected.
+        // Foundation deliberately shortens /private/var back to /var on macOS,
+        // so use realpath for an alias-free path that O_NOFOLLOW can traverse.
+        guard let resolved = realpath(standardized.deletingLastPathComponent().path, nil) else {
+            throw EnvironmentStoreError.fileSystem(operation: "resolve trusted parent", code: errno)
+        }
+        defer { free(resolved) }
+        return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
+            .appendingPathComponent(standardized.lastPathComponent, isDirectory: true)
+    }
+
+    /// Informational locator, not authorization for unguarded filesystem mutation.
+    public nonisolated func prefixURL(for id: EnvironmentID) -> URL {
+        root.appendingPathComponent("Environments", isDirectory: true)
+            .appendingPathComponent(id.rawValue, isDirectory: true)
+    }
+
+    private func directories(create: Bool) throws -> (root: ManagedDirectory, metadata: ManagedDirectory)? {
+        guard let rootDirectory = try ManagedDirectory.openRoot(root, create: create),
+              let metadata = try rootDirectory.directory("Metadata", create: create),
+              let environments = try metadata.directory("Environments", create: create) else { return nil }
+        return (rootDirectory, environments)
+    }
+
+    private func load(_ id: EnvironmentID, from directory: ManagedDirectory) throws -> EnvironmentRecord? {
+        guard let data = try directory.read("\(id.rawValue).json") else { return nil }
+        let record = try EnvironmentDocument.decode(data)
+        guard record.id == id else { throw EnvironmentStoreError.identityMismatch }
+        return record
+    }
+
+    public func load(_ id: EnvironmentID) throws -> EnvironmentRecord? {
+        guard let directory = try directories(create: false) else { return nil }
+        return try load(id, from: directory.metadata)
+    }
+
+    public func loadAll() throws -> [EnvironmentRecord] {
+        guard let directory = try directories(create: false) else { return [] }
+        return try directory.metadata.names().filter { $0.hasSuffix(".json") }.map { name in
+            let id = try EnvironmentID(String(name.dropLast(5)))
+            guard let record = try load(id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
+            return record
+        }
+    }
+
+    private func inspectFiles(_ record: EnvironmentRecord, in rootDirectory: ManagedDirectory) throws -> EnvironmentFiles {
+        try record.validate()
+        guard let environments = try rootDirectory.directory("Environments"),
+              let prefix = try environments.directory(record.id.rawValue) else {
+            return EnvironmentFiles(prefixExists: false, executableExists: false)
+        }
+        var directory = prefix
+        let parts = record.steamExecutable.components
+        for part in parts.dropLast() {
+            guard let next = try directory.directory(part) else {
+                return EnvironmentFiles(prefixExists: true, executableExists: false)
+            }
+            directory = next
+        }
+        return EnvironmentFiles(prefixExists: true, executableExists: try directory.containsRegularFile(parts[parts.count - 1]))
+    }
+
+    public func create(_ record: EnvironmentRecord) throws -> EnvironmentRecord {
+        try record.validate()
+        guard record.revision == 0 else { throw EnvironmentStoreError.conflict }
+        guard let directory = try directories(create: true) else { throw EnvironmentStoreError.notFound }
+        return try directory.metadata.withWriteLock {
+            if try directory.metadata.containsRegularFile("\(record.id.rawValue).json") {
+                throw EnvironmentStoreError.alreadyExists
+            }
+            if try inspectFiles(record, in: directory.root).prefixExists { throw EnvironmentStoreError.prefixAlreadyExists }
+            let data = try EnvironmentDocument.encode(record)
+            try directory.metadata.write(data, to: "\(record.id.rawValue).json", createOnly: true, beforeCommit: beforeCommit)
+            return try EnvironmentDocument.decode(data)
+        }
+    }
+
+    public func save(_ record: EnvironmentRecord) throws -> EnvironmentRecord {
+        try record.validate()
+        guard let directory = try directories(create: false) else { throw EnvironmentStoreError.notFound }
+        return try directory.metadata.withWriteLock {
+            guard let current = try load(record.id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
+            guard current.revision == record.revision, current.createdAt == record.createdAt else {
+                throw EnvironmentStoreError.conflict
+            }
+            _ = try inspectFiles(record, in: directory.root)
+            var updated = record
+            updated.revision += 1
+            updated.updatedAt = max(current.updatedAt, max(record.updatedAt, Date()))
+            let data = try EnvironmentDocument.encode(updated)
+            try directory.metadata.write(data, to: "\(record.id.rawValue).json", createOnly: false, beforeCommit: beforeCommit)
+            return try EnvironmentDocument.decode(data)
+        }
+    }
+
+    /// Process/runtime observations are supplied by E3.3's scoped detector. Unknown
+    /// observations stay unverified; only a positively idle process set interrupts work.
+    public func reconcile(_ id: EnvironmentID, process: ProcessObservation,
+                          prerequisites: PrerequisiteObservation, at now: Date = Date()) throws -> ReconciledEnvironment {
+        guard let directory = try directories(create: false),
+              let original = try load(id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
+        let files = try inspectFiles(original, in: directory.root)
+        let result = EnvironmentReconciler.reconcile(original, files: files, process: process,
+                                                    prerequisites: prerequisites, at: now)
+        let persisted = result.record == original ? original : try save(result.record)
+        return ReconciledEnvironment(record: persisted, files: files, state: result.state)
+    }
+}

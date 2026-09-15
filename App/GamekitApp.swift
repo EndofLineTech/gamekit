@@ -6,7 +6,7 @@ struct GamekitApp: App {
         Window("Gamekit", id: "main") {
             ContentView()
         }
-        .defaultSize(width: 760, height: 500)
+        .defaultSize(width: 760, height: 660)
         .windowResizability(.contentMinSize)
     }
 }

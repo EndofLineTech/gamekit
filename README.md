@@ -13,7 +13,8 @@ make ui-test
 make run
 ```
 
-The SwiftUI foundation app and separate `GamekitCore` module are in place.
+The SwiftUI foundation app and separate `GamekitCore` module are in place,
+including [environment metadata and restart reconciliation](docs/environment-state.md).
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 
