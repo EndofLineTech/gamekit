@@ -163,6 +163,13 @@ is the executable for this engine. This revises the E1 launch recipe. Do not run
 the template's generic launch target or its internal `Contents/drive_c` shortcut;
 all prefixes are external, explicit Gamekit-managed paths.
 
+The same fallback paths are required for **wineserver commands**, including
+shutdown. A prefix-only `wineserver -k` invocation fails to locate
+`libinotify.0.dylib`; this was reproduced during cleanup. With the documented
+environment, `wineserver --version` succeeds and `-k` returns 1 without errors
+when no server is running for that prefix. Do not mistake that inactive-prefix
+status for a loader failure or drop the dependency environment for cleanup.
+
 ## Repeatable checks
 
 Compile `diagnostics/prerequisite_probe.c` with both MinGW gcc target compilers,
