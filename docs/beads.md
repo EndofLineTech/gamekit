@@ -8,6 +8,8 @@
 - GitHub backup: `git+https://github.com/EndofLineTech/gamekit.git`, named `github`.
 - Git data ref: **`refs/dolt/data`**, separate from `refs/heads/dev` and
   `refs/heads/main`. Backup updates never modify either protected source branch.
+- Dolt also maintains a `__dolt_remote_info__` metadata branch in the repository.
+  It is managed by Dolt, not an application development or release branch.
 - This backup is **public**, as requested. It includes Dolt history, issue text,
   dependencies, and author/audit metadata. Keep credentials out of issue content.
 
