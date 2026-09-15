@@ -16,7 +16,9 @@
   its PR URL when a PR has been requested and created. Check branch and tracking
   state before editing, committing, or pushing.
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+This project uses **bd** (beads) with a Dolt SQL server for issue tracking.
+Run `bd prime` for CLI workflow context. See [the Beads runbook](docs/beads.md)
+for startup, backup, fresh-clone recovery, and troubleshooting.
 
 ## Quick Reference
 
@@ -25,7 +27,8 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd dolt test --json    # Verify the local SQL server connection
+python3 scripts/beads_service.py backup  # Snapshot board to GitHub
 ```
 
 <!-- BEGIN BEADS INTEGRATION -->
@@ -36,7 +39,7 @@ bd sync               # Sync with git
 ### Why bd?
 
 - Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
+- Versioned database: Dolt snapshots include board history and working sets
 - Agent-optimized: JSON output, ready work detection, discovered-from links
 - Prevents duplicate tracking systems and confusion
 
@@ -93,13 +96,25 @@ bd close bd-42 --reason "Completed" --json
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 5. **Complete**: `bd close <id> --reason "Done"`
 
-### Auto-Sync
+### Database and Backup
 
-bd automatically syncs with git:
-
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
+- Tested tooling: Beads 0.56.1 and Dolt 2.3.4. Evaluate upgrades separately.
+- Beads connects to `127.0.0.1:3307`, database `beads_gamekit`. Local data is
+  under `.beads/dolt/`; `.beads/` is excluded from source commits.
+- The macOS LaunchAgent starts Dolt at user login and restarts it after failure.
+- A second LaunchAgent snapshots the database hourly and at login. Check
+  `~/Library/Application Support/Gamekit/Beads/backup-status.json` for its result.
+- Run `python3 scripts/beads_service.py backup` after board changes and at handoff.
+- The approved **public** backup is stored in this repository's `refs/dolt/data`.
+  It contains the board, audit/author information and Dolt history. Do not put
+  secrets in beads. This is a database snapshot, not a source-code branch or PR.
+- Ordinary `git push` and `git pull` do **not** synchronize the board. Do not rely
+  on JSONL auto-export, `bd sync`, or Git hooks to do so in this version.
+- We configured a Dolt **backup**, not a collaboration remote; `bd dolt push/pull`
+  are not the snapshot workflow. Use the helper and runbook instead.
+- One Mac is the active board writer. Restore on a second Mac before handoff;
+  coordinate writers rather than overwriting divergent snapshots.
+- Never remove live Dolt lock files or reset/reinitialize a populated database.
 
 ### Important Rules
 
@@ -111,7 +126,7 @@ bd automatically syncs with git:
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
-For more details, see README.md and docs/QUICKSTART.md.
+For more details, see README.md and [docs/beads.md](docs/beads.md).
 
 <!-- END BEADS INTEGRATION -->
 
@@ -127,12 +142,12 @@ For more details, see README.md and docs/QUICKSTART.md.
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
-   git push
+   python3 scripts/beads_service.py backup
+   git push -u origin HEAD  # task branch only; never push directly to dev/main
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
+5. **Clean up** - Inspect stashes and branches; preserve unrelated user work
+6. **Verify** - Intended source changes pushed and latest board backup successful
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**

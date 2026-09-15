@@ -10,7 +10,9 @@ silicon. It will validate prerequisites, manage a dedicated Wine environment,
 install Windows Steam, and provide launch, stop, recovery, and diagnostic controls.
 Game evaluation follows the Steam milestone; game-specific fixes are future work.
 
-The project is currently in planning. Work is tracked locally with Beads (`bd`).
+The project is currently in planning. Work is tracked with Beads (`bd`) using a
+local Dolt server and a public GitHub database backup. See the
+[Beads operations runbook](docs/beads.md) for startup, backup and recovery.
 
 ## Development workflow
 
