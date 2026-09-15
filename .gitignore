@@ -3,3 +3,28 @@
 .beads/
 __pycache__/
 *.pyc
+
+# Generated Swift/Xcode output; project.yml and Package.swift are authoritative.
+.build/
+.swiftpm/
+Gamekit.xcodeproj/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcresult/
+
+# Evaluation artifacts and private runtime/user data belong outside this repo.
+Artifacts/
+Runtimes/
+Environments/
+*.dmg
+*.pkg
+*.exe
+*.dll
+*.dylib
+*.app/
+*.framework/
+*.tar.xz
+*.zip
+*.log
+.DS_Store
