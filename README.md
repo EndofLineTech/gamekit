@@ -23,3 +23,12 @@ The project is currently in planning. Work is tracked locally with Beads (`bd`).
   allowing the personal prototype to be maintained by one person.
 
 See [AGENTS.md](AGENTS.md) for agent workflow instructions.
+
+## Phase 1: runtime contract
+
+- [GPTK 4.0 beta 2 package inspection](docs/gptk-package-inspection.md)
+- [Selected runtime and prerequisite checklist](docs/runtime-contract.md)
+- [Steam and graphics feasibility test](docs/steam-feasibility-test.md)
+
+These documents define the candidate configuration. Installation and actual
+Steam compatibility verification are the next milestone.
