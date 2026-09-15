@@ -22,6 +22,13 @@ struct ContentView: View {
     }
 
     var body: some View {
+        ScrollView {
+            content
+        }
+        .frame(minWidth: 640, minHeight: 620)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 16) {
                 Image(systemName: "gamecontroller.fill")
@@ -48,7 +55,7 @@ struct ContentView: View {
                         .font(.headline)
                     Text("Sikarugir Wine 10.0 revision 6 + Apple D3DMetal 4.0b2")
                         .accessibilityIdentifier("runtime-recipe")
-                    Text("Two fresh Steam environments passed manual feasibility testing. This build establishes the native app and its core module.")
+                    Text("Two fresh Steam environments passed manual feasibility testing. The native core now models and stores environment metadata.")
                         .foregroundStyle(.secondary)
                     Link("Read the validated runtime recipe",
                          destination: URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!)
@@ -65,13 +72,13 @@ struct ContentView: View {
                     systemImage: hostMatchesScope ? "checkmark.circle" : "info.circle"
                 )
                 .accessibilityIdentifier("host-scope")
-                Text("Host eligibility does not check Rosetta or the installed runtime. Environment setup, runtime detection, and Steam controls follow in later milestones.")
+                Text("Host eligibility does not check Rosetta or the installed runtime. Runtime detection and Steam controls follow in later milestones.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            EnvironmentSummaryView()
             Spacer(minLength: 0)
         }
         .padding(32)
-        .frame(minWidth: 640, minHeight: 460)
     }
 }

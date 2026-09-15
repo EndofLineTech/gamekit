@@ -52,7 +52,7 @@ regenerate the project while another Xcode build/test is reading it.
 
 ```text
 App/                       SwiftUI entry point and foundation window
-Sources/GamekitCore/        Pure domain logic; no UI/process/filesystem work
+Sources/GamekitCore/        Domain policy, metadata, reconciliation and managed storage
 tests/GamekitCoreTests/     Swift Testing core suite
 UITests/                   XCTest native-launch smoke test
 project.yml                App, scheme and signing specification
@@ -69,8 +69,10 @@ boundary and combined failures. This is host eligibility, not runtime readiness.
 
 The core package targets macOS 15 because its pure policy needs no macOS 27 APIs.
 The **app and UI tests target macOS 27**. The library deployment floor does not
-expand the product's support promise. The UI displays the evaluated recipe and
-host scope, and links to the runtime guide. Persistence, runtime detection,
+expand the product's support promise. The UI displays the evaluated recipe, host
+scope and a read-only saved-environment summary. E3.2 adds
+[atomic metadata storage and restart reconciliation](environment-state.md).
+Runtime/process observations are inputs until E3.3 supplies the actual detector;
 process execution and local diagnostics remain the subsequent E3 tasks.
 
 ## Signing and generated artifacts
@@ -88,8 +90,10 @@ file .build/xcode/Build/Products/Debug/Gamekit.app/Contents/MacOS/Gamekit
 Generated projects, SwiftPM state, derived data, user settings, test results,
 runtime binaries, evaluation prefixes, installers and logs are ignored. Edit
 `project.yml`, not generated project files. Build cleanup is limited to
-`.build/` and `Gamekit.xcodeproj/`; the existing environments remain under
-`~/Library/Application Support/Gamekit/` and are not accessed by the scaffold.
+`.build/` and `Gamekit.xcodeproj/`; runtime/user data remain under
+`~/Library/Application Support/Gamekit/`. The app reads only registered metadata
+and its scoped file facts; it does not adopt the manual E2 prefixes. Core/UI tests
+use isolated temporary roots.
 
 ## CI
 
@@ -105,11 +109,13 @@ XcodeGen 2.46.0 produced an identical project file. CI does not install Wine/GPT
 sign into Steam, read Beads, or rerun hardware-specific E2 evaluations. Inspect
 the PR's actual CI results before merging.
 
-## Local verification evidence
+## Local verification recorded for E3.2
 
-- Core tests were written first and failed before the policy types existed.
-- `make check` passed: four Swift test functions / eight test cases, six Python
-  tests, and the native arm64 app build.
-- `make ui-test` passed: one automated app launch/window/core-content smoke test.
-- The local bundle's signature verified successfully.
-- Two generations produced the same `project.pbxproj` SHA-256.
+- Metadata/storage tests were introduced before their implementation and failed;
+  an additional readiness regression also failed before its fix.
+- `make check` passed: 32 Swift test functions (including parameterized edge
+  cases), six Python tests, and the native arm64 app build.
+- `make ui-test` passed: three tests covering empty startup, persisted metadata
+  across app restart, and corruption handling without modifying the bad document.
+- Core tests use real temporary directories and an owned child-process lifetime
+  fixture; they never use the user's Steam environments as writable fixtures.
