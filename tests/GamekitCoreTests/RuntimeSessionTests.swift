@@ -179,7 +179,15 @@ struct RuntimeSessionTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.store.prefixURL(for: record.id).appendingPathComponent("stop").path))
         #expect(try await session.snapshot().processes.count == 2)
         try Data().write(to: fixture.store.prefixURL(for: record.id).appendingPathComponent("stop"))
-        try await Task.sleep(for: .milliseconds(100))
+        // On a busy CI runner, 100 ms is not proof that the foreign child exited.
+        // Observe cooperative quiescence before retrying the owned cleanup.
+        for _ in 0..<100 {
+            let snapshot = try await session.snapshot()
+            if snapshot.complete && snapshot.processes.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let quiescent = try await session.snapshot()
+        try #require(quiescent.complete && quiescent.processes.isEmpty)
         _ = try await session.stop()
     }
 
