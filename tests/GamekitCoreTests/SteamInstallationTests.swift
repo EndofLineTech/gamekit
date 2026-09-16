@@ -37,8 +37,13 @@ private func installationDriver(_ fixture: InstallationFixture, probe: Installat
             await probe.record(stage)
             if stage == .runningInstaller && failing != stage {
                 let exe = fixture.root.appendingPathComponent("Environments/steam/\(record.steamExecutable.rawValue)")
+                if FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().path) {
+                    guard try FileManager.default.contentsOfDirectory(atPath: exe.deletingLastPathComponent().path).isEmpty
+                    else { throw SteamInstallationError.commandFailed } // Valve's real empty-destination requirement
+                }
                 try FileManager.default.createDirectory(at: exe.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try Data("fixture executable".utf8).write(to: exe)
+                try FileManager.default.createDirectory(at: exe.deletingLastPathComponent().appendingPathComponent("steamapps"), withIntermediateDirectories: true)
             }
             return SteamInstallationProcess(leaderExit: { failing == stage ? .exited(23) : .exited(0) },
                 snapshot: { .init(processes: stage == .bootstrappingSteam ? [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: "fixture")] : [], complete: true) },

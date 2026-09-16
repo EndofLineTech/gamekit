@@ -26,6 +26,8 @@ installer, follows bootstrap, and records explicit UI confirmation.
 managed installation, including after Gamekit restarts.
 [Recovery controls](docs/steam-recovery.md) retry interrupted setup and support a
 confirmed reset that archives the old environment and preserves game downloads.
+An explicitly confirmed clean reset can instead delete the current prefix and its
+downloads while retaining older archives and external libraries.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

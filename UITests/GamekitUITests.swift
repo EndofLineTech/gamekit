@@ -3,6 +3,38 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testConfirmedCleanResetDeletesOnlyDisposablePrefix() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Disposable clean reset", runtime: RuntimeProfile.sikarugir.identity,
+            installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data("game".utf8).write(to: steam.appendingPathComponent("steamapps/game.bin"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path]
+        app.launch()
+        defer { app.terminate() }
+        app.activate()
+        XCTAssertTrue(app.staticTexts["Disposable clean reset"].waitForExistence(timeout: 15))
+        let reset = app.buttons["reset-delete-downloads"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 10))
+        revealRecoveryButton(reset, in: app)
+        reset.click()
+        let confirmation = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Delete environment and downloads"].click()
+        let status = app.staticTexts["installation-status"]
+        let message = "Current environment and its downloads deleted."
+        let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value BEGINSWITH %@ OR label BEGINSWITH %@", message, message), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 15), .completed, status.debugDescription)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.prefixURL(for: id).path))
+        let updated = try await store.load(id)
+        XCTAssertEqual(updated?.installation, .notStarted)
+    }
+
     func testOptInNormalQuitAndOrdinaryReopenWhileSteamRuns() async throws {
         guard ProcessInfo.processInfo.environment["GAMEKIT_NORMAL_QUIT_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in normal quit and Launch Services reopen") }
         let root = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_ROOT"])
@@ -42,6 +74,12 @@ final class GamekitUITests: XCTestCase {
         let confirmation = app.windows["Gamekit"].sheets.firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(confirmation.buttons["Archive environment and preserve downloads"].exists)
+        confirmation.buttons["Cancel"].click()
+        XCTAssertEqual(try Data(contentsOf: metadata), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
+        app.buttons["reset-delete-downloads"].click()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Delete environment and downloads"].exists)
         confirmation.buttons["Cancel"].click()
         XCTAssertEqual(try Data(contentsOf: metadata), original)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
@@ -96,6 +134,17 @@ final class GamekitUITests: XCTestCase {
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: parent) }
         return parent.appendingPathComponent("Gamekit")
+    }
+
+    private func revealRecoveryButton(_ button: XCUIElement, in app: XCUIApplication) {
+        let scroll = app.scrollViews.firstMatch
+        // A partially clipped button can report hittable while its center is
+        // outside the scroll viewport. Avoid clicking during startup layout shifts.
+        for _ in 0..<12 {
+            if button.isHittable && scroll.frame.insetBy(dx: 0, dy: 16).contains(button.frame) { return }
+            scroll.scroll(byDeltaX: 0, deltaY: -160)
+        }
+        XCTAssertTrue(button.isHittable && scroll.frame.contains(button.frame), button.debugDescription)
     }
 
     func testNativeAppLaunchesWithLinkedCore() throws {

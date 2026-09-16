@@ -130,15 +130,15 @@ public actor SteamInstallationCoordinator {
                 if resumeExisting { _ = try await store.checkedPrefixURL(for: id) }
                 else { try await store.createInstallationPrefix(record) }
                 try await runCommand(record, arguments: SteamInstallationRecipe.initializeArguments, timeout: 180, operation: operation)
-                try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id)
+                try SteamRecoveryArchive.prepareInstallerDestination(root: store.root, id: id)
                 stage = .runningInstaller
                 record = try await advance(record, to: stage, operation: operation)
                 await onStage(stage)
                 let artifactURL = try await driver.artifactURL(artifact)
                 try await runCommand(record, arguments: [artifactURL.path], timeout: 1200, operation: operation)
             }
-            if verificationOnly { try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id) }
             guard try await store.installationFiles(id).executableExists else { throw SteamInstallationError.commandFailed }
+            try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id)
             stage = .bootstrappingSteam
             record = try await advance(record, to: stage, operation: operation)
             await onStage(stage)
