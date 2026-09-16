@@ -108,6 +108,16 @@ final class ManagedDirectory {
         return ManagedDirectory(fd)
     }
 
+    func createExclusiveDirectory(_ name: String) throws -> ManagedDirectory {
+        try checkName(name)
+        guard mkdirat(descriptor, name, mode_t(0o700)) == 0 else {
+            if errno == EEXIST { throw EnvironmentStoreError.prefixAlreadyExists }
+            throw ioError("create exclusive directory")
+        }
+        guard let created = try directory(name) else { throw EnvironmentStoreError.notFound }
+        return created
+    }
+
     private func regularFile(_ name: String) throws -> Int32? {
         try checkName(name)
         let fd = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)

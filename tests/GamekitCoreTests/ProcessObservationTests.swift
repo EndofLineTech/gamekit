@@ -45,6 +45,19 @@ struct ProcessObservationTests {
         #expect(!RuntimeProcessObserver.isWithin("/owned/steam-other/bin/wine", root: root))
     }
 
+    @Test("Wine argv rewriting can leave NUL padding before intact scope environment", arguments: [0, 1, 64])
+    func rewrittenArgumentPadding(padding: Int) {
+        var count: Int32 = 2
+        var bytes = withUnsafeBytes(of: &count) { Data($0) }
+        bytes.append(Data("/runtime/wine\0\0/owned/steam/drive_c/Program Files (x86)/Steam/Steam.exe\0\0".utf8))
+        bytes.append(Data(repeating: 0, count: padding))
+        bytes.append(Data("PRIVATE_TOKEN=not-retained\0WINEPREFIX=/owned/steam\0GAMEKIT_SESSION_ID=owned\0\0".utf8))
+        let parsed = KernelArguments(bytes: bytes)
+        #expect(parsed?.arguments.count == 2)
+        #expect(parsed?.prefix == "/owned/steam")
+        #expect(parsed?.session == "owned")
+    }
+
     @Test("Reused PIDs represent different process identities")
     func pidReuse() {
         #expect(ProcessIdentity(pid: 42, startSeconds: 1, startMicroseconds: 0)

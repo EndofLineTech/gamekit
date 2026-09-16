@@ -20,6 +20,8 @@ The core also provides [runtime checks and scoped process execution](docs/runtim
 offer private output viewing and structured summary exports.
 The core now supports [Steam installer acquisition](docs/installer-acquisition.md)
 with HTTPS policy, artifact validation and persisted provenance.
+[Managed Steam setup](docs/steam-installation.md) creates a fresh prefix, runs the
+installer, follows bootstrap, and records explicit UI confirmation.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

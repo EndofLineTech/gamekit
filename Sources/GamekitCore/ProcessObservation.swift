@@ -52,7 +52,11 @@ struct KernelArguments {
             argv.append(argument)
         }
         var prefix: String?, session: String?
-        while let entry = string(), !entry.isEmpty {
+        while offset < bytes.count {
+            // Wine rewrites argv/process titles and can leave a NUL-filled gap
+            // before its intact environment. An empty slot is not end-of-buffer.
+            while offset < bytes.count && bytes[offset] == 0 { offset += 1 }
+            guard let entry = string() else { break }
             if entry.hasPrefix("WINEPREFIX=") { prefix = String(entry.dropFirst(11)) }
             if entry.hasPrefix("GAMEKIT_SESSION_ID=") { session = String(entry.dropFirst(19)) }
         }

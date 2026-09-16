@@ -13,6 +13,7 @@ Default root: `~/Library/Application Support/Gamekit/`.
 ```text
 Metadata/Environments/<environment-id>.json   # one versioned record
 Metadata/Environments/.write.lock             # cooperative writer lock
+Metadata/Environments/.installation.lock      # E4.2 whole-install lease
 Metadata/Environments/.<uuid>.tmp             # in-flight/orphan writes
 Environments/<environment-id>/               # derived Wine prefix location
 ```
@@ -23,7 +24,9 @@ creating directories. Prefix paths are derived from validated IDs; display names
 are never used as filesystem names. The Steam executable is a validated relative
 path, defaulting to `drive_c/Program Files (x86)/Steam/Steam.exe`.
 
-There is no prefix creation, deletion, reset or automatic adoption in this API.
+The E4.2 coordinator has an internal exclusive prefix-creation operation, gated
+by a matching saved recipe/revision and `creatingPrefix` stage. There is no prefix
+deletion, reset or automatic adoption.
 Registering an ID whose prefix already exists fails with `prefixAlreadyExists`.
 The manually evaluated `steam-eval-a`/`steam-eval-b` prefixes therefore do not
 silently become app-owned records. Beads, runtimes and other Gamekit siblings are
@@ -39,6 +42,7 @@ not storage targets of this component.
 | `name` | Human-readable name, independent of paths |
 | `runtime` | Optional provider, distribution, Wine and graphics version identity |
 | `installer` | Optional original HTTPS source URL, lowercase 64-character SHA-256, download timestamp |
+| `installationRecipeVersion` | Optional installation recipe version; currently 1, absent in older records |
 | `steamExecutable` | POSIX-relative path within the derived prefix, beneath `drive_c` and ending in `.exe` |
 | `installation` | Durable progress or recorded failure/interruption |
 | `createdAt`, `updatedAt` | Milliseconds since Unix epoch in the JSON document |
@@ -133,8 +137,8 @@ reads are per-record atomic, not a multi-record database transaction.
 
 With asynchronous E3.3 observations, pass the source record's `expectedRevision`
 to `reconcile`. It rejects stale observations, and will not persist an interruption
-while a current execution lease is active. Runtime/executable selection changes
-also require an available execution lease.
+while a current execution or whole-install lease is active. Runtime/executable/
+recipe selection changes also require available installation and execution leases.
 
 ## Atomic writes and path handling
 

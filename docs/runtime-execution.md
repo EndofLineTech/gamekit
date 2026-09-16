@@ -96,6 +96,10 @@ selected runtime/prefix executable paths, and reads kernel arguments only for
 those candidates. It retains the prefix and operation tag, not unrelated
 environment keys. No raw argument/environment dump is published or persisted.
 
+The argument parser skips NUL padding before environment entries. Live E4.2
+verification found that Wine's process-title rewriting leaves such gaps; treating
+the first empty slot as the end loses otherwise intact prefix/session ownership.
+
 Identity includes PID and start timestamp, with a second identity/path check after
 reading arguments. Prefix matching uses path-component boundaries, not substring
 matching. Executable-role classification uses the actual target argument: a later
@@ -111,7 +115,8 @@ can identify a registered environment after an app restart without restoring PID
 
 `RuntimeSession.start` requires an already registered, existing, path-checked
 prefix, the matching validated runtime, and a complete empty-prefix process scan.
-Prefix creation remains an installer-coordinator responsibility. An execution
+The [installation coordinator](steam-installation.md) performs exclusive prefix
+creation. An execution
 lease prevents duplicate operations and pins the directory identity. Runtime or
 Steam-executable selection changes are rejected while that lease is active.
 

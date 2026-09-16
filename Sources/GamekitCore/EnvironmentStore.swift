@@ -1,7 +1,8 @@
 import Darwin
 import Foundation
 
-/// Per-record atomic metadata storage. It never creates, deletes or resets Wine prefixes.
+/// Per-record atomic metadata storage. Prefix creation is exclusive and requires
+/// the installation coordinator's persisted creatingPrefix stage; prefixes are never reset.
 public actor EnvironmentStore {
     public nonisolated let root: URL
     private let beforeCommit: @Sendable () throws -> Void
@@ -101,7 +102,10 @@ public actor EnvironmentStore {
             }
             // A running operation pins its runtime and executable selection. Progress
             // and display-name updates can still be recorded by the coordinator.
-            let selectionLock = current.runtime != record.runtime || current.steamExecutable != record.steamExecutable
+            let selectionChanged = current.runtime != record.runtime || current.steamExecutable != record.steamExecutable || current.installationRecipeVersion != record.installationRecipeVersion
+            let installLock = selectionChanged ? try directory.metadata.acquireLock(".installation.lock") : nil
+            defer { withExtendedLifetime(installLock) {} }
+            let selectionLock = selectionChanged
                 ? try directory.metadata.acquireLock(".execution-\(record.id.rawValue).lock") : nil
             defer { withExtendedLifetime(selectionLock) {} }
             _ = try inspectFiles(record, in: directory.root)
@@ -119,6 +123,28 @@ public actor EnvironmentStore {
               let record = try load(id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
         _ = try inspectFiles(record, in: directory.root)
         return prefixURL(for: id)
+    }
+
+    func installationLease() throws -> ManagedFileLock {
+        guard let directory = try directories(create: true) else { throw EnvironmentStoreError.notFound }
+        return try directory.metadata.acquireLock(".installation.lock")
+    }
+
+    func createInstallationPrefix(_ record: EnvironmentRecord) throws {
+        guard let directory = try directories(create: false) else { throw EnvironmentStoreError.notFound }
+        try directory.metadata.withWriteLock {
+            guard let current = try load(record.id, from: directory.metadata), current == record,
+                  current.installation == .installing(.creatingPrefix), current.installationRecipeVersion == 1
+            else { throw EnvironmentStoreError.conflict }
+            guard let environments = try directory.root.directory("Environments", create: true) else { throw EnvironmentStoreError.notFound }
+            _ = try environments.createExclusiveDirectory(record.id.rawValue)
+        }
+    }
+
+    func installationFiles(_ id: EnvironmentID) throws -> EnvironmentFiles {
+        guard let directory = try directories(create: false), let record = try load(id, from: directory.metadata)
+        else { throw EnvironmentStoreError.notFound }
+        return try inspectFiles(record, in: directory.root)
     }
 
     func executionLease(for id: EnvironmentID) throws -> EnvironmentExecutionLease {
@@ -148,10 +174,12 @@ public actor EnvironmentStore {
         // An idle scan can race a new operation. Never persist interruption while
         // a current process coordinator owns the environment's execution lease.
         let interruptionLock: ManagedFileLock?
+        let installationLock: ManagedFileLock?
         if case .installing = original.installation, case .interrupted = result.record.installation {
+            installationLock = try directory.metadata.acquireLock(".installation.lock")
             interruptionLock = try directory.metadata.acquireLock(".execution-\(id.rawValue).lock")
-        } else { interruptionLock = nil }
-        defer { withExtendedLifetime(interruptionLock) {} }
+        } else { interruptionLock = nil; installationLock = nil }
+        defer { withExtendedLifetime(interruptionLock) {}; withExtendedLifetime(installationLock) {} }
         let persisted = result.record == original ? original : try save(result.record)
         return ReconciledEnvironment(record: persisted, files: files, state: result.state)
     }
