@@ -22,21 +22,7 @@ public actor EnvironmentStore {
     }
 
     private static func canonicalRoot(_ supplied: URL) throws -> URL {
-        guard supplied.isFileURL, supplied.path.hasPrefix("/"), supplied.path != "/" else {
-            throw EnvironmentStoreError.unsafePath
-        }
-        let standardized = supplied.standardizedFileURL
-        guard standardized.path != "/" else { throw EnvironmentStoreError.unsafePath }
-        // Resolve OS/user aliases in the trusted parent (e.g. /var -> /private/var),
-        // but never resolve the app root itself: a symlink there must be rejected.
-        // Foundation deliberately shortens /private/var back to /var on macOS,
-        // so use realpath for an alias-free path that O_NOFOLLOW can traverse.
-        guard let resolved = realpath(standardized.deletingLastPathComponent().path, nil) else {
-            throw EnvironmentStoreError.fileSystem(operation: "resolve trusted parent", code: errno)
-        }
-        defer { free(resolved) }
-        return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
-            .appendingPathComponent(standardized.lastPathComponent, isDirectory: true)
+        try ManagedDirectory.canonicalRoot(supplied)
     }
 
     /// Informational locator, not authorization for unguarded filesystem mutation.

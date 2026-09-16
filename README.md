@@ -16,6 +16,8 @@ make run
 The SwiftUI foundation app and separate `GamekitCore` module are in place,
 including [environment metadata and restart reconciliation](docs/environment-state.md).
 The core also provides [runtime checks and scoped process execution](docs/runtime-execution.md).
+[Local diagnostics](docs/local-diagnostics.md) record runtime probe commands and
+offer private output viewing and structured summary exports.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

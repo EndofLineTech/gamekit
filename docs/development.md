@@ -74,8 +74,8 @@ expand the product's support promise. The UI displays the evaluated recipe, host
 scope and a read-only saved-environment summary. E3.2 adds
 [atomic metadata storage and restart reconciliation](environment-state.md).
 E3.3 supplies [runtime detection and scoped process execution](runtime-execution.md),
-including live observations for the summary. Local diagnostic persistence/redaction
-remains E3.4 work.
+including live observations for the summary. E3.4 adds
+[bounded local diagnostics and allowlisted summary exports](local-diagnostics.md).
 
 ## Signing and generated artifacts
 
@@ -125,3 +125,14 @@ the PR's actual CI results before merging.
 - `GAMEKIT_RUNTIME_SMOKE=1 swift test --filter installedRuntime` passed locally:
   actual Rosetta/runtime checks, Windows command execution, tagged process
   observation and scoped cleanup in a newly registered temporary prefix.
+
+## Local verification recorded for E3.4
+
+- `make check` passed: 77 Swift test functions reported, six Python tests and the
+  native arm64 app build. The installed-runtime case remains explicitly opt-in.
+- `make ui-test` passed: four tests, including a failed-command diagnostics fixture
+  with local-output/export controls and a private sentinel excluded from export.
+- Diagnostics tests cover real command failures, storage errors independent of
+  execution results, bounded capture, retention, checkpoints and export privacy.
+- Debug `--diagnostics-root` overrides the log root. When `--metadata-root` is
+  supplied alone, logs use a sibling `GamekitLogs` directory to isolate UI tests.

@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Fresh runtime/process observations drive registered-environment summaries.
 struct EnvironmentSummaryView: View {
+    @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @State private var environments: [ReconciledEnvironment] = []
     @State private var failed = false
     @State private var refresh = 0
@@ -66,18 +67,14 @@ struct EnvironmentSummaryView: View {
 
     private func reload() async {
         do {
-            var root = EnvironmentStore.applicationSupportRoot
-            #if DEBUG
-            // UI tests opt into their own temporary store; never write fixtures to real user data.
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "--metadata-root"), arguments.indices.contains(index + 1) {
-                root = URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
-            }
-            #endif
+            let root = AppStorageLocations.metadata
             let store = try EnvironmentStore(root: root)
             let records = try await store.loadAll()
             let layout = RuntimeLayout(dataRoot: root)
-            let report = try await RuntimeDetector().detect(layout, selection: layout.profile.identity)
+            let detector = RuntimeDetector { [diagnostics] request in
+                try await diagnostics.execute(request, layout: layout)
+            }
+            let report = try await detector.detect(layout, selection: layout.profile.identity)
             var refreshed: [ReconciledEnvironment] = []
             for record in records {
                 var process: ProcessObservation = .notChecked

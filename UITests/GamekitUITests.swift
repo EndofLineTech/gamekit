@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testDiagnosticsAreVisibleAndOfferSummaryExport() async throws {
+        let root = try temporaryRoot()
+        let logs = root.deletingLastPathComponent().appendingPathComponent("GamekitLogs")
+        let store = try DiagnosticStore(base: logs)
+        let result = await DiagnosticCommandRunner(store: store).run(
+            CommandRequest(executable: URL(fileURLWithPath: "/bin/sh"),
+                           arguments: ["-c", "printf PRIVATE_UI_DIAGNOSTIC >&2; exit 23"]), stage: .bootstrap)
+        let summary = try XCTUnwrap(result.summary)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["export-diagnostic-\(summary.id.uuidString)"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["local-diagnostic-\(summary.id.uuidString)"].exists)
+        let exported = try await store.exportSummary(summary.id)
+        XCTAssertFalse(String(decoding: exported, as: UTF8.self).contains("PRIVATE_UI_DIAGNOSTIC"))
+    }
+
     private func temporaryRoot() throws -> URL {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)

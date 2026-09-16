@@ -2,6 +2,7 @@ import GamekitCore
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var diagnostics = AppDiagnosticsModel()
     private let operatingSystem = ProcessInfo.processInfo.operatingSystemVersion
 
     private var architecture: HostArchitecture {
@@ -26,6 +27,7 @@ struct ContentView: View {
             content
         }
         .frame(minWidth: 640, minHeight: 620)
+        .environmentObject(diagnostics)
     }
 
     private var content: some View {
@@ -77,6 +79,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             EnvironmentSummaryView()
+            DiagnosticsView()
             Spacer(minLength: 0)
         }
         .padding(32)
