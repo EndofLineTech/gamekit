@@ -5,6 +5,10 @@ environment. The lifecycle card refreshes live status every second. Quitting
 Gamekit leaves Windows Steam running; reopening Gamekit restores observation and
 control without launching another Steam instance.
 
+A persistent launch receipt also pins runtime/recipe/executable selection after
+the launching controller releases its operation lease. Complete scoped Stop to
+clear the receipt before changing that selection, even if Steam exited manually.
+
 ## Ownership and restart
 
 `SteamLifecycle` persists a private schema-1 launch receipt under

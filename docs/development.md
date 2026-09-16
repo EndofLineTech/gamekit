@@ -181,7 +181,7 @@ the PR's actual CI results before merging.
 ## Local verification recorded for E4.4
 
 - Tests-first red observed for reset journaling, download preservation and retry.
-- `make check` passed: 124 Swift functions reported (six opt-in skips), six Python
+- `make check` passed: 125 Swift functions reported (six opt-in skips), six Python
   tests and native build.
 - Crash-injection tests cover reset preparation, prefix archival, metadata reset
   and library restoration; an end-to-end coordinator fixture resets/reinstalls
