@@ -1,0 +1,194 @@
+import CryptoKit
+import Darwin
+import Foundation
+
+public struct RuntimeProfile: Sendable {
+    public let identity: RuntimeIdentity
+    public let bundlePath: String
+    public let wineVersionOutput: String
+    public let hashes: [String: String]
+
+    public static let sikarugir = RuntimeProfile(
+        identity: RuntimeIdentity(provider: "Sikarugir", distribution: "10.0_6", wine: "10.0", graphics: "4.0b2"),
+        bundlePath: "Runtimes/sikarugir10.0_6-d3dmetal4.0b2/Template-1.0.11.app",
+        wineVersionOutput: "wine-10.0 (Sikarugir)",
+        hashes: [
+            "Contents/SharedSupport/wine/bin/wine": "1b992a3e0bc5f2a058a24f923832aaa6e464d44766fb0ad13054797e02060d10",
+            "Contents/SharedSupport/wine/bin/wineserver": "6dfe1f9d2d8a67cc6a09a57966f5ef88fd461abe7321d6fb0d4a1672e8ff0350",
+            "Contents/SharedSupport/wine/lib/external/D3DMetal.framework/Versions/A/D3DMetal": "f5b56df1b8fe8b364dd9530651a3769c8aed948bd343be3b4510604d503e2bad",
+            "Contents/SharedSupport/wine/lib/external/libd3dshared.dylib": "1582e7ceef7f495df4bebf7f06a49aef130233f8a2e9a8971e35affafeb76ec0",
+            "Contents/SharedSupport/wine/lib/wine/x86_64-windows/d3d11.dll": "303b2bb41efa30c890e2e93d39c3d3c565c8557e069eee832f2cb8a37bd4ec26",
+            "Contents/SharedSupport/wine/lib/wine/x86_64-windows/d3d12.dll": "1b7a02cb37ec6b484e2aaa76b5ec9cbb47e63aeec29dbe087d5d1589a3347cfb",
+            "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll": "522a8b37216afb09e614489d88a74118076f4d7e08d2b289df6a6eb6f3e817af",
+        ]
+    )
+}
+
+public struct RuntimeLayout: Sendable {
+    public let dataRoot: URL
+    public let profile: RuntimeProfile
+    public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir) {
+        self.dataRoot = dataRoot; self.profile = profile
+    }
+    public var bundle: URL { dataRoot.appendingPathComponent(profile.bundlePath) }
+    public var engine: URL { bundle.appendingPathComponent("Contents/SharedSupport/wine") }
+    public var wine: URL { engine.appendingPathComponent("bin/wine") }
+    public var wineserver: URL { engine.appendingPathComponent("bin/wineserver") }
+    public var frameworks: URL { bundle.appendingPathComponent("Contents/Frameworks") }
+    public var graphics: URL { engine.appendingPathComponent("lib/external/D3DMetal.framework") }
+
+    public func environment(prefix: URL? = nil, session: String? = nil,
+                            inheriting inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        let allowed = Set(["HOME", "USER", "LOGNAME", "TMPDIR", "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ"])
+        var result = inherited.filter { allowed.contains($0.key) }
+        result["PATH"] = result["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        result["WINEDEBUG"] = "-all"
+        result["WINEARCH"] = "win64"
+        result["DYLD_FALLBACK_LIBRARY_PATH"] = "\(engine.path)/lib:\(frameworks.path):\(frameworks.path)/GStreamer.framework/Libraries"
+        result["DYLD_FALLBACK_FRAMEWORK_PATH"] = "\(engine.path)/lib/external:\(frameworks.path)"
+        if let prefix { result["WINEPREFIX"] = prefix.path }
+        if let session { result["GAMEKIT_SESSION_ID"] = session }
+        return result
+    }
+}
+
+public struct RuntimeHostFacts: Sendable {
+    public let macOSMajorVersion: Int
+    public let architecture: HostArchitecture
+    public let availableBytes: Int64?
+    public init(macOSMajorVersion: Int, architecture: HostArchitecture, availableBytes: Int64?) {
+        self.macOSMajorVersion = macOSMajorVersion; self.architecture = architecture; self.availableBytes = availableBytes
+    }
+    public static func current(at url: URL) -> RuntimeHostFacts {
+        var arm64: Int32 = 0
+        var size = MemoryLayout.size(ofValue: arm64)
+        let architecture: HostArchitecture = sysctlbyname("hw.optional.arm64", &arm64, &size, nil, 0) == 0
+            ? (arm64 == 1 ? .arm64 : .x86_64) : .unknown
+        var volume = url
+        while !FileManager.default.fileExists(atPath: volume.path), volume.path != "/" {
+            volume.deleteLastPathComponent()
+        }
+        let values = try? volume.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey])
+        let available = values?.volumeAvailableCapacityForImportantUsage ?? values?.volumeAvailableCapacity.map(Int64.init)
+        return RuntimeHostFacts(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+                                architecture: architecture, availableBytes: available)
+    }
+}
+
+public enum RuntimeCheckStatus: Sendable { case passed, failed, unknown }
+public struct RuntimeCheck: Sendable {
+    public let prerequisite: Prerequisite
+    public let status: RuntimeCheckStatus
+    public let detail: String
+}
+public struct RuntimeReport: Sendable {
+    public let checks: [RuntimeCheck]
+    public var prerequisites: PrerequisiteObservation {
+        let missing = checks.filter { $0.status == .failed }.map(\.prerequisite)
+        if !missing.isEmpty { return .missing(missing) }
+        return checks.contains { $0.status == .unknown } ? .notChecked : .ready
+    }
+}
+
+public struct RuntimeDetector: Sendable {
+    public static let minimumFreeBytes: Int64 = 15 * 1024 * 1024 * 1024
+    private let execute: @Sendable (CommandRequest) async throws -> CommandResult
+    public init() { execute = { try await ProcessExecutor().run($0) } }
+    init(execute: @escaping @Sendable (CommandRequest) async throws -> CommandResult) { self.execute = execute }
+
+    public func detect(_ layout: RuntimeLayout, selection: RuntimeIdentity?,
+                       host: RuntimeHostFacts? = nil) async throws -> RuntimeReport {
+        let facts = host ?? RuntimeHostFacts.current(at: layout.dataRoot)
+        let supported = PrototypeHostPolicy.failures(macOSMajorVersion: facts.macOSMajorVersion, architecture: facts.architecture).isEmpty
+        var checks: [RuntimeCheck] = [.init(prerequisite: .supportedHost, status: supported ? .passed : .failed,
+                                            detail: supported ? "Apple silicon / macOS 27" : "Outside the evaluated host scope")]
+        if let bytes = facts.availableBytes {
+            checks.append(.init(prerequisite: .diskSpace, status: bytes >= Self.minimumFreeBytes ? .passed : .failed,
+                                detail: "\(bytes / (1024 * 1024 * 1024)) GiB available; 15 GiB working allowance"))
+        } else {
+            checks.append(.init(prerequisite: .diskSpace, status: .unknown, detail: "Disk capacity could not be checked"))
+        }
+        if supported {
+            let translated = try? await execute(CommandRequest(executable: URL(fileURLWithPath: "/usr/bin/arch"),
+                                                               arguments: ["-x86_64", "/usr/bin/uname", "-m"], timeout: 10, outputLimit: 4096))
+            try Task.checkCancellation()
+            let available = translated?.termination == .exited(0) && translated?.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) == "x86_64"
+            checks.append(.init(prerequisite: .rosetta, status: available ? .passed : .failed,
+                                detail: available ? "Intel execution probe passed" : "Intel execution is unavailable"))
+        } else {
+            checks.append(.init(prerequisite: .rosetta, status: .unknown, detail: "Not executed on an unsupported host"))
+        }
+        let selected = selection == layout.profile.identity && Self.safeBundle(layout)
+        var runtimeValid = selected, graphicsValid = selected
+        var versionChecked = false
+        if selected {
+            for (relative, hash) in layout.profile.hashes {
+                try Task.checkCancellation()
+                let valid = Self.matches(layout.bundle.appendingPathComponent(relative), root: layout.bundle, hash: hash)
+                if relative.contains("/bin/") { runtimeValid = runtimeValid && valid }
+                else { graphicsValid = graphicsValid && valid }
+            }
+            let dependencies = ["libinotify.0.dylib", "libfreetype.6.dylib", "libgnutls.30.dylib", "libSDL2-2.0.0.dylib",
+                                "GStreamer.framework/Libraries/libgstreamer-1.0.0.dylib"]
+            runtimeValid = runtimeValid && dependencies.allSatisfy {
+                Self.containedRegularFile(layout.frameworks.appendingPathComponent($0), root: layout.bundle)
+            }
+            runtimeValid = runtimeValid && FileManager.default.isExecutableFile(atPath: layout.wine.path)
+                && FileManager.default.isExecutableFile(atPath: layout.wineserver.path)
+            let versionURL = layout.graphics.appendingPathComponent("Resources/version.plist")
+            if Self.containedRegularFile(versionURL, root: layout.bundle),
+               let data = try? Data(contentsOf: versionURL),
+               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+                graphicsValid = graphicsValid && plist["CFBundleVersion"] as? String == "4.0b2"
+                    && plist["SourceVersion"] as? String == "33024000000000"
+            } else { graphicsValid = false }
+        }
+        if runtimeValid && supported && checks.contains(where: { $0.prerequisite == .rosetta && $0.status == .passed }) {
+            versionChecked = true
+            let version = try? await execute(CommandRequest(executable: layout.wine, arguments: ["--version"],
+                                                           environment: layout.environment(), workingDirectory: layout.engine,
+                                                           timeout: 10, outputLimit: 4096))
+            try Task.checkCancellation()
+            runtimeValid = version?.termination == .exited(0)
+                && version?.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) == layout.profile.wineVersionOutput
+        }
+        if graphicsValid {
+            let signature = try? await execute(CommandRequest(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+                                                             arguments: ["--verify", "--deep", "--strict", layout.graphics.path],
+                                                             timeout: 15, outputLimit: 4096))
+            try Task.checkCancellation()
+            graphicsValid = signature?.termination == .exited(0)
+        }
+        checks.append(.init(prerequisite: .runtime, status: runtimeValid ? (versionChecked ? .passed : .unknown) : .failed,
+                            detail: runtimeValid ? (versionChecked ? "Validated Sikarugir 10.0 revision 6" : "Runtime files match; execution not checked")
+                                : "Runtime selection, files, dependencies or version do not match"))
+        checks.append(.init(prerequisite: .graphicsPayload, status: graphicsValid ? .passed : .failed,
+                            detail: graphicsValid ? "Apple D3DMetal 4.0b2 integrity verified" : "Graphics payload does not match the validated recipe"))
+        return RuntimeReport(checks: checks)
+    }
+
+    static func safeBundle(_ layout: RuntimeLayout) -> Bool {
+        do {
+            let root = try EnvironmentStore(root: layout.dataRoot).root
+            guard var directory = try ManagedDirectory.openRoot(root, create: false) else { return false }
+            for part in try RelativePath(layout.profile.bundlePath).components {
+                guard let next = try directory.directory(part) else { return false }
+                directory = next
+            }
+            return true
+        } catch { return false }
+    }
+
+    static func containedRegularFile(_ url: URL, root: URL) -> Bool {
+        let base = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+        guard resolved.path.hasPrefix(base + "/") else { return false }
+        return (try? resolved.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+    }
+    static func matches(_ url: URL, root: URL, hash: String) -> Bool {
+        guard containedRegularFile(url, root: root),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 64 * 1024 * 1024,
+              let bytes = try? Data(contentsOf: url) else { return false }
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() == hash
+    }
+}

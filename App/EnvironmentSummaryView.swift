@@ -1,11 +1,12 @@
 import GamekitCore
 import SwiftUI
 
-/// Read-only presentation of registered metadata. Runtime/process probes arrive in E3.3.
+/// Fresh runtime/process observations drive registered-environment summaries.
 struct EnvironmentSummaryView: View {
     @State private var environments: [ReconciledEnvironment] = []
     @State private var failed = false
     @State private var refresh = 0
+    @State private var runtimeReport: RuntimeReport?
 
     var body: some View {
         GroupBox {
@@ -16,8 +17,15 @@ struct EnvironmentSummaryView: View {
                     Spacer()
                     Button("Reload") { refresh += 1 }
                 }
+                if let runtimeReport {
+                    ForEach(runtimeReport.checks, id: \.prerequisite) { check in
+                        Label(check.detail, systemImage: check.status == .passed ? "checkmark.circle" : "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if failed {
-                    Text("Saved metadata could not be read. Existing files have been preserved.")
+                    Text("Environment checks could not be completed. Existing files have been preserved.")
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("metadata-error")
                 } else if environments.isEmpty {
@@ -68,11 +76,22 @@ struct EnvironmentSummaryView: View {
             #endif
             let store = try EnvironmentStore(root: root)
             let records = try await store.loadAll()
+            let layout = RuntimeLayout(dataRoot: root)
+            let report = try await RuntimeDetector().detect(layout, selection: layout.profile.identity)
             var refreshed: [ReconciledEnvironment] = []
             for record in records {
-                refreshed.append(try await store.reconcile(record.id, process: .notChecked, prerequisites: .notChecked))
+                var process: ProcessObservation = .notChecked
+                if record.runtime == layout.profile.identity {
+                    let prefix = try await store.checkedPrefixURL(for: record.id)
+                    let inventory = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
+                    process = inventory.observation(installation: record.installation)
+                }
+                refreshed.append(try await store.reconcile(record.id, process: process,
+                                                            prerequisites: report.prerequisites,
+                                                            expectedRevision: record.revision))
             }
             try Task.checkCancellation()
+            runtimeReport = report
             environments = refreshed
             failed = false
         } catch is CancellationError {
@@ -80,6 +99,7 @@ struct EnvironmentSummaryView: View {
         } catch {
             guard !Task.isCancelled else { return }
             environments = []
+            runtimeReport = nil
             failed = true
         }
     }

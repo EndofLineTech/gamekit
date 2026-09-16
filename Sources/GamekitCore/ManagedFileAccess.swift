@@ -28,6 +28,28 @@ final class ManagedDirectory {
     private init(_ descriptor: Int32) { self.descriptor = descriptor }
     deinit { Darwin.close(descriptor) }
 
+    func identity() throws -> (device: Int32, inode: UInt64) {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { throw ioError("stat directory") }
+        return (info.st_dev, info.st_ino)
+    }
+
+    func acquireLock(_ name: String) throws -> ManagedFileLock {
+        try checkName(name)
+        let fd = openat(descriptor, name, O_RDWR | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, mode_t(0o600))
+        guard fd >= 0 else { throw ioError("open operation lock") }
+        var info = stat()
+        guard fstat(fd, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else {
+            Darwin.close(fd); throw EnvironmentStoreError.unsafePath
+        }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno; Darwin.close(fd)
+            if code == EWOULDBLOCK { throw EnvironmentStoreError.busy }
+            throw EnvironmentStoreError.fileSystem(operation: "lock operation", code: code)
+        }
+        return ManagedFileLock(fd)
+    }
+
     static func openRoot(_ url: URL, create: Bool) throws -> ManagedDirectory? {
         guard url.isFileURL else { throw EnvironmentStoreError.unsafePath }
         let fd = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
@@ -191,4 +213,10 @@ final class ManagedDirectory {
             }
         }
     }
+}
+
+final class ManagedFileLock: @unchecked Sendable {
+    private let descriptor: Int32
+    init(_ descriptor: Int32) { self.descriptor = descriptor }
+    deinit { flock(descriptor, LOCK_UN); Darwin.close(descriptor) }
 }
