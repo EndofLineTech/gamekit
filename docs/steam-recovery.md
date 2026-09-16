@@ -10,7 +10,7 @@ the current prefix instead. Recovery never resets an unregistered prefix automat
 | Situation | Action |
 |---|---|
 | Download failed before a prefix was created | **Retry interrupted install** starts a fresh bounded download |
-| Prefix initialization or the installer was interrupted, with no Steam executable | Retry reuses the prefix, reruns baseline initialization, downloads a validated installer and opens its wizard |
+| Prefix initialization or the installer was interrupted, with no Steam executable | Retry reuses the prefix, reruns baseline initialization and runs a validated installer silently |
 | Steam files exist but bootstrap/UI verification was interrupted | Retry relaunches Steam for explicit UI verification |
 | A reset was interrupted | Retry completes its journal before starting the appropriate install step |
 | An interrupted setup left Wine processes running after Gamekit exited | **Force-stop interrupted setup…**, confirm, then Retry |
@@ -18,8 +18,8 @@ the current prefix instead. Recovery never resets an unregistered prefix automat
 | Start completely fresh without retaining the current prefix's downloads | **Reset and delete downloads…**, confirm permanent deletion, then Retry |
 | Steam is already installed and running | Use the ordinary **Stop Windows Steam** lifecycle control first |
 
-Keep Steam open when confirming usable UI. Normal setup still uses the interactive
-installer wizard; recovery does not silently accept dialogs or authenticate Steam.
+Setup uses the installer's `/S` mode and automatic client/browser/window readiness.
+Gamekit does not authenticate Steam or accept Steam Guard prompts.
 
 ## Preserving reset semantics
 

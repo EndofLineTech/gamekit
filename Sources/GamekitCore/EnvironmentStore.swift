@@ -147,11 +147,12 @@ public actor EnvironmentStore {
         }
     }
 
-    func installationFiles(_ id: EnvironmentID) throws -> EnvironmentFiles {
+    public func installationFiles(_ id: EnvironmentID) throws -> EnvironmentFiles {
         guard let directory = try directories(create: false), let record = try load(id, from: directory.metadata)
         else { throw EnvironmentStoreError.notFound }
         return try inspectFiles(record, in: directory.root)
     }
+
 
     func executionLease(for id: EnvironmentID) throws -> EnvironmentExecutionLease {
         guard let directory = try directories(create: false) else { throw EnvironmentStoreError.notFound }

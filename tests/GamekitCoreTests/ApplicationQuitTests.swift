@@ -39,6 +39,9 @@ struct ApplicationQuitTests {
         let ownedPIDs = Set(live.processes.map { $0.identity.pid })
         let foreground = NSWorkspace.shared.runningApplications.filter { ownedPIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular }
         print("Managed Dock applications: \(foreground.map { $0.localizedName ?? "?" })")
+        for application in foreground {
+            print("Foreground managed PID \(application.processIdentifier), bundle \(application.bundleIdentifier ?? "unbundled")")
+        }
         #expect(foreground.count == 1)
         #expect(foreground.allSatisfy { $0.localizedName == "Windows Steam" })
         let parent = try #require(NSRunningApplication.runningApplications(withBundleIdentifier: "tech.endofline.gamekit").first)

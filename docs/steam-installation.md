@@ -10,16 +10,15 @@ Sikarugir 10.0 revision 6 / Template 1.0.11 / D3DMetal 4.0b2 runtime.
    registers a new environment or downloads an installer.
 2. Gamekit downloads and validates the official installer, creates a fresh prefix,
    and runs `cmd /c ver` through the selected Wine runtime to initialize it.
-3. Complete the normal Steam installer wizard. Keep its default destination and
-   **uncheck Run Steam before Finish**, as in the accepted E2 recipe.
+3. Gamekit runs the installer silently with `/S` at its default destination.
 4. Gamekit closes the installer's owned Wine session and launches the installed
    Steam executable separately. Allow Steam to download updates and restart itself.
-5. **Keep Steam open.** When Steam shows a usable sign-in or Library window, click
-   **Steam UI is usable — finish setup** in Gamekit. A process appearing in an inventory is not enough
-   to prove this visual acceptance criterion.
-6. Gamekit rechecks the managed processes and executable, closes this setup's Steam
-   session, then marks the environment installed. Ongoing launch/stop controls are
-   the next lifecycle task, E4.3.
+5. Automatic readiness requires a complete consistently tagged inventory, a Steam
+   client, its web-helper process, and a visible web-helper window stable for three
+   seconds. A successful installer exit alone is insufficient.
+6. Gamekit closes the setup session, records installed state, and the native UI
+   reopens Steam in persistent normal-use mode. Authentication remains in Steam;
+   there is no additional Gamekit confirmation click.
 
 The native control uses environment ID `steam`, at
 `~/Library/Application Support/Gamekit/Environments/steam`. Existing manual
@@ -46,22 +45,20 @@ let coordinator = SteamInstallationCoordinator(
     acquisition: try SteamInstallerAcquisition(root: store.root),
     diagnostics: try DiagnosticStore()
 )
-let installed = try await coordinator.install(
-    onStage: { stage in /* update progress UI */ },
-    confirmUsableUI: { /* await the user's visual confirmation */ false }
-)
+let installed = try await coordinator.install(onStage: { stage in /* update UI */ })
 ```
 
-The confirmation callback must cooperate with task cancellation. Setup bounds
-prefix initialization to three minutes, the interactive installer to twenty
-minutes, and bootstrap plus visual confirmation to twenty minutes. Expiration or
+An optional additional acceptance callback remains available to callers and tests;
+the app does not use it. Such callbacks must cooperate with cancellation. Setup bounds
+prefix initialization to three minutes, the silent installer to twenty
+minutes, and bootstrap/readiness to twenty minutes. Expiration or
 cancellation triggers cleanup restricted to the current session's prefix/tag.
 Keep the coordinator alive while setup is running, including after any cleanup
 refusal that retains ownership.
 
 `verifyExistingInstallation(onStage:confirmUsableUI:)` exposes the narrowly scoped
 verification retry. It uses the same prerequisites, ownership, process checks and
-confirmation contract; unsupported states return `recoveryRequired`.
+automatic readiness contract; unsupported states return `recoveryRequired`.
 
 `resumeInstaller` is the recovery path for a saved partial prefix without a Steam
 executable. It reruns initialization and the installer in that same prefix, with
@@ -70,8 +67,9 @@ no reset. A record explicitly prepared as `notStarted` with no prefix can use
 
 Recipe 1 uses the runtime layout's explicit `WINEPREFIX`, `WINEARCH=win64`,
 `WINEDEBUG=-all`, and validated packaged library/framework paths. It adds no DLL,
-registry, MetalFX, MSync/ESync or AVX overrides. Wine is invoked with literal argv;
-the installer is interactive, not an unverified silent-install variant.
+registry, MetalFX, MSync/ESync or AVX overrides. Wine is invoked with literal argv.
+The `/S` invocation and automatic readiness were verified in a fresh E5 acceptance
+root; the original E4 evidence below used the earlier interactive workflow.
 
 ## Persistence and ownership
 
@@ -102,8 +100,9 @@ For initialization and installer commands, the coordinator observes leader exit
 independently of inherited output pipes, then stops the owned session. For Steam
 bootstrap, it follows fresh scoped inventories through empty/incomplete updater
 handoff gaps; the original launcher exiting is not installation success. The final
-installed state requires user confirmation, fresh Steam/process and executable
-facts, successful scoped cleanup, and a successful metadata write.
+installed state requires stable client/browser/window evidence, fresh executable
+facts, successful scoped cleanup, and a successful metadata write. This establishes
+UI availability, not successful account authentication or game compatibility.
 
 Cleanup uses the validated per-prefix Wine server protocol and ownership checks.
 It never kills processes globally by name. If cleanup is refused, setup preserves
@@ -129,9 +128,9 @@ the existing runtime-session and process-executor suites.
 For an explicitly requested real setup, a Debug build accepts `--install-steam`
 to start the same native flow automatically, or `--verify-steam` to retry eligible
 verification. The normal UI tests never pass those
-flag, download Steam, or write to real environments. A real setup still requires
-the installer wizard and visual confirmation; automated process observations do
-not replace that evidence.
+flag, download Steam, or write to real environments. Login/Steam Guard and richer
+visual release acceptance remain user checks; setup itself is silent and detects
+its UI-availability milestone automatically.
 
 ### Recorded live verification
 

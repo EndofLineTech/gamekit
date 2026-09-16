@@ -4,10 +4,10 @@ import SwiftUI
 /// Fresh runtime/process observations drive registered-environment summaries.
 struct EnvironmentSummaryView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
+    @EnvironmentObject private var setup: SetupModel
     @State private var environments: [ReconciledEnvironment] = []
     @State private var failed = false
     @State private var refresh = 0
-    @State private var runtimeReport: RuntimeReport?
 
     var body: some View {
         GroupBox {
@@ -17,13 +17,6 @@ struct EnvironmentSummaryView: View {
                         .font(.headline)
                     Spacer()
                     Button("Reload") { refresh += 1 }
-                }
-                if let runtimeReport {
-                    ForEach(runtimeReport.checks, id: \.prerequisite) { check in
-                        Label(check.detail, systemImage: check.status == .passed ? "checkmark.circle" : "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 if failed {
                     Text("Environment checks could not be completed. Existing files have been preserved.")
@@ -70,11 +63,7 @@ struct EnvironmentSummaryView: View {
             let root = AppStorageLocations.metadata
             let store = try EnvironmentStore(root: root)
             let records = try await store.loadAll()
-            let layout = RuntimeLayout(dataRoot: root)
-            let detector = RuntimeDetector { [diagnostics] request in
-                try await diagnostics.execute(request, layout: layout)
-            }
-            let report = try await detector.detect(layout, selection: layout.profile.identity)
+            let layout = setup.layout
             var refreshed: [ReconciledEnvironment] = []
             for record in records {
                 var process: ProcessObservation = .notChecked
@@ -84,11 +73,10 @@ struct EnvironmentSummaryView: View {
                     process = inventory.observation(installation: record.installation)
                 }
                 refreshed.append(try await store.reconcile(record.id, process: process,
-                                                            prerequisites: report.prerequisites,
+                                                            prerequisites: setup.report?.prerequisites ?? .notChecked,
                                                             expectedRevision: record.revision))
             }
             try Task.checkCancellation()
-            runtimeReport = report
             environments = refreshed
             failed = false
         } catch is CancellationError {
@@ -96,7 +84,6 @@ struct EnvironmentSummaryView: View {
         } catch {
             guard !Task.isCancelled else { return }
             environments = []
-            runtimeReport = nil
             failed = true
         }
     }

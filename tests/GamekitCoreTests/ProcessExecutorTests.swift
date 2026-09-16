@@ -1,9 +1,23 @@
 import Foundation
+import CProcessSupport
+import Darwin
 import Testing
 @testable import GamekitCore
 
 @Suite("Asynchronous command execution")
 struct ProcessExecutorTests {
+    @Test("Audit-token signalling refuses stale identities and terminates only the owned process")
+    func auditTokenTermination() async throws {
+        let child = try await ProcessExecutor().start(.init(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["30"], timeout: 35))
+        defer { child.cancel() }
+        var identity = GKProcessIdentity()
+        try #require(gk_identity(child.pid, &identity) == 0)
+        #expect(gk_signal_identity(child.pid, identity.start_seconds + 1, identity.start_microseconds, SIGTERM) != 0)
+        let probe = gk_signal_identity(child.pid, identity.start_seconds, identity.start_microseconds, 0)
+        try #require(probe == 0, "audit-token signal access returned \(probe)")
+        #expect(gk_signal_identity(child.pid, identity.start_seconds, identity.start_microseconds, SIGTERM) == 0)
+        #expect(await child.result().termination == .signalled(SIGTERM))
+    }
     @Test("An independently launched application owns its own macOS responsibility")
     func independentResponsibility() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

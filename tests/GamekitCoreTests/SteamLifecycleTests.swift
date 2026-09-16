@@ -8,8 +8,11 @@ private actor LifecycleFixtureRuntime {
     var launches = 0
     var forced = false
     var graceful = true
+    var orphan = false
+    var signalled = false
     func foreign() { token = "foreign" }
     func refuseGraceful() { graceful = false }
+    func leaveOrphan() { graceful = false; orphan = true }
     func handoffGap() { token = nil }
     func snapshot() -> RuntimeProcessSnapshot {
         .init(processes: token.map { [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: $0)] } ?? [], complete: true)
@@ -23,12 +26,16 @@ private actor LifecycleFixtureRuntime {
     func execute(_ request: CommandRequest) async throws -> CommandResult {
         #expect(prefix != nil && request.environment["WINEPREFIX"] == prefix)
         #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
-        if request.arguments == ["-k"] { forced = true; token = nil }
+        if request.arguments == ["-k"] { forced = true; if !orphan { token = nil } }
         else if request.arguments.last == "-shutdown", graceful { token = nil }
         return try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/true")))
     }
     var driver: SteamLifecycleDriver {
-        .init(preflight: {}, observe: { _, _ in await self.snapshot() }, spawn: { await self.spawn($0) }, execute: { try await self.execute($0) })
+        .init(preflight: {}, observe: { _, _ in await self.snapshot() }, spawn: { await self.spawn($0) }, execute: { try await self.execute($0) },
+              signalRemaining: { processes, _ in await self.signal(processes) })
+    }
+    func signal(_ processes: [ScopedRuntimeProcess]) {
+        if !processes.isEmpty { #expect(processes.allSatisfy { $0.sessionID == token }); signalled = true; token = nil }
     }
 }
 
@@ -50,6 +57,15 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Explicit live cleanup of the recorded managed session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_STOP_ONLY"] == "1"))
+    func stopRecordedSession() async throws {
+        let store = try EnvironmentStore()
+        let lifecycle = SteamLifecycle(store: store, layout: try await RuntimeSettingsStore(store: store).layout())
+        let result = try await lifecycle.stop()
+        #expect(try await lifecycle.status() == .stopped)
+        print("Recorded managed session cleanup: \(result)")
+    }
+
     @Test("Launch is idempotent and a reopened controller restores scoped stop")
     func reopen() async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }
@@ -59,6 +75,8 @@ struct SteamLifecycleTests {
         #expect(try await first.status() == .stopped)
         _ = try await first.launch()
         #expect(try await first.launch() == .running)
+        #expect(await runtime.launches == 1)
+        try await first.show()
         #expect(await runtime.launches == 1)
         let reopened = SteamLifecycle(store: fixture.store, driver: driver, gracefulTimeout: 0.05)
         #expect(try await reopened.status() == .running)
@@ -78,6 +96,18 @@ struct SteamLifecycleTests {
         _ = try await lifecycle.launch()
         #expect(try await lifecycle.stop() == .forced)
         #expect(await runtime.forced)
+    }
+
+    @Test("Tagged server survivors reach the final identity-checked fallback")
+    func orphanFallback() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        await runtime.leaveOrphan()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        #expect(try await lifecycle.stop() == .forced)
+        #expect(await runtime.signalled)
+        #expect(try await lifecycle.status() == .stopped)
     }
 
     @Test("Foreign process tags refuse both launch and shutdown")
@@ -131,6 +161,22 @@ struct SteamLifecycleTests {
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.store.save(record) }
         _ = try await lifecycle.stop()
         _ = try await fixture.store.save(record)
+    }
+
+    @Test("Missing runtime reports unverified but an already idle receipt can be released safely")
+    func runtimeDisappearance() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let original = await runtime.driver
+        _ = try await SteamLifecycle(store: fixture.store, driver: original).launch()
+        await runtime.handoffGap()
+        let missing = SteamLifecycleDriver(preflight: { throw RuntimeSessionError.prerequisitesNotReady }, observe: original.observe,
+            spawn: original.spawn, execute: original.execute, runtimeAvailable: { false })
+        let reopened = SteamLifecycle(store: fixture.store, driver: missing, gracefulTimeout: 0.05)
+        #expect(try await reopened.status() == .unverified)
+        #expect(try await reopened.stop() == .alreadyStopped)
+        #expect(!(await runtime.forced))
+        #expect(!(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked()))
     }
 
     @Test("Uncaptured output does not depend on an app-owned pipe")

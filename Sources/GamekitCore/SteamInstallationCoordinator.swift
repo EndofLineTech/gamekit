@@ -9,6 +9,7 @@ public enum SteamInstallationRecipe {
     public static let environmentID = try! EnvironmentID("steam")
     // E2's baseline Windows command initializes Wine without registry overrides.
     public static let initializeArguments = ["cmd", "/c", "ver"]
+    public static let installerArguments = ["/S"]
 }
 
 struct SteamInstallationProcess: Sendable {
@@ -21,10 +22,13 @@ struct SteamInstallationDriver: Sendable {
     let acquire: @Sendable () async throws -> InstallerArtifact
     let artifactURL: @Sendable (InstallerArtifact) async throws -> URL
     let start: @Sendable (EnvironmentRecord, [String], TimeInterval, DiagnosticOperation?) async throws -> SteamInstallationProcess
+    var uiReady: @Sendable (EnvironmentRecord, RuntimeProcessSnapshot) -> Bool = { _, _ in true }
+    var readinessStability: TimeInterval = 0
 }
 
-/// Fresh installation only. Restart/retry of a partial prefix requires explicit
-/// recovery. The confirmation callback means a person has seen a usable Steam UI.
+/// Silent installation with objective UI-availability detection. Restart/retry of a
+/// partial prefix requires explicit recovery. An optional extra acceptance callback
+/// is supported for callers/tests; the native app needs no confirmation click.
 public actor SteamInstallationCoordinator {
     private let store: EnvironmentStore
     private let driver: SteamInstallationDriver
@@ -46,7 +50,7 @@ public actor SteamInstallationCoordinator {
                 arguments: arguments, timeout: timeout, onOutput: { operation?.receive($0) })
             return SteamInstallationProcess(leaderExit: { await session.command.observedLeaderExit() },
                 snapshot: { try await session.snapshot() }, stop: { _ = try await session.stop() })
-        })
+        }, uiReady: { _, snapshot in SteamReadiness.ready(snapshot: snapshot, windowOwners: SteamReadiness.windowOwners()) }, readinessStability: 3)
     }
     init(store: EnvironmentStore, driver: SteamInstallationDriver, diagnostics: DiagnosticStore? = nil) {
         self.store = store; self.driver = driver; self.diagnostics = diagnostics
@@ -54,7 +58,7 @@ public actor SteamInstallationCoordinator {
 
     public func install(id: EnvironmentID = SteamInstallationRecipe.environmentID,
                         onStage: @escaping @Sendable (InstallationStage) async -> Void = { _ in },
-                        confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
+                        confirmUsableUI: (@Sendable () async throws -> Bool)? = nil) async throws -> EnvironmentRecord {
         try await execute(id: id, verificationOnly: false, onStage: onStage, confirmUsableUI: confirmUsableUI)
     }
 
@@ -62,20 +66,20 @@ public actor SteamInstallationCoordinator {
     /// was interrupted. Never reruns an installer or initializes an existing prefix.
     public func verifyExistingInstallation(id: EnvironmentID = SteamInstallationRecipe.environmentID,
                         onStage: @escaping @Sendable (InstallationStage) async -> Void = { _ in },
-                        confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
+                        confirmUsableUI: (@Sendable () async throws -> Bool)? = nil) async throws -> EnvironmentRecord {
         try await execute(id: id, verificationOnly: true, onStage: onStage, confirmUsableUI: confirmUsableUI)
     }
 
     public func resumeInstaller(id: EnvironmentID = SteamInstallationRecipe.environmentID,
                         onStage: @escaping @Sendable (InstallationStage) async -> Void = { _ in },
-                        confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
+                        confirmUsableUI: (@Sendable () async throws -> Bool)? = nil) async throws -> EnvironmentRecord {
         try await execute(id: id, verificationOnly: false, resumeExisting: true, onStage: onStage, confirmUsableUI: confirmUsableUI)
     }
 
     private func execute(id: EnvironmentID, verificationOnly: Bool,
                          resumeExisting: Bool = false,
                          onStage: @escaping @Sendable (InstallationStage) async -> Void,
-                         confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
+                         confirmUsableUI: (@Sendable () async throws -> Bool)?) async throws -> EnvironmentRecord {
         guard !running, process == nil else { throw EnvironmentStoreError.busy }
         running = true
         defer { running = false; if process == nil { lease = nil } }
@@ -135,7 +139,7 @@ public actor SteamInstallationCoordinator {
                 record = try await advance(record, to: stage, operation: operation)
                 await onStage(stage)
                 let artifactURL = try await driver.artifactURL(artifact)
-                try await runCommand(record, arguments: [artifactURL.path], timeout: 1200, operation: operation)
+                try await runCommand(record, arguments: [artifactURL.path] + SteamInstallationRecipe.installerArguments, timeout: 1200, operation: operation)
             }
             guard try await store.installationFiles(id).executableExists else { throw SteamInstallationError.commandFailed }
             try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id)
@@ -154,7 +158,20 @@ public actor SteamInstallationCoordinator {
             stage = .validatingInstallation
             record = try await advance(record, to: stage, operation: operation)
             await onStage(stage)
-            let confirmed = try await withThrowingTaskGroup(of: Bool.self) { group in
+            var readySince: ContinuousClock.Instant?
+            while true {
+                try Task.checkCancellation()
+                guard let process else { throw SteamInstallationError.steamNotObserved }
+                let snapshot = try await process.snapshot()
+                if driver.uiReady(record, snapshot) {
+                    if readySince == nil { readySince = .now }
+                    if readySince!.duration(to: .now) >= .seconds(driver.readinessStability) { break }
+                } else { readySince = nil }
+                guard ContinuousClock.now < deadline else { throw SteamInstallationError.timedOut }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            if let confirmUsableUI {
+              let confirmed = try await withThrowingTaskGroup(of: Bool.self) { group in
                 group.addTask { try await confirmUsableUI() }
                 group.addTask {
                     try await Task.sleep(until: deadline, clock: .continuous)
@@ -163,7 +180,8 @@ public actor SteamInstallationCoordinator {
                 defer { group.cancelAll() }
                 return try await group.next() ?? false
             }
-            guard confirmed else { throw SteamInstallationError.confirmationDeclined }
+              guard confirmed else { throw SteamInstallationError.confirmationDeclined }
+            }
             try Task.checkCancellation()
             guard try await steamObserved(), try await store.installationFiles(id).executableExists else {
                 throw SteamInstallationError.steamNotObserved
@@ -222,7 +240,7 @@ public actor SteamInstallationCoordinator {
     private func steamObserved() async throws -> Bool {
         guard let process else { return false }
         let snapshot = try await process.snapshot()
-        return snapshot.complete && snapshot.processes.contains { $0.role == .steam }
+        return snapshot.complete && snapshot.processes.contains { $0.role == .steam || $0.role == .steamUI }
     }
     private func stopProcess() async throws {
         guard let process else { return }

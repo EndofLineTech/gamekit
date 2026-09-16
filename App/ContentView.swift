@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var diagnostics = AppDiagnosticsModel()
+    @StateObject private var setup = SetupModel()
     private let operatingSystem = ProcessInfo.processInfo.operatingSystemVersion
 
     private var architecture: HostArchitecture {
@@ -23,11 +24,20 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ScrollView {
-            content
+        VStack(spacing: 0) {
+            if let activity = setup.activity {
+                HStack(spacing: 12) {
+                    ProgressView().controlSize(.small)
+                    Text(activity).accessibilityIdentifier("operation-status")
+                    Spacer()
+                }.padding(16).background(.quaternary)
+            }
+            ScrollView { content }
         }
         .frame(minWidth: 640, minHeight: 620)
         .environmentObject(diagnostics)
+        .environmentObject(setup)
+        .task { setup.refresh(diagnostics: diagnostics) }
     }
 
     private var content: some View {
@@ -44,27 +54,15 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("Foundation build")
+                Text("Personal prototype")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.quaternary, in: Capsule())
             }
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 14) {
-                    Label("Steam runtime recipe", systemImage: "shippingbox")
-                        .font(.headline)
-                    Text("Sikarugir Wine 10.0 revision 6 + Apple D3DMetal 4.0b2")
-                        .accessibilityIdentifier("runtime-recipe")
-                    Text("Two fresh Steam environments passed manual feasibility testing. The native core now checks the runtime and tracks managed process ownership.")
-                        .foregroundStyle(.secondary)
-                    Link("Read the validated runtime recipe",
-                         destination: URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-            }
+            Text("Sikarugir Wine 10.0 revision 6 + Apple D3DMetal 4.0b2")
+                .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("runtime-recipe")
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Prototype target: Apple silicon · macOS \(PrototypeHostPolicy.macOSMajorVersion)")
@@ -79,6 +77,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             SteamLifecycleView()
+            SetupView()
             EnvironmentSummaryView()
             SteamInstallationView()
             DiagnosticsView()

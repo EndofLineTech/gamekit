@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "scope": "personal Apple-silicon macOS 27 prototype",
+  "runtime": "WS12WineSikarugir10.0_6",
+  "template": "1.0.11",
+  "wine": "10.0 (Sikarugir)",
+  "graphics": "Apple D3DMetal 4.0b2, unchanged payload",
+  "gstreamer": "1.28.1",
+  "installerSource": "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe",
+  "observedInstallerSHA256": "7d3654531c32d941b8cae81c4137fc542172bfa9635f169cb392f245a0a12bcb",
+  "observedSteamWin64Manifest": "1788652215",
+  "installerMode": "NSIS /S, default destination",
+  "readiness": "complete tagged client and web-helper inventory plus stable web-helper window",
+  "note": "Observed identities are evidence, not independent installer authentication or future compatibility guarantees. Revalidate after OS/runtime/Steam updates."
+}

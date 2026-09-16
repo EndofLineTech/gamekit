@@ -14,7 +14,7 @@ struct ProcessObservationTests {
         #expect(RuntimeProcessObserver.role(arguments: ["/runtime/bin/wine", "cmd", "/c", "echo", steam], record: record, prefix: prefix) == .other)
         #expect(RuntimeProcessObserver.role(arguments: [steam, "-silent"], record: record, prefix: prefix) == .steam)
         let helper = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/bin/cef/cef.win64/steamwebhelper.exe").path
-        #expect(RuntimeProcessObserver.role(arguments: [helper], record: record, prefix: prefix) == .steam)
+        #expect(RuntimeProcessObserver.role(arguments: [helper], record: record, prefix: prefix) == .steamUI)
     }
     @Test("Wine environment does not inherit secrets or conflicting runtime controls")
     func sanitizedEnvironment() {

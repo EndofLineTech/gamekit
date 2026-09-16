@@ -32,9 +32,10 @@ private func installationDriver(_ fixture: InstallationFixture, probe: Installat
     let artifact = InstallerArtifact(schemaVersion: 1, id: UUID(), provenance: .init(source: InstallerSourcePolicy.source,
         sha256: String(repeating: "a", count: 64), downloadedAt: Date()), finalURL: InstallerSourcePolicy.source, byteCount: 1024)
     return SteamInstallationDriver(preflight: {}, acquire: { artifact }, artifactURL: { _ in fixture.parent.appendingPathComponent("installer.exe") },
-        start: { record, _, _, _ in
+        start: { record, arguments, _, _ in
             guard case .installing(let stage) = record.installation else { throw MetadataError.invalidRecord }
             await probe.record(stage)
+            if stage == .runningInstaller { #expect(arguments.count == 2 && arguments.last == "/S") }
             if stage == .runningInstaller && failing != stage {
                 let exe = fixture.root.appendingPathComponent("Environments/steam/\(record.steamExecutable.rawValue)")
                 if FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().path) {
