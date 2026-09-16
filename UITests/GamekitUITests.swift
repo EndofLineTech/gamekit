@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testOptInLiveSteamSurvivesGamekitRestart() async throws {
+        guard ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in real Steam lifecycle") }
+        let root = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_ROOT"])
+        let store = try EnvironmentStore(root: URL(fileURLWithPath: root))
+        let record = try await store.load(SteamInstallationRecipe.environmentID)
+        XCTAssertEqual(record?.installation, .installed)
+        guard record?.installation == .installed else { return }
+        let logs = try temporaryRoot().deletingLastPathComponent().appendingPathComponent("Logs")
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root, "--diagnostics-root", logs.path, "--launch-steam"]
+        app.launch()
+        let running = app.staticTexts["Steam: running"]
+        XCTAssertTrue(running.waitForExistence(timeout: 60))
+        let receiptURL = store.root.appendingPathComponent("Metadata/Lifecycle/steam.json")
+        let receiptBeforeQuit = try Data(contentsOf: receiptURL)
+        app.terminate()
+        // Xcode's UI runner may not inspect another process's kernel arguments.
+        // The relaunched app must observe the existing session without a launch flag.
+        app.launchArguments = ["--metadata-root", root, "--diagnostics-root", logs.path]
+        app.launch()
+        XCTAssertTrue(running.waitForExistence(timeout: 30))
+        XCTAssertEqual(try Data(contentsOf: receiptURL), receiptBeforeQuit)
+        app.buttons["stop-steam"].click()
+        XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 60))
+        app.terminate()
+    }
     func testDiagnosticsAreVisibleAndOfferSummaryExport() async throws {
         let root = try temporaryRoot()
         let logs = root.deletingLastPathComponent().appendingPathComponent("GamekitLogs")

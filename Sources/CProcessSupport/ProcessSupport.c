@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 int gk_spawn(const char *path, char *const argv[], char *const envp[], const char *cwd,
-             pid_t *pid, int *stdout_fd, int *stderr_fd)
+             int discard_output, pid_t *pid, int *stdout_fd, int *stderr_fd)
 {
     int out[2] = {-1, -1}, err[2] = {-1, -1}, result = 0;
     posix_spawnattr_t attributes;
@@ -44,8 +44,13 @@ int gk_spawn(const char *path, char *const argv[], char *const envp[], const cha
     ACTION(posix_spawnattr_setsigmask(&attributes, &empty));
     ACTION(posix_spawnattr_setsigdefault(&attributes, &defaults));
     ACTION(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0));
-    ACTION(posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO));
-    ACTION(posix_spawn_file_actions_adddup2(&actions, err[1], STDERR_FILENO));
+    if (discard_output) {
+        ACTION(posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0));
+        ACTION(posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0));
+    } else {
+        ACTION(posix_spawn_file_actions_adddup2(&actions, out[1], STDOUT_FILENO));
+        ACTION(posix_spawn_file_actions_adddup2(&actions, err[1], STDERR_FILENO));
+    }
     if (cwd) {
         if (__builtin_available(macOS 26.0, *)) {
             ACTION(posix_spawn_file_actions_addchdir(&actions, cwd));

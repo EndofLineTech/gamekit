@@ -22,6 +22,8 @@ The core now supports [Steam installer acquisition](docs/installer-acquisition.m
 with HTTPS policy, artifact validation and persisted provenance.
 [Managed Steam setup](docs/steam-installation.md) creates a fresh prefix, runs the
 installer, follows bootstrap, and records explicit UI confirmation.
+[Steam lifecycle controls](docs/steam-lifecycle.md) launch, observe and stop the
+managed installation, including after Gamekit restarts.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

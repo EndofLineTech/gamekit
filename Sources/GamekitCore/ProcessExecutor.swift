@@ -7,6 +7,7 @@ public enum CommandTermination: Equatable, Sendable {
     case exited(Int32), signalled(Int32), timedOut, cancelled, observationFailed(Int32)
 }
 public enum OutputChannel: Sendable { case stdout, stderr }
+public enum CommandOutputMode: Sendable { case capture, discard }
 public struct CommandOutput: Sendable {
     public let channel: OutputChannel
     public let bytes: Data
@@ -32,12 +33,14 @@ public struct CommandRequest: Sendable {
     public let timeout: TimeInterval?
     public let terminationGrace: TimeInterval
     public let outputLimit: Int
+    public let outputMode: CommandOutputMode
 
     public init(executable: URL, arguments: [String] = [], environment: [String: String] = [:],
                 workingDirectory: URL? = nil, timeout: TimeInterval? = 30,
-                terminationGrace: TimeInterval = 0.5, outputLimit: Int = 262_144) {
+                terminationGrace: TimeInterval = 0.5, outputLimit: Int = 262_144, outputMode: CommandOutputMode = .capture) {
         self.executable = executable; self.arguments = arguments; self.environment = environment
         self.workingDirectory = workingDirectory; self.timeout = timeout
+        self.outputMode = outputMode
         self.terminationGrace = terminationGrace; self.outputLimit = outputLimit
     }
 
@@ -73,7 +76,7 @@ public struct ProcessExecutor: Sendable {
                 }
                 var pid: pid_t = 0, output: Int32 = -1, errors: Int32 = -1
                 let code = gk_spawn(request.executable.path, &arguments, &environment,
-                                    request.workingDirectory?.path, &pid, &output, &errors)
+                                     request.workingDirectory?.path, request.outputMode == .discard ? 1 : 0, &pid, &output, &errors)
                 guard code == 0 else { continuation.resume(throwing: CommandError.spawn(code)); return }
                 let command = RunningCommand(pid: pid, output: output, errors: errors, request: request, callback: onOutput)
                 command.begin()
