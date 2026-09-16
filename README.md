@@ -24,6 +24,8 @@ with HTTPS policy, artifact validation and persisted provenance.
 installer, follows bootstrap, and records explicit UI confirmation.
 [Steam lifecycle controls](docs/steam-lifecycle.md) launch, observe and stop the
 managed installation, including after Gamekit restarts.
+[Recovery controls](docs/steam-recovery.md) retry interrupted setup and support a
+confirmed reset that archives the old environment and preserves game downloads.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

@@ -66,27 +66,43 @@ public actor SteamInstallationCoordinator {
         try await execute(id: id, verificationOnly: true, onStage: onStage, confirmUsableUI: confirmUsableUI)
     }
 
+    public func resumeInstaller(id: EnvironmentID = SteamInstallationRecipe.environmentID,
+                        onStage: @escaping @Sendable (InstallationStage) async -> Void = { _ in },
+                        confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
+        try await execute(id: id, verificationOnly: false, resumeExisting: true, onStage: onStage, confirmUsableUI: confirmUsableUI)
+    }
+
     private func execute(id: EnvironmentID, verificationOnly: Bool,
+                         resumeExisting: Bool = false,
                          onStage: @escaping @Sendable (InstallationStage) async -> Void,
                          confirmUsableUI: @escaping @Sendable () async throws -> Bool) async throws -> EnvironmentRecord {
         guard !running, process == nil else { throw EnvironmentStoreError.busy }
         running = true
         defer { running = false; if process == nil { lease = nil } }
         lease = try await store.installationLease()
+        guard try !SteamRecoveryArchive(root: store.root, id: id).resetNeedsCompletion else { throw SteamRecoveryError.pendingReset }
         let existing = try await store.load(id)
         if let existing {
             let files = try await store.installationFiles(id)
             guard existing.installationRecipeVersion == SteamInstallationRecipe.version,
-                  files.prefixExists, files.executableExists else { throw SteamInstallationError.recoveryRequired }
-            if !verificationOnly {
+                  existing.runtime == RuntimeProfile.sikarugir.identity, existing.steamExecutable == .steamDefault
+            else { throw SteamInstallationError.recoveryRequired }
+            if resumeExisting {
+                guard files.prefixExists, !files.executableExists,
+                      [.interrupted(.creatingPrefix), .interrupted(.runningInstaller), .failed(.installerFailed)].contains(existing.installation)
+                else { throw SteamInstallationError.recoveryRequired }
+            } else if !verificationOnly && existing.installation == .notStarted && !files.prefixExists {
+                // Explicit recovery prepared this existing record for a fresh prefix.
+            } else if !verificationOnly {
+                guard files.prefixExists, files.executableExists else { throw SteamInstallationError.recoveryRequired }
                 guard existing.installation == .installed else { throw SteamInstallationError.recoveryRequired }
                 return existing
+            } else {
+                guard files.prefixExists, files.executableExists, existing.installer != nil,
+                      [.failed(.bootstrapFailed), .interrupted(.bootstrappingSteam), .interrupted(.validatingInstallation)].contains(existing.installation)
+                else { throw SteamInstallationError.recoveryRequired }
             }
-            guard existing.runtime == RuntimeProfile.sikarugir.identity, existing.steamExecutable == .steamDefault,
-                  existing.installer != nil,
-                  [.failed(.bootstrapFailed), .interrupted(.bootstrappingSteam), .interrupted(.validatingInstallation)].contains(existing.installation)
-            else { throw SteamInstallationError.recoveryRequired }
-        } else if verificationOnly {
+        } else if verificationOnly || resumeExisting {
             throw SteamInstallationError.recoveryRequired
         }
         try Task.checkCancellation()
@@ -103,6 +119,7 @@ public actor SteamInstallationCoordinator {
         catch { operation = nil; diagnosticsUnavailable = true }
         do {
             if !verificationOnly {
+                record = try await advance(record, to: .downloadingInstaller, operation: operation)
                 await onStage(stage)
                 let artifact = try await driver.acquire()
                 try Task.checkCancellation()
@@ -110,14 +127,17 @@ public actor SteamInstallationCoordinator {
                 stage = .creatingPrefix
                 record = try await advance(record, to: stage, operation: operation)
                 await onStage(stage)
-                try await store.createInstallationPrefix(record)
+                if resumeExisting { _ = try await store.checkedPrefixURL(for: id) }
+                else { try await store.createInstallationPrefix(record) }
                 try await runCommand(record, arguments: SteamInstallationRecipe.initializeArguments, timeout: 180, operation: operation)
+                try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id)
                 stage = .runningInstaller
                 record = try await advance(record, to: stage, operation: operation)
                 await onStage(stage)
                 let artifactURL = try await driver.artifactURL(artifact)
                 try await runCommand(record, arguments: [artifactURL.path], timeout: 1200, operation: operation)
             }
+            if verificationOnly { try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id) }
             guard try await store.installationFiles(id).executableExists else { throw SteamInstallationError.commandFailed }
             stage = .bootstrappingSteam
             record = try await advance(record, to: stage, operation: operation)
@@ -180,7 +200,7 @@ public actor SteamInstallationCoordinator {
         var updated = record; updated.installation = .installing(stage)
         let saved = try await store.save(updated)
         if let operation {
-            do { try await diagnostics?.transition(operation, to: stage == .bootstrappingSteam ? .bootstrap : stage == .validatingInstallation ? .rendering : .installation) }
+            do { try await diagnostics?.transition(operation, to: stage == .downloadingInstaller ? .download : stage == .bootstrappingSteam ? .bootstrap : stage == .validatingInstallation ? .rendering : .installation) }
             catch { diagnosticsUnavailable = true }
         }
         return saved

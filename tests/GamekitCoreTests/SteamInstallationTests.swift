@@ -194,4 +194,57 @@ struct SteamInstallationTests {
         #expect(summary.outcome == .exited(0))
         #expect(!(String(decoding: try await diagnostics.exportSummary(summary.id), as: UTF8.self).contains(fixture.root.path)))
     }
+
+    @Test("Recovery resumes a partial installer in the same prefix")
+    func resumePartialInstaller() async throws {
+        let fixture = try InstallationFixture(); defer { fixture.remove() }
+        let store = try EnvironmentStore(root: fixture.root)
+        let probe = InstallationProbe()
+        let failed = SteamInstallationCoordinator(store: store, driver: installationDriver(fixture, probe: probe, failing: .runningInstaller))
+        await #expect(throws: (any Error).self) { try await failed.install(id: fixture.id, confirmUsableUI: { true }) }
+        let marker = store.prefixURL(for: fixture.id).appendingPathComponent("keep-existing")
+        try Data("keep".utf8).write(to: marker)
+        let recovery = SteamRecovery(store: store, driver: .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }))
+        #expect(try await recovery.prepareRetry() == .resumeInstaller)
+        let resumed = SteamInstallationCoordinator(store: store, driver: installationDriver(fixture, probe: probe))
+        let result = try await resumed.resumeInstaller(id: fixture.id, confirmUsableUI: { true })
+        #expect(result.installation == .installed)
+        #expect(try Data(contentsOf: marker) == Data("keep".utf8))
+    }
+
+    @Test("Reset then reinstall restores games before bootstrap and keeps the environment identity")
+    func resetAndReinstall() async throws {
+        let fixture = try InstallationFixture(); defer { fixture.remove() }
+        let store = try EnvironmentStore(root: fixture.root)
+        let probe = InstallationProbe()
+        let coordinator = SteamInstallationCoordinator(store: store, driver: installationDriver(fixture, probe: probe))
+        let first = try await coordinator.install(id: fixture.id, confirmUsableUI: { true })
+        let game = store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/game/data")
+        try FileManager.default.createDirectory(at: game.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("game download".utf8).write(to: game)
+        let recovery = SteamRecovery(store: store, driver: .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }))
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        #expect(try await recovery.prepareRetry() == .install)
+        let result = try await coordinator.install(id: fixture.id, confirmUsableUI: {
+            let bytes = try Data(contentsOf: game)
+            #expect(bytes == Data("game download".utf8))
+            return true
+        })
+        #expect(result.installation == .installed && result.id == first.id && result.createdAt == first.createdAt)
+    }
+
+    @Test("An interrupted reset must finish its journal before Install can create a replacement prefix")
+    func pendingResetBlocksInstallation() async throws {
+        let fixture = try InstallationFixture(); defer { fixture.remove() }
+        let store = try EnvironmentStore(root: fixture.root)
+        let probe = InstallationProbe()
+        let coordinator = SteamInstallationCoordinator(store: store, driver: installationDriver(fixture, probe: probe))
+        _ = try await coordinator.install(id: fixture.id, confirmUsableUI: { true })
+        let recovery = SteamRecovery(store: store, driver: .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }),
+            checkpoint: { if $0 == .metadataReset { throw SteamInstallationError.commandFailed } })
+        await #expect(throws: SteamInstallationError.commandFailed) { try await recovery.resetPreservingDownloads(confirmed: true) }
+        await #expect(throws: SteamRecoveryError.pendingReset) { try await coordinator.install(id: fixture.id, confirmUsableUI: { true }) }
+        #expect(!(try await store.installationFiles(fixture.id).prefixExists))
+        #expect(await probe.stages.count == 3)
+    }
 }

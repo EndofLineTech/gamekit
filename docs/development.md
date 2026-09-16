@@ -80,6 +80,7 @@ E4.1 supplies [Steam installer acquisition](installer-acquisition.md) for the
 installation coordinator, with an opt-in official-download smoke test.
 E4.2 adds the [managed Steam installation coordinator and setup UI](steam-installation.md).
 E4.3 adds [persistent Steam lifecycle controls](steam-lifecycle.md).
+E4.4 adds [stage-aware recovery and download-preserving reset](steam-recovery.md).
 
 ## Signing and generated artifacts
 
@@ -176,3 +177,17 @@ the PR's actual CI results before merging.
 - Three live Steam launch/stop cycles passed with replacement controllers.
 - All five UI tests passed with the real lifecycle opt-in, including Gamekit
   termination/reopen while Steam remained running. Normal CI skips that live case.
+
+## Local verification recorded for E4.4
+
+- Tests-first red observed for reset journaling, download preservation and retry.
+- `make check` passed: 124 Swift functions reported (six opt-in skips), six Python
+  tests and native build.
+- Crash-injection tests cover reset preparation, prefix archival, metadata reset
+  and library restoration; an end-to-end coordinator fixture resets/reinstalls
+  with game bytes intact before bootstrap.
+- The disposable real-Wine recovery smoke passed twice: a freshly initialized
+  replacement prefix with unchanged game/depot bytes and the old client archived.
+- Local UI testing hit the locked-desktop authentication barrier; the reset-dialog
+  confirmation/Cancel regression is included in hosted CI. No attempt was made to
+  bypass the user's screen lock.

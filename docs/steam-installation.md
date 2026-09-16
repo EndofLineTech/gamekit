@@ -32,7 +32,8 @@ stage. A failed or interrupted prefix is preserved. Setup refuses to recreate or
 silently resume it. **Retry Steam verification** explicitly relaunches only the
 bootstrap/UI check for a recipe-1 environment with intact Steam files and a saved
 bootstrap failure or interrupted bootstrap/validation stage. It never reruns the
-installer or creates a prefix. Broader interrupted-install recovery belongs to E4.4.
+installer or creates a prefix. [E4.4 recovery](steam-recovery.md) adds stage-aware
+retry and explicit download-preserving reset.
 
 ## Core API
 
@@ -60,6 +61,11 @@ refusal that retains ownership.
 `verifyExistingInstallation(onStage:confirmUsableUI:)` exposes the narrowly scoped
 verification retry. It uses the same prerequisites, ownership, process checks and
 confirmation contract; unsupported states return `recoveryRequired`.
+
+`resumeInstaller` is the recovery path for a saved partial prefix without a Steam
+executable. It reruns initialization and the installer in that same prefix, with
+no reset. A record explicitly prepared as `notStarted` with no prefix can use
+`install` again; pending reset journals must first be completed through recovery.
 
 Recipe 1 uses the runtime layout's explicit `WINEPREFIX`, `WINEARCH=win64`,
 `WINEDEBUG=-all`, and validated packaged library/framework paths. It adds no DLL,
