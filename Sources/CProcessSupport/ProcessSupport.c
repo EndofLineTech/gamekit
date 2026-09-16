@@ -1,5 +1,6 @@
 #include "CProcessSupport.h"
 #include <errno.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <libproc.h>
 #include <signal.h>
@@ -12,7 +13,7 @@
 #include <unistd.h>
 
 int gk_spawn(const char *path, char *const argv[], char *const envp[], const char *cwd,
-             int discard_output, pid_t *pid, int *stdout_fd, int *stderr_fd)
+             int discard_output, int independent_responsibility, pid_t *pid, int *stdout_fd, int *stderr_fd)
 {
     int out[2] = {-1, -1}, err[2] = {-1, -1}, result = 0;
     posix_spawnattr_t attributes;
@@ -43,6 +44,14 @@ int gk_spawn(const char *path, char *const argv[], char *const envp[], const cha
     ACTION(posix_spawnattr_setpgroup(&attributes, 0));
     ACTION(posix_spawnattr_setsigmask(&attributes, &empty));
     ACTION(posix_spawnattr_setsigdefault(&attributes, &defaults));
+    if (independent_responsibility) {
+        // macOS SPI also used by LLDB/Chromium for independently launched apps.
+        // Fail closed if unavailable: do not silently recreate subordinate ownership.
+        typedef int (*disclaim_fn)(posix_spawnattr_t *, int);
+        disclaim_fn disclaim = (disclaim_fn)dlsym(RTLD_DEFAULT, "responsibility_spawnattrs_setdisclaim");
+        if (!disclaim) { result = ENOTSUP; goto cleanup; }
+        ACTION(disclaim(&attributes, 1));
+    }
     ACTION(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0));
     if (discard_output) {
         ACTION(posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0));

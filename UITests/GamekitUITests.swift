@@ -3,6 +3,26 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testOptInNormalQuitAndOrdinaryReopenWhileSteamRuns() async throws {
+        guard ProcessInfo.processInfo.environment["GAMEKIT_NORMAL_QUIT_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in normal quit and Launch Services reopen") }
+        let root = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_ROOT"])
+        let appPath = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_APP_PATH"])
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root, "--launch-steam"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 60))
+        app.activate()
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 5), "Normal Quit must not wait for Steam shutdown")
+        let opened = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: [appPath], timeout: 10))
+        XCTAssertEqual(opened.termination, .exited(0))
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "Ordinary Launch Services reopen must work while Steam remains alive")
+        XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 30))
+        app.buttons["stop-steam"].click()
+        XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 60))
+        app.terminate()
+    }
+
     func testRecoveryResetRequiresConfirmationAndCancellationPreservesMetadata() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

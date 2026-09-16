@@ -131,6 +131,67 @@ final class ManagedDirectory {
         }
     }
 
+    /// Copy a validated runtime tree without resolving source symlinks or following
+    /// a replaced destination pathname. APFS clones avoid duplicating binary data.
+    func copyContents(from source: ManagedDirectory) throws {
+        for name in try source.names() {
+            var info = stat()
+            guard fstatat(source.descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect copy source") }
+            switch info.st_mode & mode_t(S_IFMT) {
+            case mode_t(S_IFDIR):
+                guard let child = try source.directory(name) else { throw EnvironmentStoreError.notFound }
+                let copy = try createExclusiveDirectory(name)
+                try copy.copyContents(from: child)
+                guard fchmod(copy.descriptor, info.st_mode & 0o777) == 0 else { throw ioError("copy directory permissions") }
+            case mode_t(S_IFREG):
+                guard let input = try source.regularFile(name) else { throw EnvironmentStoreError.notFound }
+                defer { Darwin.close(input) }
+                if fclonefileat(input, descriptor, name, 0) != 0 {
+                    guard errno == ENOTSUP || errno == EXDEV else { throw ioError("clone runtime file") }
+                    let output = openat(descriptor, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))
+                    guard output >= 0 else { throw ioError("create runtime copy") }
+                    defer { Darwin.close(output) }
+                    guard fcopyfile(input, output, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 else { throw ioError("copy runtime file") }
+                }
+            case mode_t(S_IFLNK):
+                var target = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
+                let count = readlinkat(source.descriptor, name, &target, target.count - 1)
+                guard count >= 0, count < target.count - 1,
+                      let link = String(bytes: target.prefix(count).map { UInt8(bitPattern: $0) }, encoding: .utf8)
+                else { throw EnvironmentStoreError.unsafePath }
+                try createSymbolicLink(name, target: link)
+            default: throw EnvironmentStoreError.unsafePath
+            }
+        }
+    }
+
+    func createSymbolicLink(_ name: String, target: String) throws {
+        try checkName(name)
+        guard !target.utf8.contains(0), symlinkat(target, descriptor, name) == 0 else { throw ioError("create owned symlink") }
+    }
+
+    func renameRegularFile(_ name: String, to target: String) throws {
+        try checkName(name); try checkName(target)
+        guard try containsRegularFile(name) else { throw EnvironmentStoreError.notFound }
+        guard renameatx_np(descriptor, name, descriptor, target, UInt32(RENAME_EXCL)) == 0 else { throw ioError("rename owned file") }
+    }
+
+    /// Used only for this operation's private staging tree, never Wine prefixes.
+    func removeStagingDirectory(_ name: String, identity: (device: Int32, inode: UInt64)) throws {
+        guard let directory = try directory(name), try directory.identity() == identity else { throw EnvironmentStoreError.identityMismatch }
+        for child in try directory.names() {
+            var info = stat()
+            guard fstatat(directory.descriptor, child, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect staging entry") }
+            if info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) {
+                guard let nested = try directory.directory(child) else { throw EnvironmentStoreError.notFound }
+                try directory.removeStagingDirectory(child, identity: nested.identity())
+            } else {
+                guard unlinkat(directory.descriptor, child, 0) == 0 else { throw ioError("remove staging entry") }
+            }
+        }
+        guard unlinkat(descriptor, name, AT_REMOVEDIR) == 0 else { throw ioError("remove staging directory") }
+    }
+
     private func regularFile(_ name: String) throws -> Int32? {
         try checkName(name)
         let fd = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)

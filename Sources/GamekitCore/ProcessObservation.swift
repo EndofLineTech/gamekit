@@ -86,7 +86,7 @@ public struct RuntimeProcessObserver: Sendable {
         }
         func leaf(_ path: String) -> String { path.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last ?? "" }
         guard let first = arguments.first.map(normalized) else { return .other }
-        let isLoader = ["wine", "wine64", "wine-preloader", "wine64-preloader"].contains(leaf(first))
+        let isLoader = ["wine", "wine64", "wine-preloader", "wine64-preloader", "windows steam"].contains(leaf(first))
         let target = isLoader && arguments.count > 1 ? normalized(arguments[1]) : first
         if target == expectedPOSIX || target == expectedWindows { return .steam }
         let posixDirectory = prefix.appendingPathComponent(record.steamExecutable.rawValue).deletingLastPathComponent().path.lowercased() + "/"
@@ -115,7 +115,7 @@ public struct RuntimeProcessObserver: Sendable {
             }
             if first.zombie != 0 || first.uid != getuid() { continue }
             let executable = withUnsafeBytes(of: first.path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
-            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: prefix) else { continue }
+            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: layout.steamApplicationBundle) || Self.isWithin(executable, root: prefix) else { continue }
             var buffer: UnsafeMutablePointer<CChar>?, length = 0
             let code = gk_arguments(pid, &buffer, &length)
             guard code == 0, let buffer else {

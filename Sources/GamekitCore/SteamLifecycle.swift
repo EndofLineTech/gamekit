@@ -37,7 +37,7 @@ public actor SteamLifecycle {
             let report = try await RuntimeDetector().detect(layout, selection: layout.profile.identity)
             guard report.prerequisites == .ready else { throw RuntimeSessionError.prerequisitesNotReady }
         }, observe: { record, prefix in await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout) },
-        spawn: { _ = try await ProcessExecutor().start($0) }, execute: { try await ProcessExecutor().run($0) })
+        spawn: { try await SteamApplicationBundle.launch($0, layout: layout) }, execute: { try await ProcessExecutor().run($0) })
     }
     init(store: EnvironmentStore, driver: SteamLifecycleDriver, gracefulTimeout: TimeInterval = 30) {
         self.store = store; self.driver = driver; self.gracefulTimeout = gracefulTimeout

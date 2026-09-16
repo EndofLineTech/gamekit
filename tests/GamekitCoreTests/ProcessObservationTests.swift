@@ -10,6 +10,7 @@ struct ProcessObservationTests {
         let prefix = URL(fileURLWithPath: "/owned/steam")
         let steam = "C:\\Program Files (x86)\\Steam\\Steam.exe"
         #expect(RuntimeProcessObserver.role(arguments: ["/runtime/bin/wine", steam], record: record, prefix: prefix) == .steam)
+        #expect(RuntimeProcessObserver.role(arguments: ["/launcher/Windows Steam", steam], record: record, prefix: prefix) == .steam)
         #expect(RuntimeProcessObserver.role(arguments: ["/runtime/bin/wine", "cmd", "/c", "echo", steam], record: record, prefix: prefix) == .other)
         #expect(RuntimeProcessObserver.role(arguments: [steam, "-silent"], record: record, prefix: prefix) == .steam)
         let helper = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/bin/cef/cef.win64/steamwebhelper.exe").path

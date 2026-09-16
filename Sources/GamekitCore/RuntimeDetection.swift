@@ -36,6 +36,7 @@ public struct RuntimeLayout: Sendable {
     public var wineserver: URL { engine.appendingPathComponent("bin/wineserver") }
     public var frameworks: URL { bundle.appendingPathComponent("Contents/Frameworks") }
     public var graphics: URL { engine.appendingPathComponent("lib/external/D3DMetal.framework") }
+    public var steamApplicationBundle: URL { dataRoot.appendingPathComponent("Launchers/Windows Steam.app") }
 
     public func environment(prefix: URL? = nil, session: String? = nil,
                             inheriting inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {

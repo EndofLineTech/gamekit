@@ -34,13 +34,16 @@ public struct CommandRequest: Sendable {
     public let terminationGrace: TimeInterval
     public let outputLimit: Int
     public let outputMode: CommandOutputMode
+    public let independentApplication: Bool
 
     public init(executable: URL, arguments: [String] = [], environment: [String: String] = [:],
                 workingDirectory: URL? = nil, timeout: TimeInterval? = 30,
-                terminationGrace: TimeInterval = 0.5, outputLimit: Int = 262_144, outputMode: CommandOutputMode = .capture) {
+                terminationGrace: TimeInterval = 0.5, outputLimit: Int = 262_144, outputMode: CommandOutputMode = .capture,
+                independentApplication: Bool = false) {
         self.executable = executable; self.arguments = arguments; self.environment = environment
         self.workingDirectory = workingDirectory; self.timeout = timeout
         self.outputMode = outputMode
+        self.independentApplication = independentApplication
         self.terminationGrace = terminationGrace; self.outputLimit = outputLimit
     }
 
@@ -76,7 +79,8 @@ public struct ProcessExecutor: Sendable {
                 }
                 var pid: pid_t = 0, output: Int32 = -1, errors: Int32 = -1
                 let code = gk_spawn(request.executable.path, &arguments, &environment,
-                                     request.workingDirectory?.path, request.outputMode == .discard ? 1 : 0, &pid, &output, &errors)
+                                     request.workingDirectory?.path, request.outputMode == .discard ? 1 : 0,
+                                     request.independentApplication ? 1 : 0, &pid, &output, &errors)
                 guard code == 0 else { continuation.resume(throwing: CommandError.spawn(code)); return }
                 let command = RunningCommand(pid: pid, output: output, errors: errors, request: request, callback: onOutput)
                 command.begin()
