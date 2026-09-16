@@ -118,6 +118,19 @@ final class ManagedDirectory {
         return created
     }
 
+    func moveDirectory(_ name: String, to destination: ManagedDirectory, as target: String) throws {
+        try checkName(name); try checkName(target)
+        guard let source = try directory(name) else { throw EnvironmentStoreError.notFound }
+        let identity = try source.identity()
+        guard renameatx_np(descriptor, name, destination.descriptor, target, UInt32(RENAME_EXCL)) == 0 else {
+            if errno == EEXIST { throw EnvironmentStoreError.alreadyExists }
+            throw ioError("move owned directory")
+        }
+        guard let moved = try destination.directory(target), try moved.identity() == identity else {
+            throw EnvironmentStoreError.identityMismatch
+        }
+    }
+
     private func regularFile(_ name: String) throws -> Int32? {
         try checkName(name)
         let fd = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)

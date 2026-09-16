@@ -26,7 +26,9 @@ path, defaulting to `drive_c/Program Files (x86)/Steam/Steam.exe`.
 
 The E4.2 coordinator has an internal exclusive prefix-creation operation, gated
 by a matching saved recipe/revision and `creatingPrefix` stage. There is no prefix
-deletion, reset or automatic adoption.
+deletion or automatic adoption in this storage API. The separate
+[recovery coordinator](steam-recovery.md) offers explicit journaled reset by
+archiving a registered prefix and preserving its downloaded libraries.
 Registering an ID whose prefix already exists fails with `prefixAlreadyExists`.
 The manually evaluated `steam-eval-a`/`steam-eval-b` prefixes therefore do not
 silently become app-owned records. Beads, runtimes and other Gamekit siblings are

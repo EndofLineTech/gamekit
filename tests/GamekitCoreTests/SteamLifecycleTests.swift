@@ -120,6 +120,19 @@ struct SteamLifecycleTests {
         #expect(!(await runtime.forced))
     }
 
+    @Test("Persistent launch receipts pin runtime selection until scoped Stop completes")
+    func selectionPinnedAcrossRestart() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        var record = try #require(await fixture.store.load(fixture.id))
+        record.installationRecipeVersion = nil
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.store.save(record) }
+        _ = try await lifecycle.stop()
+        _ = try await fixture.store.save(record)
+    }
+
     @Test("Uncaptured output does not depend on an app-owned pipe")
     func discardedOutput() async throws {
         let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/bin/sh"),

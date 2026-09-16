@@ -105,6 +105,12 @@ public actor EnvironmentStore {
             let selectionChanged = current.runtime != record.runtime || current.steamExecutable != record.steamExecutable || current.installationRecipeVersion != record.installationRecipeVersion
             let installLock = selectionChanged ? try directory.metadata.acquireLock(".installation.lock") : nil
             defer { withExtendedLifetime(installLock) {} }
+            if selectionChanged, let lifecycle = try directory.root.directory("Metadata")?.directory("Lifecycle"),
+               try lifecycle.containsRegularFile("\(record.id.rawValue).json") {
+                // Persistent Steam can outlive Gamekit's execution lease. Retain
+                // its selected runtime until scoped Stop clears the launch receipt.
+                throw EnvironmentStoreError.busy
+            }
             let selectionLock = selectionChanged
                 ? try directory.metadata.acquireLock(".execution-\(record.id.rawValue).lock") : nil
             defer { withExtendedLifetime(selectionLock) {} }

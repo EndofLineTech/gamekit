@@ -1,0 +1,231 @@
+import Foundation
+import Testing
+@testable import GamekitCore
+
+private struct RecoveryFixture {
+    let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store: EnvironmentStore
+    let id = SteamInstallationRecipe.environmentID
+    init(progress: InstallationProgress = .installed, prefix: Bool = true) async throws {
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Steam", runtime: RuntimeProfile.sikarugir.identity,
+            installer: prefix ? .init(source: InstallerSourcePolicy.source, sha256: String(repeating: "a", count: 64), downloadedAt: Date()) : nil,
+            installation: progress, installationRecipeVersion: 1))
+        if prefix {
+            let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+            try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/game"), withIntermediateDirectories: true)
+            try Data("GAME_BYTES".utf8).write(to: steam.appendingPathComponent("steamapps/common/game/content.bin"))
+            try Data("manifest".utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_123.acf"))
+            try FileManager.default.createDirectory(at: steam.appendingPathComponent("depotcache"), withIntermediateDirectories: true)
+            try Data("download".utf8).write(to: steam.appendingPathComponent("depotcache/partial.bin"))
+            try Data("installer fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        }
+    }
+    func remove() { try? FileManager.default.removeItem(at: parent) }
+    var driver: SteamRecoveryDriver { .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }) }
+    func resetter(fault: @escaping @Sendable (SteamRecoveryCheckpoint) throws -> Void = { _ in }) -> SteamRecovery {
+        SteamRecovery(store: store, driver: driver, quietInterval: 0, checkpoint: fault)
+    }
+}
+
+private enum RecoveryFault: Error { case interrupted }
+
+private actor InterruptedRuntime {
+    let token = UUID().uuidString
+    var alive = true
+    var stops = 0
+    func snapshot() -> RuntimeProcessSnapshot {
+        .init(processes: alive ? [.init(identity: .init(pid: 12, startSeconds: 1, startMicroseconds: 0), role: .installer, sessionID: token)] : [], complete: true)
+    }
+    func stop(_ requested: String) { #expect(requested == token); alive = false; stops += 1 }
+}
+
+@Suite("Download-preserving Steam recovery")
+struct SteamRecoveryTests {
+    @Test("Real Wine prefix reset preserves downloads in a disposable environment", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_RECOVERY_SMOKE"] == "1"))
+    func liveRecovery() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let layout = RuntimeLayout(dataRoot: EnvironmentStore.applicationSupportRoot)
+        let first = try await RuntimeSession.start(store: fixture.store, id: fixture.id, layout: layout,
+            arguments: SteamInstallationRecipe.initializeArguments, timeout: 180)
+        let firstExit = await first.command.leaderExit()
+        _ = try await first.stop()
+        try #require(firstExit == .exited(0))
+        let originalIdentity = try await fixture.store.executionLease(for: fixture.id).prefixIdentity
+        let recovery = SteamRecovery(store: fixture.store, layout: layout)
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        #expect(try await recovery.prepareRetry() == .install)
+        var record = try #require(await fixture.store.load(fixture.id))
+        record.installation = .installing(.creatingPrefix)
+        record = try await fixture.store.save(record)
+        try await fixture.store.createInstallationPrefix(record)
+        let second = try await RuntimeSession.start(store: fixture.store, id: fixture.id, layout: layout,
+            arguments: SteamInstallationRecipe.initializeArguments, timeout: 180)
+        let secondExit = await second.command.leaderExit()
+        _ = try await second.stop()
+        try #require(secondExit == .exited(0))
+        try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id)
+        let identity = try await fixture.store.executionLease(for: fixture.id).prefixIdentity
+        #expect(originalIdentity != identity)
+        let steam = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        #expect(try Data(contentsOf: steam.appendingPathComponent("steamapps/common/game/content.bin")) == Data("GAME_BYTES".utf8))
+        #expect(try Data(contentsOf: steam.appendingPathComponent("depotcache/partial.bin")) == Data("download".utf8))
+        #expect(!FileManager.default.fileExists(atPath: steam.appendingPathComponent("Steam.exe").path))
+        print("Live recovery passed: fresh Wine prefix identity, archived old installation, unchanged game and depot bytes")
+    }
+
+    @Test("Reset requires confirmation, archives only its prefix and restores downloaded games")
+    func preserveGames() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let recovery = fixture.resetter()
+        await #expect(throws: SteamRecoveryError.confirmationRequired) { try await recovery.resetPreservingDownloads(confirmed: false) }
+        let unrelated = fixture.store.root.appendingPathComponent("Environments/unrelated")
+        try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
+        try Data("KEEP".utf8).write(to: unrelated.appendingPathComponent("keep"))
+        let reset = try await recovery.resetPreservingDownloads(confirmed: true)
+        #expect(reset.installation == .notStarted)
+        #expect(!FileManager.default.fileExists(atPath: fixture.store.prefixURL(for: fixture.id).path))
+        var pending = reset; pending.installation = .installing(.creatingPrefix)
+        pending = try await fixture.store.save(pending)
+        try await fixture.store.createInstallationPrefix(pending)
+        try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id)
+        try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id)
+        let steam = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        #expect(try Data(contentsOf: steam.appendingPathComponent("steamapps/common/game/content.bin")) == Data("GAME_BYTES".utf8))
+        #expect(try Data(contentsOf: steam.appendingPathComponent("depotcache/partial.bin")) == Data("download".utf8))
+        #expect(try Data(contentsOf: unrelated.appendingPathComponent("keep")) == Data("KEEP".utf8))
+        #expect(!FileManager.default.fileExists(atPath: steam.appendingPathComponent("Steam.exe").path))
+    }
+
+    @Test("Reset resumes after every durable checkpoint", arguments: [SteamRecoveryCheckpoint.prepared, .archived, .metadataReset])
+    func interruptedReset(point: SteamRecoveryCheckpoint) async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let broken = fixture.resetter { if $0 == point { throw RecoveryFault.interrupted } }
+        await #expect(throws: RecoveryFault.interrupted) { try await broken.resetPreservingDownloads(confirmed: true) }
+        let resumed = fixture.resetter()
+        #expect(try await resumed.prepareRetry() == .install)
+        #expect(try await fixture.store.load(fixture.id)?.installation == .notStarted)
+    }
+
+    @Test("A crash after moving one library resumes without overwriting or duplicating it")
+    func interruptedRestore() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        var record = try await fixture.resetter().resetPreservingDownloads(confirmed: true)
+        record.installation = .installing(.creatingPrefix)
+        record = try await fixture.store.save(record)
+        try await fixture.store.createInstallationPrefix(record)
+        #expect(throws: RecoveryFault.interrupted) {
+            try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id) { if $0 == .libraryMoved { throw RecoveryFault.interrupted } }
+        }
+        try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id)
+        let steam = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        #expect(try Data(contentsOf: steam.appendingPathComponent("steamapps/common/game/content.bin")) == Data("GAME_BYTES".utf8))
+        #expect(try Data(contentsOf: steam.appendingPathComponent("depotcache/partial.bin")) == Data("download".utf8))
+    }
+
+    @Test("Restoration refuses a colliding library instead of overwriting it")
+    func restorationCollision() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        var record = try await fixture.resetter().resetPreservingDownloads(confirmed: true)
+        record.installation = .installing(.creatingPrefix)
+        record = try await fixture.store.save(record)
+        try await fixture.store.createInstallationPrefix(record)
+        let library = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+        try Data("different".utf8).write(to: library.appendingPathComponent("keep"))
+        #expect(throws: EnvironmentStoreError.conflict) { try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id) }
+        #expect(try Data(contentsOf: library.appendingPathComponent("keep")) == Data("different".utf8))
+    }
+
+    @Test("Explicit interrupted-session stop preserves files and records interruption")
+    func interruptedStop() async throws {
+        let fixture = try await RecoveryFixture(progress: .installing(.bootstrappingSteam)); defer { fixture.remove() }
+        let runtime = InterruptedRuntime()
+        let driver = SteamRecoveryDriver(observe: { _, _ in await runtime.snapshot() }, stop: { _, prefix, token in
+            #expect(prefix == fixture.store.prefixURL(for: fixture.id))
+            await runtime.stop(token)
+        })
+        let recovery = SteamRecovery(store: fixture.store, driver: driver)
+        await #expect(throws: SteamRecoveryError.confirmationRequired) { try await recovery.stopInterruptedSetup(confirmed: false) }
+        try await recovery.stopInterruptedSetup(confirmed: true)
+        #expect(await runtime.stops == 1)
+        #expect(try await fixture.store.load(fixture.id)?.installation == .interrupted(.bootstrappingSteam))
+        #expect(try await fixture.store.installationFiles(fixture.id).executableExists)
+    }
+
+    @Test("Corrupt recovery journals are preserved without moving the active prefix")
+    func corruptJournal() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let directory = fixture.store.root.appendingPathComponent("Metadata/Recovery")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("steam.json")
+        let corrupt = Data("{invalid".utf8)
+        try corrupt.write(to: file)
+        await #expect(throws: (any Error).self) { try await fixture.resetter().resetPreservingDownloads(confirmed: true) }
+        #expect(try Data(contentsOf: file) == corrupt)
+        #expect(try await fixture.store.installationFiles(fixture.id).executableExists)
+    }
+
+    @Test("Retry distinguishes missing prefix, installed files and a partial installer")
+    func retryStages() async throws {
+        let missing = try await RecoveryFixture(progress: .failed(.downloadFailed), prefix: false); defer { missing.remove() }
+        #expect(try await missing.resetter().prepareRetry() == .install)
+        let present = try await RecoveryFixture(progress: .interrupted(.bootstrappingSteam)); defer { present.remove() }
+        #expect(try await present.resetter().prepareRetry() == .verifySteam)
+        let partial = try await RecoveryFixture(progress: .interrupted(.runningInstaller)); defer { partial.remove() }
+        try FileManager.default.removeItem(at: partial.store.prefixURL(for: partial.id).appendingPathComponent(RelativePath.steamDefault.rawValue))
+        #expect(try await partial.resetter().prepareRetry() == .resumeInstaller)
+    }
+
+    @Test("Each persisted installation stage has a nondestructive retry path", arguments: [InstallationStage.downloadingInstaller, .creatingPrefix, .runningInstaller, .bootstrappingSteam, .validatingInstallation])
+    func everyInterruptedStage(stage: InstallationStage) async throws {
+        let fixture = try await RecoveryFixture(progress: .installing(stage), prefix: stage != .downloadingInstaller)
+        defer { fixture.remove() }
+        if stage == .creatingPrefix || stage == .runningInstaller {
+            try FileManager.default.removeItem(at: fixture.store.prefixURL(for: fixture.id).appendingPathComponent(RelativePath.steamDefault.rawValue))
+        }
+        let expected: SteamRecoveryAction = stage == .downloadingInstaller ? .install :
+            (stage == .creatingPrefix || stage == .runningInstaller ? .resumeInstaller : .verifySteam)
+        #expect(try await fixture.resetter().prepareRetry() == expected)
+        if stage != .downloadingInstaller {
+            let game = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/game/content.bin")
+            #expect(try Data(contentsOf: game) == Data("GAME_BYTES".utf8))
+        }
+    }
+
+    @Test("Live or uncertain process inventories refuse reset and preserve files")
+    func activeRefusal() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        for snapshot in [RuntimeProcessSnapshot(processes: [], complete: false),
+                         .init(processes: [.init(identity: .init(pid: 2, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: "foreign")], complete: true)] {
+            let driver = SteamRecoveryDriver(observe: { _, _ in snapshot }, stop: { _, _, _ in Issue.record("Reset must not stop processes") })
+            let recovery = SteamRecovery(store: fixture.store, driver: driver, quietInterval: 0)
+            await #expect(throws: (any Error).self) { try await recovery.resetPreservingDownloads(confirmed: true) }
+            #expect(try await fixture.store.installationFiles(fixture.id).executableExists)
+        }
+    }
+
+    @Test("A current installation owner blocks recovery before any archive is created")
+    func concurrentOwner() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let lease = try await fixture.store.installationLease()
+        defer { withExtendedLifetime(lease) {} }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.resetter().resetPreservingDownloads(confirmed: true) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.resetter().prepareRetry() }
+        #expect(!FileManager.default.fileExists(atPath: fixture.store.root.appendingPathComponent("Recovery").path))
+        #expect(try await fixture.store.installationFiles(fixture.id).executableExists)
+    }
+
+    @Test("Symlinked library roots refuse reset without changing external data")
+    func unsafeLibrary() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let steam = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        let external = fixture.parent.appendingPathComponent("outside")
+        try FileManager.default.moveItem(at: steam.appendingPathComponent("steamapps"), to: external)
+        try FileManager.default.createSymbolicLink(at: steam.appendingPathComponent("steamapps"), withDestinationURL: external)
+        await #expect(throws: EnvironmentStoreError.unsafePath) { try await fixture.resetter().resetPreservingDownloads(confirmed: true) }
+        #expect(try Data(contentsOf: external.appendingPathComponent("common/game/content.bin")) == Data("GAME_BYTES".utf8))
+        #expect(try await fixture.store.installationFiles(fixture.id).executableExists)
+    }
+}

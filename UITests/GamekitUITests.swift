@@ -3,6 +3,30 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testRecoveryResetRequiresConfirmationAndCancellationPreservesMetadata() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let record = try EnvironmentRecord(id: SteamInstallationRecipe.environmentID, name: "Recovery fixture",
+            runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1)
+        _ = try await store.create(record)
+        let metadata = root.appendingPathComponent("Metadata/Environments/steam.json")
+        let original = try Data(contentsOf: metadata)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path]
+        app.launch()
+        defer { app.terminate() }
+        let reset = app.buttons["reset-preserve-downloads"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !reset.isHittable { app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -500) }
+        reset.click()
+        let confirmation = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Archive environment and preserve downloads"].exists)
+        confirmation.buttons["Cancel"].click()
+        XCTAssertEqual(try Data(contentsOf: metadata), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
+    }
+
     func testOptInLiveSteamSurvivesGamekitRestart() async throws {
         guard ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in real Steam lifecycle") }
         let root = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_ROOT"])
