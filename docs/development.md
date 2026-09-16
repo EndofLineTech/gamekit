@@ -52,7 +52,8 @@ regenerate the project while another Xcode build/test is reading it.
 
 ```text
 App/                       SwiftUI entry point and foundation window
-Sources/GamekitCore/        Domain policy, metadata, reconciliation and managed storage
+Sources/GamekitCore/        Domain, metadata, runtime detection and scoped execution
+Sources/CProcessSupport/   Native spawn/wait and macOS process-inventory bridge
 tests/GamekitCoreTests/     Swift Testing core suite
 UITests/                   XCTest native-launch smoke test
 project.yml                App, scheme and signing specification
@@ -72,8 +73,9 @@ The **app and UI tests target macOS 27**. The library deployment floor does not
 expand the product's support promise. The UI displays the evaluated recipe, host
 scope and a read-only saved-environment summary. E3.2 adds
 [atomic metadata storage and restart reconciliation](environment-state.md).
-Runtime/process observations are inputs until E3.3 supplies the actual detector;
-process execution and local diagnostics remain the subsequent E3 tasks.
+E3.3 supplies [runtime detection and scoped process execution](runtime-execution.md),
+including live observations for the summary. Local diagnostic persistence/redaction
+remains E3.4 work.
 
 ## Signing and generated artifacts
 
@@ -109,13 +111,17 @@ XcodeGen 2.46.0 produced an identical project file. CI does not install Wine/GPT
 sign into Steam, read Beads, or rerun hardware-specific E2 evaluations. Inspect
 the PR's actual CI results before merging.
 
-## Local verification recorded for E3.2
+## Local verification recorded for E3.3
 
-- Metadata/storage tests were introduced before their implementation and failed;
-  an additional readiness regression also failed before its fix.
-- `make check` passed: 32 Swift test functions (including parameterized edge
-  cases), six Python tests, and the native arm64 app build.
+- Command tests were introduced before their implementation. Additional path,
+  prerequisite and role-classification regressions failed before their fixes.
+- `make check` passed: 59 ordinary Swift test functions (including parameterized
+  edge cases), six Python tests, and the native arm64 app build. The 60th Swift
+  test is an explicitly opt-in installed-runtime check and is skipped in CI.
 - `make ui-test` passed: three tests covering empty startup, persisted metadata
   across app restart, and corruption handling without modifying the bad document.
 - Core tests use real temporary directories and an owned child-process lifetime
   fixture; they never use the user's Steam environments as writable fixtures.
+- `GAMEKIT_RUNTIME_SMOKE=1 swift test --filter installedRuntime` passed locally:
+  actual Rosetta/runtime checks, Windows command execution, tagged process
+  observation and scoped cleanup in a newly registered temporary prefix.

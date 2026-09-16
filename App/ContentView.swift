@@ -55,7 +55,7 @@ struct ContentView: View {
                         .font(.headline)
                     Text("Sikarugir Wine 10.0 revision 6 + Apple D3DMetal 4.0b2")
                         .accessibilityIdentifier("runtime-recipe")
-                    Text("Two fresh Steam environments passed manual feasibility testing. The native core now models and stores environment metadata.")
+                    Text("Two fresh Steam environments passed manual feasibility testing. The native core now checks the runtime and tracks managed process ownership.")
                         .foregroundStyle(.secondary)
                     Link("Read the validated runtime recipe",
                          destination: URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!)
@@ -72,7 +72,7 @@ struct ContentView: View {
                     systemImage: hostMatchesScope ? "checkmark.circle" : "info.circle"
                 )
                 .accessibilityIdentifier("host-scope")
-                Text("Host eligibility does not check Rosetta or the installed runtime. Runtime detection and Steam controls follow in later milestones.")
+                Text("The checks below inspect Rosetta and the installed runtime. Installation and Steam controls follow in later milestones.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

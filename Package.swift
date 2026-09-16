@@ -8,7 +8,8 @@ let package = Package(
         .library(name: "GamekitCore", targets: ["GamekitCore"]),
     ],
     targets: [
-        .target(name: "GamekitCore"),
+        .target(name: "CProcessSupport"),
+        .target(name: "GamekitCore", dependencies: ["CProcessSupport"]),
         .testTarget(name: "GamekitCoreTests", dependencies: ["GamekitCore"], path: "tests/GamekitCoreTests"),
     ]
 )

@@ -1,9 +1,10 @@
 # Environment metadata and restart reconciliation
 
 E3.2 (`gamekit-m19.2`) adds the core record model, atomic storage and reconciliation
-contract. The app reads registered records on startup and on Reload. E3.3 will
-supply actual scoped runtime/process detection; until then the UI says **Not
-checked**, rather than inferring readiness from saved data.
+contract. The app reads registered records on startup and on Reload. E3.3 now
+supplies [scoped runtime/process detection](runtime-execution.md). Unknown or
+unsupported observations still say **Not checked**, rather than inferring readiness
+from saved data.
 
 ## Storage layout and ownership
 
@@ -130,6 +131,11 @@ are coordinated with a nonblocking advisory lock; `busy` means reload/retry late
 not bypass the lock. The actor serializes one instance's own operations. Catalog
 reads are per-record atomic, not a multi-record database transaction.
 
+With asynchronous E3.3 observations, pass the source record's `expectedRevision`
+to `reconcile`. It rejects stale observations, and will not persist an interruption
+while a current execution lease is active. Runtime/executable selection changes
+also require an available execution lease.
+
 ## Atomic writes and path handling
 
 Writes use a unique same-directory temporary file, a complete write loop and
@@ -160,9 +166,9 @@ durability or automatic recovery from externally corrupted files is not claimed.
 
 ## Native UI and verification
 
-The saved-environment summary is read-only. Startup and Reload use the store and
-real file inspection, with unknown process/prerequisite observations until E3.3.
-Errors are visible and do not rewrite the records. Debug UI tests use an explicit
+The summary has no installation/reset controls. Startup and Reload use the store,
+real file inspection and E3.3 observations; a confirmed interruption can be saved.
+Errors are visible and do not replace corrupt records. Debug UI tests use an explicit
 temporary `--metadata-root`; release builds do not accept that override.
 
 Tests cover real temporary files, unknown/future schemas, provenance validation,

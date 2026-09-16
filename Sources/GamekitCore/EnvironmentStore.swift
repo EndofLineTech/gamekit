@@ -113,6 +113,11 @@ public actor EnvironmentStore {
             guard current.revision == record.revision, current.createdAt == record.createdAt else {
                 throw EnvironmentStoreError.conflict
             }
+            // A running operation pins its runtime and executable selection. Progress
+            // and display-name updates can still be recorded by the coordinator.
+            let selectionLock = current.runtime != record.runtime || current.steamExecutable != record.steamExecutable
+                ? try directory.metadata.acquireLock(".execution-\(record.id.rawValue).lock") : nil
+            defer { withExtendedLifetime(selectionLock) {} }
             _ = try inspectFiles(record, in: directory.root)
             var updated = record
             updated.revision += 1
@@ -123,16 +128,66 @@ public actor EnvironmentStore {
         }
     }
 
+    public func checkedPrefixURL(for id: EnvironmentID) throws -> URL {
+        guard let directory = try directories(create: false),
+              let record = try load(id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
+        _ = try inspectFiles(record, in: directory.root)
+        return prefixURL(for: id)
+    }
+
+    func executionLease(for id: EnvironmentID) throws -> EnvironmentExecutionLease {
+        guard let directory = try directories(create: false) else { throw EnvironmentStoreError.notFound }
+        return try directory.metadata.withWriteLock {
+            guard let record = try load(id, from: directory.metadata),
+                  let environments = try directory.root.directory("Environments"),
+                  let prefix = try environments.directory(id.rawValue) else { throw EnvironmentStoreError.notFound }
+            _ = try inspectFiles(record, in: directory.root)
+            let lock = try directory.metadata.acquireLock(".execution-\(id.rawValue).lock")
+            return EnvironmentExecutionLease(record: record, root: root, prefix: prefixURL(for: id),
+                                             pinnedPrefix: prefix, identity: try prefix.identity(), lock: lock)
+        }
+    }
+
     /// Process/runtime observations are supplied by E3.3's scoped detector. Unknown
     /// observations stay unverified; only a positively idle process set interrupts work.
     public func reconcile(_ id: EnvironmentID, process: ProcessObservation,
-                          prerequisites: PrerequisiteObservation, at now: Date = Date()) throws -> ReconciledEnvironment {
+                          prerequisites: PrerequisiteObservation, at now: Date = Date(),
+                          expectedRevision: Int? = nil) throws -> ReconciledEnvironment {
         guard let directory = try directories(create: false),
               let original = try load(id, from: directory.metadata) else { throw EnvironmentStoreError.notFound }
+        if let expectedRevision, original.revision != expectedRevision { throw EnvironmentStoreError.conflict }
         let files = try inspectFiles(original, in: directory.root)
         let result = EnvironmentReconciler.reconcile(original, files: files, process: process,
                                                     prerequisites: prerequisites, at: now)
+        // An idle scan can race a new operation. Never persist interruption while
+        // a current process coordinator owns the environment's execution lease.
+        let interruptionLock: ManagedFileLock?
+        if case .installing = original.installation, case .interrupted = result.record.installation {
+            interruptionLock = try directory.metadata.acquireLock(".execution-\(id.rawValue).lock")
+        } else { interruptionLock = nil }
+        defer { withExtendedLifetime(interruptionLock) {} }
         let persisted = result.record == original ? original : try save(result.record)
         return ReconciledEnvironment(record: persisted, files: files, state: result.state)
+    }
+}
+
+/// The immutable lease is only issued for a registered, existing, checked prefix.
+final class EnvironmentExecutionLease: @unchecked Sendable {
+    let record: EnvironmentRecord
+    let root: URL
+    let prefix: URL
+    private let identity: (device: Int32, inode: UInt64)
+    private let pinnedPrefix: ManagedDirectory
+    private let lock: ManagedFileLock
+    init(record: EnvironmentRecord, root: URL, prefix: URL, pinnedPrefix: ManagedDirectory,
+         identity: (device: Int32, inode: UInt64), lock: ManagedFileLock) {
+        self.record = record; self.root = root; self.prefix = prefix
+        self.pinnedPrefix = pinnedPrefix; self.identity = identity; self.lock = lock
+    }
+    func validate() throws {
+        guard let root = try ManagedDirectory.openRoot(root, create: false),
+              let environments = try root.directory("Environments"),
+              let current = try environments.directory(record.id.rawValue),
+              try current.identity() == identity else { throw EnvironmentStoreError.unsafePath }
     }
 }
