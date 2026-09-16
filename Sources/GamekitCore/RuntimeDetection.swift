@@ -94,7 +94,7 @@ public struct RuntimeDetector: Sendable {
     public static let minimumFreeBytes: Int64 = 15 * 1024 * 1024 * 1024
     private let execute: @Sendable (CommandRequest) async throws -> CommandResult
     public init() { execute = { try await ProcessExecutor().run($0) } }
-    init(execute: @escaping @Sendable (CommandRequest) async throws -> CommandResult) { self.execute = execute }
+    public init(execute: @escaping @Sendable (CommandRequest) async throws -> CommandResult) { self.execute = execute }
 
     public func detect(_ layout: RuntimeLayout, selection: RuntimeIdentity?,
                        host: RuntimeHostFacts? = nil) async throws -> RuntimeReport {

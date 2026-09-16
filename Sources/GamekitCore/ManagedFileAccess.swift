@@ -28,6 +28,25 @@ final class ManagedDirectory {
     private init(_ descriptor: Int32) { self.descriptor = descriptor }
     deinit { Darwin.close(descriptor) }
 
+    static func canonicalRoot(_ supplied: URL) throws -> URL {
+        guard supplied.isFileURL, supplied.path.hasPrefix("/"), supplied.standardizedFileURL.path != "/" else {
+            throw EnvironmentStoreError.unsafePath
+        }
+        let standardized = supplied.standardizedFileURL
+        guard let resolved = realpath(standardized.deletingLastPathComponent().path, nil) else {
+            throw EnvironmentStoreError.fileSystem(operation: "resolve trusted parent", code: errno)
+        }
+        defer { free(resolved) }
+        return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
+            .appendingPathComponent(standardized.lastPathComponent, isDirectory: true)
+    }
+
+    func removeRegularFile(_ name: String) throws {
+        try checkName(name)
+        guard try containsRegularFile(name) else { return }
+        guard unlinkat(descriptor, name, 0) == 0 else { throw ioError("remove owned file") }
+    }
+
     func identity() throws -> (device: Int32, inode: UInt64) {
         var info = stat()
         guard fstat(descriptor, &info) == 0 else { throw ioError("stat directory") }
@@ -135,8 +154,10 @@ final class ManagedDirectory {
     }
 
     func names() throws -> [String] {
-        let copy = dup(descriptor)
-        guard copy >= 0 else { throw ioError("duplicate directory") }
+        // dup() shares the directory cursor: a second enumeration would begin at
+        // EOF. Open the pinned directory again for an independent file description.
+        let copy = openat(descriptor, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard copy >= 0 else { throw ioError("open directory iterator") }
         guard let stream = fdopendir(copy) else {
             let error = ioError("list metadata")
             Darwin.close(copy)
@@ -174,10 +195,11 @@ final class ManagedDirectory {
         return try operation()
     }
 
-    func write(_ data: Data, to name: String, createOnly: Bool, beforeCommit: () throws -> Void) throws {
+    func write(_ data: Data, to name: String, createOnly: Bool, temporaryPrefix: String = ".", beforeCommit: () throws -> Void) throws {
         try checkName(name)
         guard data.count <= Self.maximumDocumentBytes else { throw EnvironmentStoreError.documentTooLarge }
-        let temporary = ".\(UUID().uuidString).tmp"
+        let temporary = "\(temporaryPrefix)\(UUID().uuidString).tmp"
+        try checkName(temporary)
         let fd = openat(descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))
         guard fd >= 0 else { throw ioError("create temporary metadata") }
         defer {

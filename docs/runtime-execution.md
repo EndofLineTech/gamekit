@@ -58,8 +58,9 @@ let result = try await ProcessExecutor().run(CommandRequest(
 - Retained result buffers are bounded independently; total byte counts and
   truncation/incomplete-output flags remain available.
 - An optional callback receives each data chunk as it is read. It runs on the
-  command's private serial queue and must return promptly; persistent logging and
-  redaction belong to E3.4.
+  command's private serial queue and must return promptly. E3.4's
+  [diagnostic recorder](local-diagnostics.md) captures bounded data there and writes
+  checkpoints separately; export uses a distinct allowlisted summary.
 - Nonzero exit and signal termination are results, while invalid/spawn failures
   throw typed errors.
 - One-shot `run` handles task cancellation. An already-cancelled task can throw
