@@ -18,6 +18,8 @@ including [environment metadata and restart reconciliation](docs/environment-sta
 The core also provides [runtime checks and scoped process execution](docs/runtime-execution.md).
 [Local diagnostics](docs/local-diagnostics.md) record runtime probe commands and
 offer private output viewing and structured summary exports.
+The core now supports [Steam installer acquisition](docs/installer-acquisition.md)
+with HTTPS policy, artifact validation and persisted provenance.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
 

@@ -134,7 +134,7 @@ final class ManagedDirectory {
         return true
     }
 
-    func read(_ name: String) throws -> Data? {
+    func read(_ name: String, maximumBytes: Int = ManagedDirectory.maximumDocumentBytes) throws -> Data? {
         guard let fd = try regularFile(name) else { return nil }
         defer { Darwin.close(fd) }
         var result = Data()
@@ -146,7 +146,7 @@ final class ManagedDirectory {
                 throw ioError("read metadata")
             }
             if count == 0 { return result }
-            guard result.count + count <= Self.maximumDocumentBytes else {
+            guard result.count + count <= maximumBytes else {
                 throw EnvironmentStoreError.documentTooLarge
             }
             result.append(contentsOf: buffer.prefix(count))
@@ -195,9 +195,10 @@ final class ManagedDirectory {
         return try operation()
     }
 
-    func write(_ data: Data, to name: String, createOnly: Bool, temporaryPrefix: String = ".", beforeCommit: () throws -> Void) throws {
+    func write(_ data: Data, to name: String, createOnly: Bool, temporaryPrefix: String = ".",
+               maximumBytes: Int = ManagedDirectory.maximumDocumentBytes, beforeCommit: () throws -> Void) throws {
         try checkName(name)
-        guard data.count <= Self.maximumDocumentBytes else { throw EnvironmentStoreError.documentTooLarge }
+        guard data.count <= maximumBytes else { throw EnvironmentStoreError.documentTooLarge }
         let temporary = "\(temporaryPrefix)\(UUID().uuidString).tmp"
         try checkName(temporary)
         let fd = openat(descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))

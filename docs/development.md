@@ -76,6 +76,8 @@ scope and a read-only saved-environment summary. E3.2 adds
 E3.3 supplies [runtime detection and scoped process execution](runtime-execution.md),
 including live observations for the summary. E3.4 adds
 [bounded local diagnostics and allowlisted summary exports](local-diagnostics.md).
+E4.1 supplies [Steam installer acquisition](installer-acquisition.md) for the
+installation coordinator, with an opt-in official-download smoke test.
 
 ## Signing and generated artifacts
 
@@ -136,3 +138,15 @@ the PR's actual CI results before merging.
   execution results, bounded capture, retention, checkpoints and export privacy.
 - Debug `--diagnostics-root` overrides the log root. When `--metadata-root` is
   supplied alone, logs use a sibling `GamekitLogs` directory to isolate UI tests.
+
+## Local verification recorded for E4.1
+
+- Tests were introduced before implementation; the missing acquisition types
+  produced the initial red build.
+- `make check` passed: 90 Swift test functions reported (two opt-in cases skipped
+  by default), six Python tests and the native arm64 app build.
+- `make ui-test` passed all four existing UI regression tests.
+- `GAMEKIT_INSTALLER_SMOKE=1 swift test --filter officialInstaller` passed using
+  Valve's current official HTTPS download. The complete artifact was saved and
+  revalidated from its receipt without execution; see
+  [acquisition evidence](installer-acquisition.md#verification).
