@@ -19,8 +19,10 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(reset.waitForExistence(timeout: 10))
         for _ in 0..<8 where !reset.isHittable { app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -500) }
         reset.click()
-        XCTAssertTrue(app.buttons["Archive environment and preserve downloads"].waitForExistence(timeout: 5))
-        app.buttons["Cancel"].click()
+        let confirmation = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Archive environment and preserve downloads"].exists)
+        confirmation.buttons["Cancel"].click()
         XCTAssertEqual(try Data(contentsOf: metadata), original)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
     }
