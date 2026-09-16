@@ -40,9 +40,10 @@ silicon. It will validate prerequisites, manage a dedicated Wine environment,
 install Windows Steam, and provide launch, stop, recovery, and diagnostic controls.
 Game evaluation follows the Steam milestone; game-specific fixes are future work.
 
-The E5 local candidate provides validated setup, silent installation, automatic
-Steam UI readiness, lifecycle and recovery controls. Post-reboot release acceptance
-is tracked separately. Work is tracked with Beads (`bd`).
+The E5 personal prototype is accepted on the recorded Mac/runtime combination,
+including the post-reboot checks. It provides validated setup, silent installation,
+automatic Steam UI readiness, lifecycle and recovery controls. Game evaluation is
+next. Work is tracked with Beads (`bd`).
 
 ## Development workflow
 

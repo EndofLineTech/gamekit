@@ -1,7 +1,8 @@
-# E5 candidate acceptance
+# E5 personal-prototype acceptance
 
-Status: **candidate — post-reboot confirmation pending**. No stable release tag or
-promotion is implied by a local Release-configuration build.
+Status: **accepted for the recorded personal-use scope**. The user confirmed all
+seven post-reboot steps passed. This acceptance does not create a stable release
+tag, promote `dev` to `main`, or establish game compatibility.
 
 ## Recorded environment
 
@@ -31,7 +32,7 @@ promotion is implied by a local Release-configuration build.
 | Interrupted setup and reset | Persisted-state/journal replay tests, original real interrupted-setup recovery, clean-reset and preserve/reset Wine smoke tests in disposable prefixes |
 | Runtime disappearance | Unverified state rather than guessed stopped; no unsafe cleanup; positively idle receipt release without running a missing runtime |
 | Orphan Wine service | Real tagged winedevice survivor captured; audit-token/PID-generation checked fallback added; native identity test and actual scoped orphan cleanup passed |
-| Post-reboot lifecycle | **Pending user check** |
+| Post-reboot lifecycle | User confirmed all seven steps passed on the checkpointed package: open, refresh/detection, launch/UI/Dock, normal Quit, reopen/control, Stop and relaunch |
 | Real game compatibility / real-game rediscovery after reset | E6 scope; no claim from Steam Library readiness |
 
 The macOS-native UI suite uses XCTest; headless CI tests do not replace the real
@@ -64,5 +65,16 @@ and quit Gamekit. Reboot normally when convenient. Open the supplied package's
 4. Reopening Gamekit restores control without another Steam instance.
 5. Stop reaches stopped, and relaunch works.
 
-Record the package executable/source hashes and result. E5 acceptance stays open
-until this check and the product owner's final confirmation pass.
+## Accepted package identity
+
+- Package: `.build/packages/Gamekit-20260916T212536Z/Gamekit.app`.
+- App version/build: `0.1.0` / `1`, arm64, ad-hoc signed for local execution.
+- Source commit: `27c1f74500bda1eb390788feec67addc30502b59`; source tree was clean.
+- Executable SHA-256: `5e60e54730a43c6139e87ddfd27575b429caa05060d93ea656ec312c09a864c5`.
+- Source-tree SHA-256: `d0e0593646e17f799c2c30bb5ba781196331f0de593cb21e222881c76704275a`.
+- Result: the user reported **“All seven steps passed.”** The executable hash was
+  rechecked afterward and still matches the checkpointed manifest.
+
+The packaged manifest is retained unchanged as build provenance; its candidate
+label predates acceptance. This document records the subsequent acceptance result.
+The acceptance-record update changes documentation only, not the tested executable.

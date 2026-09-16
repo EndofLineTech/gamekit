@@ -233,6 +233,8 @@ the PR's actual CI results before merging.
   a kernel audit token. The packaged Release app passed its live UI lifecycle test.
 - `make package` creates a new no-clobber candidate folder and manifest under
   `.build/packages/`. It does not bundle the Wine runtime or declare release acceptance.
-- See [E5 acceptance](e5-acceptance.md) for exact coverage and the pending reboot gate,
+- The user confirmed all seven post-reboot checks on the checkpointed package;
+  the executable hash still matches its manifest.
+- See [E5 acceptance](e5-acceptance.md) for exact coverage and accepted package identity,
   [native interface](native-interface.md) for action/state contracts, and the
   [operating guide](user-guide.md) for setup, recovery and removal.
