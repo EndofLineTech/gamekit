@@ -176,20 +176,37 @@ final class ManagedDirectory {
         guard renameatx_np(descriptor, name, descriptor, target, UInt32(RENAME_EXCL)) == 0 else { throw ioError("rename owned file") }
     }
 
+    func removeEmptyDirectory(_ name: String, identity: (device: Int32, inode: UInt64)) throws {
+        guard let directory = try directory(name), try directory.identity() == identity else { throw EnvironmentStoreError.identityMismatch }
+        guard try directory.names().isEmpty else { throw EnvironmentStoreError.conflict }
+        guard unlinkat(descriptor, name, AT_REMOVEDIR) == 0 else { throw ioError("remove empty owned directory") }
+    }
+
     /// Used only for this operation's private staging tree, never Wine prefixes.
     func removeStagingDirectory(_ name: String, identity: (device: Int32, inode: UInt64)) throws {
+        try removeOwnedTree(name, identity: identity, afterRemoval: {})
+    }
+
+    /// Only the journaled quarantine's `prefix` is eligible for confirmed deletion.
+    func removeQuarantinedPrefix(identity: (device: Int32, inode: UInt64), afterRemoval: () throws -> Void) throws {
+        try removeOwnedTree("prefix", identity: identity, afterRemoval: afterRemoval)
+    }
+
+    private func removeOwnedTree(_ name: String, identity: (device: Int32, inode: UInt64), afterRemoval: () throws -> Void) throws {
         guard let directory = try directory(name), try directory.identity() == identity else { throw EnvironmentStoreError.identityMismatch }
         for child in try directory.names() {
             var info = stat()
             guard fstatat(directory.descriptor, child, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect staging entry") }
             if info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) {
                 guard let nested = try directory.directory(child) else { throw EnvironmentStoreError.notFound }
-                try directory.removeStagingDirectory(child, identity: nested.identity())
+                try directory.removeOwnedTree(child, identity: nested.identity(), afterRemoval: afterRemoval)
             } else {
                 guard unlinkat(directory.descriptor, child, 0) == 0 else { throw ioError("remove staging entry") }
+                try afterRemoval()
             }
         }
         guard unlinkat(descriptor, name, AT_REMOVEDIR) == 0 else { throw ioError("remove staging directory") }
+        try afterRemoval()
     }
 
     private func regularFile(_ name: String) throws -> Int32? {

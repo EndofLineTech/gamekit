@@ -1,8 +1,9 @@
 # Interrupted setup and download-preserving reset
 
 E4.4 (`gamekit-ftm.4`) adds explicit recovery controls. It implements the selected
-policy: **preserve downloaded games**, including when resetting the Windows
-environment. Recovery never resets an unregistered prefix automatically.
+default policy: **preserve downloaded games**, including when resetting the Windows
+environment. A separately confirmed **Reset and delete downloads** option removes
+the current prefix instead. Recovery never resets an unregistered prefix automatically.
 
 ## Which action to use
 
@@ -14,12 +15,13 @@ environment. Recovery never resets an unregistered prefix automatically.
 | A reset was interrupted | Retry completes its journal before starting the appropriate install step |
 | An interrupted setup left Wine processes running after Gamekit exited | **Force-stop interrupted setup…**, confirm, then Retry |
 | The existing prefix needs replacement | **Reset, preserve downloads…**, confirm, then Retry |
+| Start completely fresh without retaining the current prefix's downloads | **Reset and delete downloads…**, confirm permanent deletion, then Retry |
 | Steam is already installed and running | Use the ordinary **Stop Windows Steam** lifecycle control first |
 
 Keep Steam open when confirming usable UI. Normal setup still uses the interactive
 installer wizard; recovery does not silently accept dialogs or authenticate Steam.
 
-## Reset semantics
+## Preserving reset semantics
 
 Reset requires an explicit confirmation naming the managed `steam` environment.
 It does not delete the old prefix. Instead it:
@@ -29,8 +31,16 @@ It does not delete the old prefix. Instead it:
 2. Saves a reset journal and the original environment record.
 3. Atomically moves the old prefix into a private recovery archive on the same
    filesystem, then marks the registered environment ready for fresh setup.
-4. During the next setup, initializes a fresh Wine prefix and restores the old
-   `steamapps` and `depotcache` directories **before running the installer**.
+4. During the next setup, initializes a fresh Wine prefix and runs the installer
+   against an empty Steam destination. **After the installer succeeds**, it restores
+   `steamapps` and `depotcache` before starting Steam bootstrap.
+
+The previous ordering restored libraries before the installer, which Valve rejects
+as a non-empty destination. `gamekit-x5i` corrects that behavior. Retry recognizes
+the exact previously restored library identities and journals moving them back to
+their archive before installation. It does not delete them. Empty library folders
+created by the installer may be replaced; non-empty collisions are refused rather
+than overwritten. Other partial client files require a reset before reinstalling.
 
 This preserves downloaded game payloads, app manifests, workshop/download data
 inside `steamapps`, and depot download caches. It does not copy game content: the
@@ -51,6 +61,26 @@ The ordinary prerequisite disk check applies before reinstalling. Archive cleanu
 is a separate explicit storage-management concern; do not remove an archive while
 its recovery journal is pending.
 
+## Clean reset semantics
+
+**Reset and delete downloads…** has a separate destructive confirmation. It removes
+the current managed Windows prefix, including Steam, downloaded games, settings,
+sign-in data and saves inside that prefix. Older recovery archives, external
+libraries, the selected runtime, derived launcher cache and diagnostics are retained.
+This is not an archive purge or secure-erasure operation.
+
+After verifying inactivity and ownership, the operation moves only the selected
+prefix into its own journaled quarantine. It persists destructive intent before
+deleting through pinned descriptors, never following symlinks. A crash during
+deletion leaves a resumable transaction; Retry continues the already confirmed
+operation and prepares clean installation. A destructive phase without the recorded
+destructive policy is rejected.
+
+A clean reset may supersede a pending library-preservation transaction after prefix
+archival. The older archive and its journal snapshot remain available; only the
+current active prefix is removed. A reset still in its initial archival phase must
+finish that journal before policy can be changed.
+
 ## Journal and restart safety
 
 ```text
@@ -61,7 +91,10 @@ Recovery/<environment-id>/<reset-uuid>/prefix/
 
 The schema-1 journal records the original metadata, reset timestamp, old prefix
 identity, preserved library identities, replacement prefix identity and phase:
-`prepared`, `ready`, `restoring`, or `restored`.
+`prepared`, `ready`, `restoring`, `restored`, `parking`, `discarding`, or `discarded`.
+The optional `discardDownloads` policy defaults to preserving behavior for existing
+schema-1 journals. `parking` re-stages libraries restored by the old ordering;
+`discarding` and `discarded` are permitted only for a confirmed destructive reset.
 
 All traversed components reject symlink redirection. Directory moves are
 descriptor-relative and no-clobber. A colliding destination, changed identity,
@@ -103,12 +136,14 @@ let action = try await recovery.prepareRetry()
 
 // Only after the corresponding UI confirmation:
 let reset = try await recovery.resetPreservingDownloads(confirmed: true)
+// Alternative: explicitly confirmed permanent removal of the current prefix.
+let clean = try await recovery.resetRemovingDownloads(confirmed: true)
 try await recovery.stopInterruptedSetup(confirmed: true)
 ```
 
 These are alternative operations, not a required sequence. `resumeInstaller` never
 creates or resets an existing prefix. The setup coordinator restores preserved
-libraries before installer execution and records its normal durable stages.
+libraries after installer success and before bootstrap, recording its normal stages.
 
 ## Verification
 
@@ -117,6 +152,25 @@ confirmation, active/uncertain-process refusal, concurrent ownership, corrupt
 journals, symlink roots, destination collisions, reset/reinstall integration and
 replay after journal, archive, metadata and library-move checkpoints. Tests assert
 game bytes and unrelated environments remain unchanged.
+
+The installer fixture now enforces Valve's empty-destination requirement; its
+reset/reinstall regression failed before the ordering fix. Additional tests cover
+re-staging prematurely restored libraries, both confirmation dialogs, confirmed UI
+deletion of a disposable prefix, interrupted recursive deletion and invalid
+destructive journals. A disposable real-Wine clean-reset test verified removal of
+the selected prefix while preserving an external symlink target and the source runtime:
+
+```bash
+GAMEKIT_CLEAN_RESET_SMOKE=1 swift test --filter liveCleanReset
+```
+
+The user's previously affected installation was repaired without deleting its
+preserved library. The actual installer accepted its default destination, the user
+confirmed Steam UI verification, and the saved record reached installed revision
+33. The final read-only check confirmed idle processes and unchanged repeat-install
+behavior. UI automation must wait for that persisted completion before restarting
+Gamekit; an earlier check interrupted the pending final confirmation and required
+the normal interrupted-setup recovery flow.
 
 The opt-in real-runtime test initializes a disposable Wine prefix with synthetic
 game/depot files, stops it, archives it, initializes a new prefix, and restores the
@@ -128,7 +182,8 @@ installed Steam environment or download games.
 GAMEKIT_RECOVERY_SMOKE=1 swift test --filter liveRecovery
 ```
 
-Local UI testing became unavailable after the desktop locked: XCTest reported
+During the original E4.4 session, local UI testing became unavailable after the desktop locked: XCTest reported
 “System authentication is running.” The native reset-confirmation and Cancel test
-is included in hosted CI. A user walkthrough of the new recovery controls remains useful
+is included in hosted CI. The later reinstall/clean-reset follow-up passed local UI
+tests for both Cancel paths and confirmed deletion on disposable data. A user walkthrough remains useful
 for E5 acceptance, especially rediscovery of a real game library after reset.

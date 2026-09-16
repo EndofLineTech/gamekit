@@ -32,8 +32,9 @@ stage. A failed or interrupted prefix is preserved. Setup refuses to recreate or
 silently resume it. **Retry Steam verification** explicitly relaunches only the
 bootstrap/UI check for a recipe-1 environment with intact Steam files and a saved
 bootstrap failure or interrupted bootstrap/validation stage. It never reruns the
-installer or creates a prefix. [E4.4 recovery](steam-recovery.md) adds stage-aware
-retry and explicit download-preserving reset.
+installer or creates a prefix. [Recovery](steam-recovery.md) adds stage-aware retry
+and separate confirmed preserving/clean resets. Preserved libraries return only
+after installer success, so Valve sees an empty installation destination.
 
 ## Core API
 

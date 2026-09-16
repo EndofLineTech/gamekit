@@ -206,3 +206,15 @@ the PR's actual CI results before merging.
   live cases skipped; the new live Command-Q/ordinary-reopen UI test passed separately.
 - The user confirmed one correctly named entry and full Gamekit exit while Steam
   remained open. See [launch identity and ownership](windows-steam-launcher.md).
+
+## Reset/reinstall follow-up (`gamekit-x5i`)
+
+- Corrected preservation order: installer first, restored libraries second, then
+  bootstrap. The installer fixture now rejects a non-empty destination, reproducing
+  the reported failure before the fix.
+- Added crash-safe re-staging for previously premature restoration and a separate
+  explicitly confirmed clean reset of the current prefix/downloads.
+- `make check` passed: 137 Swift functions reported (eight opt-in skips), six Python
+  tests and native build. UI tests passed six cases with two live cases skipped.
+- Disposable real-Wine clean reset passed. The user's preserving reinstall was
+  confirmed installed at revision 33, idle, with unchanged repeat-install behavior.

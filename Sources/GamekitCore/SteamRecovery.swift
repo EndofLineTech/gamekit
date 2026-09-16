@@ -6,8 +6,8 @@ struct SteamRecoveryDriver: Sendable {
     let stop: @Sendable (EnvironmentRecord, URL, String) async throws -> Void
 }
 
-/// User-directed recovery only; reset archives the selected prefix and preserves
-/// downloaded game libraries. Process uncertainty always refuses mutation.
+/// User-directed recovery with distinct preserving and destructive reset policies.
+/// Process uncertainty always refuses mutation.
 public actor SteamRecovery {
     private let store: EnvironmentStore
     private let id: EnvironmentID
@@ -58,6 +58,14 @@ public actor SteamRecovery {
     }
 
     public func resetPreservingDownloads(confirmed: Bool) async throws -> EnvironmentRecord {
+        try await reset(confirmed: confirmed, discardDownloads: false)
+    }
+
+    public func resetRemovingDownloads(confirmed: Bool) async throws -> EnvironmentRecord {
+        try await reset(confirmed: confirmed, discardDownloads: true)
+    }
+
+    private func reset(confirmed: Bool, discardDownloads: Bool) async throws -> EnvironmentRecord {
         guard confirmed else { throw SteamRecoveryError.confirmationRequired }
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
@@ -69,7 +77,7 @@ public actor SteamRecovery {
         try await idle(record)
         try execution?.validate()
         try Task.checkCancellation()
-        return try await SteamRecoveryArchive(root: store.root, id: id).reset(store: store, checkpoint: checkpoint)
+        return try await SteamRecoveryArchive(root: store.root, id: id).reset(store: store, discardDownloads: discardDownloads, checkpoint: checkpoint)
     }
 
     /// Prepares a durable, stage-appropriate action. It never launches anything;

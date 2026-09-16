@@ -53,6 +53,8 @@ private final class SteamInstallationModel: ObservableObject {
             } catch {
                 if error as? SteamInstallationError == .steamNotObserved {
                     status = "Steam was no longer observable. Keep its window open until you confirm in Gamekit. Use Retry Steam verification to try again; existing files were preserved."
+                } else if error as? SteamRecoveryError == .nonEmptyInstallerDestination {
+                    status = "Steam's installer requires an empty destination. Use a reset option to clear the partial installation, then Retry. Existing files were preserved."
                 } else {
                     status = "Installation could not complete: \(String(describing: error)). Existing files were preserved."
                 }
@@ -75,10 +77,10 @@ private final class SteamInstallationModel: ObservableObject {
     func confirm() { confirmed = true; awaitingConfirmation = false; status = "Verifying and finishing setup…" }
     func cancel() { task?.cancel(); status = "Stopping this installation's Wine processes…" }
 
-    func recover(reset: Bool, diagnostics: AppDiagnosticsModel) {
+    func recover(reset: Bool, deleteDownloads: Bool = false, diagnostics: AppDiagnosticsModel) {
         guard task == nil else { return }
         running = true
-        status = reset ? "Checking ownership and archiving the environment while preserving downloads…" : "Stopping the interrupted setup's owned Wine processes…"
+        status = reset ? (deleteDownloads ? "Checking ownership and deleting the selected environment…" : "Checking ownership and archiving the environment while preserving downloads…") : "Stopping the interrupted setup's owned Wine processes…"
         task = Task { [self] in
             defer {
                 running = false; task = nil
@@ -89,8 +91,13 @@ private final class SteamInstallationModel: ObservableObject {
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
                 let recovery = SteamRecovery(store: store, layout: RuntimeLayout(dataRoot: store.root))
                 if reset {
-                    _ = try await recovery.resetPreservingDownloads(confirmed: true)
-                    status = "Reset prepared. Downloads are preserved in the archive. Click Retry interrupted install to restore them during fresh setup."
+                    if deleteDownloads {
+                        _ = try await recovery.resetRemovingDownloads(confirmed: true)
+                        status = "Current environment and its downloads deleted. Older archives were retained. Retry interrupted install starts clean setup."
+                    } else {
+                        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+                        status = "Reset prepared. Downloads stay in the archive until the installer succeeds. Click Retry interrupted install to begin fresh setup."
+                    }
                 } else {
                     try await recovery.stopInterruptedSetup(confirmed: true)
                     status = "Interrupted setup stopped. Retry can now inspect and resume the saved stage."
@@ -109,6 +116,7 @@ struct SteamInstallationView: View {
     @StateObject private var model = SteamInstallationModel()
     @State private var confirmReset = false
     @State private var confirmStop = false
+    @State private var confirmDelete = false
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
@@ -128,10 +136,14 @@ struct SteamInstallationView: View {
                 HStack {
                     Button("Retry interrupted install") { model.start(diagnostics: diagnostics, recoveryRetry: true) }
                         .disabled(model.running).accessibilityIdentifier("retry-installation")
-                    Button("Reset, preserve downloads…") { confirmReset = true }
-                        .disabled(model.running).accessibilityIdentifier("reset-preserve-downloads")
                     Button("Force-stop interrupted setup…") { confirmStop = true }
                         .disabled(model.running)
+                }
+                HStack {
+                    Button("Reset, preserve downloads…") { confirmReset = true }
+                        .disabled(model.running).accessibilityIdentifier("reset-preserve-downloads")
+                    Button("Reset and delete downloads…") { confirmDelete = true }
+                        .disabled(model.running).accessibilityIdentifier("reset-delete-downloads")
                 }
                 Text("Recipe 1 · Sikarugir 10.0 revision 6 · D3DMetal 4.0b2")
                     .font(.caption).foregroundStyle(.secondary)
@@ -142,7 +154,13 @@ struct SteamInstallationView: View {
             Button("Archive environment and preserve downloads", role: .destructive) { model.recover(reset: true, diagnostics: diagnostics) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The old environment, settings and sign-in data stay in a private archive. Fresh setup restores steamapps and depotcache, including downloaded games. External libraries are left in place. Steam must be stopped first.")
+            Text("The old environment, settings and sign-in data stay in a private archive. After the installer succeeds, setup restores steamapps and depotcache before starting Steam. External libraries are left in place. Steam must be stopped first.")
+        }
+        .confirmationDialog("Delete the current steam environment and downloads?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete environment and downloads", role: .destructive) { model.recover(reset: true, deleteDownloads: true, diagnostics: diagnostics) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Permanently deletes the current managed Windows Steam prefix, including downloaded games, settings, sign-in data and saves inside it. Older recovery archives, external libraries, the runtime and diagnostic logs are retained. Steam must be stopped first.")
         }
         .confirmationDialog("Force-stop interrupted setup?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Force-stop this setup", role: .destructive) { model.recover(reset: false, diagnostics: diagnostics) }

@@ -3,6 +3,36 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testConfirmedCleanResetDeletesOnlyDisposablePrefix() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Disposable clean reset", runtime: RuntimeProfile.sikarugir.identity,
+            installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data("game".utf8).write(to: steam.appendingPathComponent("steamapps/game.bin"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path]
+        app.launch()
+        defer { app.terminate() }
+        let reset = app.buttons["reset-delete-downloads"]
+        XCTAssertTrue(reset.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !reset.isHittable { app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -500) }
+        reset.click()
+        let confirmation = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Delete environment and downloads"].click()
+        let status = app.staticTexts["installation-status"]
+        let message = "Current environment and its downloads deleted."
+        let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value BEGINSWITH %@ OR label BEGINSWITH %@", message, message), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 15), .completed, status.debugDescription)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.prefixURL(for: id).path))
+        let updated = try await store.load(id)
+        XCTAssertEqual(updated?.installation, .notStarted)
+    }
+
     func testOptInNormalQuitAndOrdinaryReopenWhileSteamRuns() async throws {
         guard ProcessInfo.processInfo.environment["GAMEKIT_NORMAL_QUIT_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in normal quit and Launch Services reopen") }
         let root = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_ROOT"])
@@ -42,6 +72,12 @@ final class GamekitUITests: XCTestCase {
         let confirmation = app.windows["Gamekit"].sheets.firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         XCTAssertTrue(confirmation.buttons["Archive environment and preserve downloads"].exists)
+        confirmation.buttons["Cancel"].click()
+        XCTAssertEqual(try Data(contentsOf: metadata), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
+        app.buttons["reset-delete-downloads"].click()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Delete environment and downloads"].exists)
         confirmation.buttons["Cancel"].click()
         XCTAssertEqual(try Data(contentsOf: metadata), original)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Recovery").path))
