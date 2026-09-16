@@ -78,6 +78,7 @@ struct ContentView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            SteamLifecycleView()
             EnvironmentSummaryView()
             SteamInstallationView()
             DiagnosticsView()

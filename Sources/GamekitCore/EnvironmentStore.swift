@@ -191,6 +191,7 @@ final class EnvironmentExecutionLease: @unchecked Sendable {
     let root: URL
     let prefix: URL
     private let identity: (device: Int32, inode: UInt64)
+    var prefixIdentity: (device: Int32, inode: UInt64) { identity }
     private let pinnedPrefix: ManagedDirectory
     private let lock: ManagedFileLock
     init(record: EnvironmentRecord, root: URL, prefix: URL, pinnedPrefix: ManagedDirectory,

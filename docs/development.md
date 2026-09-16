@@ -79,6 +79,7 @@ including live observations for the summary. E3.4 adds
 E4.1 supplies [Steam installer acquisition](installer-acquisition.md) for the
 installation coordinator, with an opt-in official-download smoke test.
 E4.2 adds the [managed Steam installation coordinator and setup UI](steam-installation.md).
+E4.3 adds [persistent Steam lifecycle controls](steam-lifecycle.md).
 
 ## Signing and generated artifacts
 
@@ -166,3 +167,12 @@ the PR's actual CI results before merging.
   record change or repeated installation on a second install request.
 - See [setup verification](steam-installation.md#recorded-live-verification) for
   the observed failure, fix and verification-retry boundary.
+
+## Local verification recorded for E4.3
+
+- Tests-first red observed for the lifecycle API and output-discard mode.
+- `make check` passed: 109 Swift functions reported (five opt-in skips), six Python
+  tests and native build.
+- Three live Steam launch/stop cycles passed with replacement controllers.
+- All five UI tests passed with the real lifecycle opt-in, including Gamekit
+  termination/reopen while Steam remained running. Normal CI skips that live case.
