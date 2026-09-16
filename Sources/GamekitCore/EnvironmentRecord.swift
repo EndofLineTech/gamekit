@@ -106,6 +106,7 @@ public struct EnvironmentRecord: Codable, Equatable, Sendable {
     public var name: String
     public var runtime: RuntimeIdentity?
     public var installer: InstallerProvenance?
+    public var installationRecipeVersion: Int?
     public var steamExecutable: RelativePath
     public var installation: InstallationProgress
     public let createdAt: Date
@@ -114,12 +115,13 @@ public struct EnvironmentRecord: Codable, Equatable, Sendable {
 
     public init(id: EnvironmentID, name: String, runtime: RuntimeIdentity? = nil,
                 installer: InstallerProvenance? = nil, steamExecutable: RelativePath = .steamDefault,
-                installation: InstallationProgress = .notStarted, createdAt: Date = Date()) throws {
+                installation: InstallationProgress = .notStarted, createdAt: Date = Date(), installationRecipeVersion: Int? = nil) throws {
         schemaVersion = 1
         self.id = id
         self.name = name
         self.runtime = runtime
         self.installer = installer
+        self.installationRecipeVersion = installationRecipeVersion
         self.steamExecutable = steamExecutable
         self.installation = installation
         self.createdAt = createdAt
@@ -129,7 +131,7 @@ public struct EnvironmentRecord: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, id, name, runtime, installer, steamExecutable, installation, createdAt, updatedAt, revision
+        case schemaVersion, id, name, runtime, installer, steamExecutable, installation, createdAt, updatedAt, revision, installationRecipeVersion
     }
 
     public init(from decoder: any Decoder) throws {
@@ -140,6 +142,7 @@ public struct EnvironmentRecord: Codable, Equatable, Sendable {
         name = try values.decode(String.self, forKey: .name)
         runtime = try values.decodeIfPresent(RuntimeIdentity.self, forKey: .runtime)
         installer = try values.decodeIfPresent(InstallerProvenance.self, forKey: .installer)
+        installationRecipeVersion = try values.decodeIfPresent(Int.self, forKey: .installationRecipeVersion)
         steamExecutable = try values.decode(RelativePath.self, forKey: .steamExecutable)
         installation = try values.decode(InstallationProgress.self, forKey: .installation)
         createdAt = try values.decode(Date.self, forKey: .createdAt)
@@ -149,6 +152,7 @@ public struct EnvironmentRecord: Codable, Equatable, Sendable {
     }
 
     func validate() throws {
+        guard installationRecipeVersion == nil || installationRecipeVersion == 1 else { throw MetadataError.invalidRecord }
         guard schemaVersion == 1 else { throw MetadataError.unsupportedSchema(schemaVersion) }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= 200,
               revision >= 0, revision < Int.max,

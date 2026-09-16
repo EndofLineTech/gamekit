@@ -49,7 +49,7 @@ struct EnvironmentSummaryView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
         }
-        .task(id: refresh) { await reload() }
+        .task(id: "\(refresh)-\(diagnostics.environmentRefreshID)") { await reload() }
     }
 
     private func label(for state: EnvironmentState) -> String {

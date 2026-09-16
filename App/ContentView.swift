@@ -74,11 +74,12 @@ struct ContentView: View {
                     systemImage: hostMatchesScope ? "checkmark.circle" : "info.circle"
                 )
                 .accessibilityIdentifier("host-scope")
-                Text("The checks below inspect Rosetta and the installed runtime. Installation and Steam controls follow in later milestones.")
+                Text("The checks below inspect Rosetta and the installed runtime. Setup uses a dedicated managed Steam environment.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             EnvironmentSummaryView()
+            SteamInstallationView()
             DiagnosticsView()
             Spacer(minLength: 0)
         }

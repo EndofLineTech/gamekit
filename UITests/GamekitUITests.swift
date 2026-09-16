@@ -38,6 +38,9 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["runtime-recipe"].exists)
         XCTAssertTrue(app.staticTexts["host-scope"].exists)
         XCTAssertTrue(app.staticTexts["metadata-empty"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["install-steam"].exists)
+        XCTAssertTrue(app.buttons["verify-steam"].exists)
+        XCTAssertFalse(app.buttons["confirm-steam-ui"].exists)
     }
 
     func testSavedMetadataReloadsAfterAppRestartWithoutClaimingRuntimeReadiness() async throws {

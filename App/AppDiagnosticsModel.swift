@@ -27,6 +27,7 @@ enum AppStorageLocations {
 final class AppDiagnosticsModel: ObservableObject {
     let store: DiagnosticStore?
     @Published var refreshID = UUID()
+    @Published var environmentRefreshID = UUID()
     @Published var recordingProblem = false
 
     init() {

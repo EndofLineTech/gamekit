@@ -111,6 +111,12 @@ private final class CommandCancellation: @unchecked Sendable {
 /// Mutable state is confined to queue. The leader is left unreaped until final
 /// cleanup, so its PID/process-group ID cannot be recycled before signalling ends.
 public final class RunningCommand: @unchecked Sendable {
+    /// Nonblocking leader status, independent of inherited pipe writers.
+    public func observedLeaderExit() async -> CommandTermination? {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: self.leaderTermination) }
+        }
+    }
     public let pid: Int32
     private let queue = DispatchQueue(label: "tech.endofline.gamekit.command")
     private let request: CommandRequest

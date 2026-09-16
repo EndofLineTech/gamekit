@@ -78,6 +78,7 @@ including live observations for the summary. E3.4 adds
 [bounded local diagnostics and allowlisted summary exports](local-diagnostics.md).
 E4.1 supplies [Steam installer acquisition](installer-acquisition.md) for the
 installation coordinator, with an opt-in official-download smoke test.
+E4.2 adds the [managed Steam installation coordinator and setup UI](steam-installation.md).
 
 ## Signing and generated artifacts
 
@@ -150,3 +151,18 @@ the PR's actual CI results before merging.
   Valve's current official HTTPS download. The complete artifact was saved and
   revalidated from its receipt without execution; see
   [acquisition evidence](installer-acquisition.md#verification).
+
+## Local verification recorded for E4.2
+
+- Coordinator tests were introduced before implementation. The Wine argv-padding
+  regression separately failed before its evidence-driven parser fix.
+- `make check` passed: 102 Swift test functions reported (four opt-in cases skipped
+  by default), six Python tests and the native arm64 app build.
+- `make ui-test` passed all four existing UI regression tests.
+- Real setup created the fresh managed `steam` prefix and bootstrapped win64
+  manifest 1788652215. The user confirmed its usable UI after the parser fix.
+- `GAMEKIT_INSTALLATION_VERIFY=1 swift test --filter verifyManagedInstallation`
+  passed: installed recipe 1, revision 17, complete/idle process inventory, and no
+  record change or repeated installation on a second install request.
+- See [setup verification](steam-installation.md#recorded-live-verification) for
+  the observed failure, fix and verification-retry boundary.
