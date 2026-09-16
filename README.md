@@ -24,6 +24,8 @@ with HTTPS policy, artifact validation and persisted provenance.
 installer silently, follows bootstrap, and detects stable web-UI readiness automatically.
 [Steam lifecycle controls](docs/steam-lifecycle.md) launch, observe and stop the
 managed installation, including after Gamekit restarts.
+[Installed game tiles](docs/installed-games.md) detect the managed Steam library,
+show game artwork and launch individual titles through Windows Steam.
 [Recovery controls](docs/steam-recovery.md) retry interrupted setup and support a
 confirmed reset that archives the old environment and preserves game downloads.
 An explicitly confirmed clean reset can instead delete the current prefix and its

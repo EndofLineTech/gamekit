@@ -78,7 +78,7 @@ struct SteamLifecycleView: View {
                 }
                 if let message = model.message { Text(message).font(.callout) }
                 if model.state == .unverified { Text("Status is not verified. Refresh prerequisites and review the selected runtime before continuing.").font(.caption) }
-                Text("Quit Gamekit to leave Steam running. Stop waits up to 30 seconds before forcing the managed environment to close.")
+                Text("Quit Gamekit to leave Steam and games running. Stop waits up to 30 seconds before forcing Steam and games in the managed environment to close.")
                     .font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
         }

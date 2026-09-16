@@ -77,6 +77,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             SteamLifecycleView()
+            InstalledGamesView()
             SetupView()
             EnvironmentSummaryView()
             SteamInstallationView()
