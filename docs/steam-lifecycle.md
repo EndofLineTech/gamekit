@@ -29,6 +29,11 @@ updater handoff gaps retain ownership and suppress a duplicate launch; five seco
 of observed emptiness are required before a prior receipt is treated as stopped.
 Unknown inventory results remain `unverified`, never inferred idle.
 
+E5 starts the persistent client with `-silent` to suppress the separate bootstrapper
+UI, then requests `steam://open/main` after the web helper appears. This keeps the
+empty client-side Dock application out of the steady-state UI. **Show Windows Steam**
+uses the same scoped URI request for an already-running session without duplicating it.
+
 Persistent launches have no setup deadline. They use a separate
 [Windows Steam application bundle](windows-steam-launcher.md) through Launch
 Services, with no Gamekit-owned output pipe that closes when Gamekit quits.
@@ -46,6 +51,12 @@ The user selected automatic bounded fallback:
 4. If owned processes remain, use that runtime's `wineserver -k` with the exact
    prefix and packaged dependency environment.
 5. Verify quiescence before removing the launch receipt and reporting stopped.
+
+E5 acceptance found a tagged Wine device service that survived server shutdown.
+After that protocol and its wait, the final bounded fallback uses a fresh complete
+owned inventory and kernel audit-token/PID-generation checked TERM/KILL delivery.
+UID/start-time and prefix/tag checks remain required. This is not a process-name
+sweep or a plain PID-only kill; denied token access refuses cleanup.
 
 The UI explains the forced fallback before use. Stop affects the entire managed
 Wine environment, including games running in it. Unrelated macOS Steam and other

@@ -141,7 +141,15 @@ public actor RuntimeSession {
                 }
                 try await Task.sleep(for: .milliseconds(100))
             }
-            throw RuntimeSessionError.cleanupFailed
+            try await ScopedProcessTermination.finish { [self] in
+                let remaining = try await self.snapshot()
+                guard remaining.complete else { throw RuntimeSessionError.observationUnavailable }
+                guard remaining.processes.allSatisfy({ $0.sessionID == self.sessionID }) else { throw RuntimeSessionError.prefixBusy }
+                return remaining.processes
+            }
+            end = reason; cleanupError = nil; self.lease = nil
+            deadline?.cancel(); deadline = nil
+            return result
         } catch {
             cleanupError = (error as? RuntimeSessionError) ?? .scopeChanged
             command.cancel()

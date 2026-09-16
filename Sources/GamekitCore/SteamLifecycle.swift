@@ -9,6 +9,8 @@ struct SteamLifecycleDriver: Sendable {
     let observe: @Sendable (EnvironmentRecord, URL) async -> RuntimeProcessSnapshot
     let spawn: @Sendable (CommandRequest) async throws -> Void
     let execute: @Sendable (CommandRequest) async throws -> CommandResult
+    var runtimeAvailable: @Sendable () -> Bool = { true }
+    var signalRemaining: @Sendable ([ScopedRuntimeProcess], Int32) async throws -> Void = { _, _ in throw SteamLifecycleError.cleanupFailed }
 }
 
 private struct SteamLaunchReceipt: Codable {
@@ -37,7 +39,27 @@ public actor SteamLifecycle {
             let report = try await RuntimeDetector().detect(layout, selection: layout.profile.identity)
             guard report.prerequisites == .ready else { throw RuntimeSessionError.prerequisitesNotReady }
         }, observe: { record, prefix in await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout) },
-        spawn: { try await SteamApplicationBundle.launch($0, layout: layout) }, execute: { try await ProcessExecutor().run($0) })
+        spawn: { request in
+            try await SteamApplicationBundle.launch(request, layout: layout)
+            guard let record = try await store.load(id), let token = request.environment["GAMEKIT_SESSION_ID"] else { throw SteamLifecycleError.notInstalled }
+            for _ in 0..<120 {
+                try Task.checkCancellation()
+                let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: id), layout: layout)
+                guard snapshot.complete else { try await Task.sleep(for: .milliseconds(250)); continue }
+                guard snapshot.processes.allSatisfy({ $0.sessionID == token }) else { throw SteamLifecycleError.foreignActivity }
+                if snapshot.processes.contains(where: { $0.role == .steamUI }) {
+                    try await Task.sleep(for: .seconds(2))
+                    let steam = store.prefixURL(for: id).appendingPathComponent(record.steamExecutable.rawValue)
+                    _ = try await ProcessExecutor().run(.init(executable: layout.wine, arguments: [steam.path, "steam://open/main"],
+                        environment: request.environment, workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+        }, execute: { try await ProcessExecutor().run($0) },
+        runtimeAvailable: { RuntimeDetector.safeBundle(layout) && RuntimeDetector.containedRegularFile(layout.wine, root: layout.bundle)
+            && RuntimeDetector.containedRegularFile(layout.wineserver, root: layout.bundle) },
+        signalRemaining: { try ScopedProcessTermination.signal($0, signal: $1) })
     }
     init(store: EnvironmentStore, driver: SteamLifecycleDriver, gracefulTimeout: TimeInterval = 30) {
         self.store = store; self.driver = driver; self.gracefulTimeout = gracefulTimeout
@@ -74,11 +96,12 @@ public actor SteamLifecycle {
         }
         emptySince = nil
         guard let receipt, snapshot.processes.allSatisfy({ $0.sessionID == receipt.token.uuidString }) else { return .foreignActivity }
-        return snapshot.processes.contains { $0.role == .steam } ? .running : .starting
+        return snapshot.processes.contains { $0.role == .steam || $0.role == .steamUI } ? .running : .starting
     }
     public func status() async throws -> SteamLifecycleState {
         let record: EnvironmentRecord
         do { record = try await installed() } catch SteamLifecycleError.notInstalled { return .notInstalled }
+        guard driver.runtimeAvailable() else { return .unverified }
         let receipt = try receipt()
         return state(await driver.observe(record, store.prefixURL(for: id)), receipt: receipt)
     }
@@ -109,7 +132,9 @@ public actor SteamLifecycle {
             try directory.write(JSONEncoder().encode(receipt), to: filename, createOnly: false, beforeCommit: { try lease.validate() })
         }
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
-        try await driver.spawn(.init(executable: layout.wine, arguments: [steam.path],
+        // Suppress the separate bootstrapper UI, then explicitly open the main
+        // web UI. This avoids retaining an empty client-side Dock application.
+        try await driver.spawn(.init(executable: layout.wine, arguments: [steam.path, "-silent"],
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: steam.deletingLastPathComponent(), timeout: nil, outputMode: .discard))
         emptySince = .now
@@ -124,6 +149,23 @@ public actor SteamLifecycle {
         guard snapshot.complete else { throw SteamLifecycleError.observationUnavailable }
         guard snapshot.processes.allSatisfy({ $0.sessionID == receipt.token.uuidString }) else { throw SteamLifecycleError.foreignActivity }
         return snapshot
+    }
+    public func show() async throws {
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: id)
+        defer { withExtendedLifetime(lease) {} }
+        guard let receipt = try receipt() else { throw SteamLifecycleError.foreignActivity }
+        try await driver.preflight()
+        guard try await !ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty else { throw SteamLifecycleError.notInstalled }
+        let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
+        let result = try await driver.execute(.init(executable: layout.wine, arguments: [steam.path, "steam://open/main"],
+            environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
+            workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
+        guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
     }
     public func stop() async throws -> SteamStopResult {
         guard !busy else { throw EnvironmentStoreError.busy }
@@ -140,6 +182,15 @@ public actor SteamLifecycle {
             return .alreadyStopped
         }
         let before = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+        if before.processes.isEmpty {
+            let quietUntil = ContinuousClock.now.advanced(by: .seconds(min(2, gracefulTimeout)))
+            var quiet = true
+            while ContinuousClock.now < quietUntil {
+                try await Task.sleep(for: .milliseconds(100))
+                if try await !ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty { quiet = false; break }
+            }
+            if quiet { try clearReceipt(); return .alreadyStopped }
+        }
         // Even an empty instant may be a handoff. Keep checking through the normal
         // graceful interval instead of deleting ownership and racing a late child.
         try await driver.preflight()
@@ -168,6 +219,17 @@ public actor SteamLifecycle {
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: lease.prefix, timeout: 10, outputLimit: 8192))
         guard [.exited(0), .exited(1)].contains(result.termination), result.stderr.isEmpty else { throw SteamLifecycleError.cleanupFailed }
+        for _ in 0..<30 {
+            if try await ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty {
+                try clearReceipt(); return .forced
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        // Wine device services can outlive the server. Escalate only against fresh
+        // token-owned identities, using kernel PID-version checked audit tokens.
+        try await driver.signalRemaining(try await ownedSnapshot(record, lease: lease, receipt: receipt).processes, SIGTERM)
+        try await Task.sleep(for: .milliseconds(500))
+        try await driver.signalRemaining(try await ownedSnapshot(record, lease: lease, receipt: receipt).processes, SIGKILL)
         for _ in 0..<30 {
             if try await ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty {
                 try clearReceipt(); return .forced

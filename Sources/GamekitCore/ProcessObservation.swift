@@ -7,7 +7,7 @@ public struct ProcessIdentity: Hashable, Sendable {
     public let startSeconds: UInt64
     public let startMicroseconds: UInt64
 }
-public enum RuntimeProcessRole: Sendable { case steam, installer, service, other }
+public enum RuntimeProcessRole: Sendable { case steam, steamUI, installer, service, other }
 public struct ScopedRuntimeProcess: Sendable {
     public let identity: ProcessIdentity
     public let role: RuntimeProcessRole
@@ -16,9 +16,10 @@ public struct ScopedRuntimeProcess: Sendable {
 public struct RuntimeProcessSnapshot: Sendable {
     public let processes: [ScopedRuntimeProcess]
     public let complete: Bool
+    public init(processes: [ScopedRuntimeProcess], complete: Bool) { self.processes = processes; self.complete = complete }
     public func observation(installation: InstallationProgress) -> ProcessObservation {
         guard complete else { return .notChecked }
-        if processes.contains(where: { $0.role == .steam }) { return .steamRunning }
+        if processes.contains(where: { $0.role == .steam || $0.role == .steamUI }) { return .steamRunning }
         if processes.contains(where: { $0.role == .installer }), case .installing(let stage) = installation {
             return .installerRunning(stage)
         }
@@ -91,7 +92,7 @@ public struct RuntimeProcessObserver: Sendable {
         if target == expectedPOSIX || target == expectedWindows { return .steam }
         let posixDirectory = prefix.appendingPathComponent(record.steamExecutable.rawValue).deletingLastPathComponent().path.lowercased() + "/"
         let windowsDirectory = "c:\\" + record.steamExecutable.components.dropFirst().dropLast().joined(separator: "\\").lowercased() + "\\"
-        if leaf(target) == "steamwebhelper.exe", target.hasPrefix(posixDirectory) || target.hasPrefix(windowsDirectory) { return .steam }
+        if leaf(target) == "steamwebhelper.exe", target.hasPrefix(posixDirectory) || target.hasPrefix(windowsDirectory) { return .steamUI }
         if leaf(target).hasPrefix("steamsetup") && leaf(target).hasSuffix(".exe") { return .installer }
         if ["wineboot", "wineboot.exe"].contains(leaf(target)), case .installing(.creatingPrefix) = record.installation { return .installer }
         if ["wineserver", "services.exe", "winedevice.exe", "explorer.exe", "rpcss.exe", "svchost.exe", "conhost.exe", "plugplay.exe", "steamservice.exe"].contains(leaf(target)) { return .service }

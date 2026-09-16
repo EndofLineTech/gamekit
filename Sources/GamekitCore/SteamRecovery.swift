@@ -135,8 +135,21 @@ public actor SteamRecovery {
                 }
                 return
             }
-            if attempt == 29 { throw SteamRecoveryError.cleanupFailed }
+            if attempt == 29 { break }
             try await Task.sleep(for: .milliseconds(100))
+        }
+        guard let token = snapshot.processes.first?.sessionID else { throw SteamRecoveryError.cleanupFailed }
+        let pinnedRecord = record
+        let observe = driver.observe
+        try await ScopedProcessTermination.finish {
+            try execution.validate()
+            let remaining = await observe(pinnedRecord, execution.prefix)
+            guard remaining.complete else { throw SteamRecoveryError.observationUnavailable }
+            guard remaining.processes.allSatisfy({ $0.sessionID == token }) else { throw SteamRecoveryError.activeProcesses }
+            return remaining.processes
+        }
+        if case .installing(let stage) = record.installation {
+            record.installation = .interrupted(stage); _ = try await store.save(record)
         }
     }
 }

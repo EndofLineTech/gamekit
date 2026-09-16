@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <libproc.h>
+#include <mach/mach.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdlib.h>
@@ -123,6 +124,27 @@ int gk_identity(pid_t pid, GKProcessIdentity *identity)
 int gk_user_pids(pid_t *pids, int capacity_bytes)
 {
     return proc_listpids(PROC_UID_ONLY, getuid(), pids, capacity_bytes);
+}
+
+int gk_signal_identity(pid_t pid, uint64_t start_seconds, uint64_t start_microseconds, int signal_number)
+{
+    if (pid <= 1 || (signal_number != 0 && signal_number != SIGTERM && signal_number != SIGKILL)) return EINVAL;
+    mach_port_t task = MACH_PORT_NULL;
+    if (task_name_for_pid(mach_task_self(), pid, &task) != KERN_SUCCESS) return EPERM;
+    audit_token_t token;
+    mach_msg_type_number_t count = TASK_AUDIT_TOKEN_COUNT;
+    kern_return_t result = task_info(task, TASK_AUDIT_TOKEN, (task_info_t)&token, &count);
+    mach_port_deallocate(mach_task_self(), task);
+    if (result != KERN_SUCCESS) return EPERM;
+    GKProcessIdentity current;
+    int error = gk_identity(pid, &current);
+    if (error) return error;
+    if (current.zombie) return ESRCH;
+    if (current.uid != getuid() || current.start_seconds != start_seconds || current.start_microseconds != start_microseconds || token.val[5] != (uint32_t)pid) return EINVAL;
+    if (signal_number == 0) return 0;
+    // The kernel compares the audit token's PID version when delivering the signal,
+    // closing the recycled-PID race that plain kill(pid, ...) would leave open.
+    return proc_signal_with_audittoken(&token, signal_number) == 0 ? 0 : errno;
 }
 
 int gk_arguments(pid_t pid, char **buffer, size_t *length)

@@ -34,6 +34,7 @@ Run from the repository root:
 | `make ui-test` | Build and run the native app-launch smoke test |
 | `make check` | Run core/Python tests and build the native app |
 | `make run` | Build and open the native app |
+| `make package` | Build a local Release candidate, verify signing/architecture and write a versioned package with build manifest |
 
 Default app: `.build/xcode/Build/Products/Debug/Gamekit.app`.
 
@@ -218,3 +219,20 @@ the PR's actual CI results before merging.
   tests and native build. UI tests passed six cases with two live cases skipped.
 - Disposable real-Wine clean reset passed. The user's preserving reinstall was
   confirmed installed at revision 33, idle, with unchanged repeat-install behavior.
+
+## E5 candidate verification
+
+- Persisted runtime selection, guided prerequisites, shared operation gating,
+  keyboard controls, state-aware actions and persistent stage feedback are in place.
+- User-requested silent `/S` installation and automatic client/browser/window
+  readiness completed in a fresh isolated root in approximately 63 seconds.
+- Latest `make check`: 154 Swift functions reported (12 opt-in skips), eight Python
+  tests and native build passed. Normal UI suite: nine passed, three live skips.
+- Live acceptance covered login/Library, paths with spaces, normal Quit/reopen,
+  two isolated lifecycle cycles, and an orphan Wine service safely terminated via
+  a kernel audit token. The packaged Release app passed its live UI lifecycle test.
+- `make package` creates a new no-clobber candidate folder and manifest under
+  `.build/packages/`. It does not bundle the Wine runtime or declare release acceptance.
+- See [E5 acceptance](e5-acceptance.md) for exact coverage and the pending reboot gate,
+  [native interface](native-interface.md) for action/state contracts, and the
+  [operating guide](user-guide.md) for setup, recovery and removal.

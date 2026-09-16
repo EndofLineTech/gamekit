@@ -27,10 +27,11 @@ public struct RuntimeProfile: Sendable {
 public struct RuntimeLayout: Sendable {
     public let dataRoot: URL
     public let profile: RuntimeProfile
-    public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir) {
-        self.dataRoot = dataRoot; self.profile = profile
+    fileprivate let selectedBundle: URL?
+    public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir, bundle: URL? = nil) {
+        self.dataRoot = dataRoot; self.profile = profile; selectedBundle = bundle
     }
-    public var bundle: URL { dataRoot.appendingPathComponent(profile.bundlePath) }
+    public var bundle: URL { selectedBundle ?? dataRoot.appendingPathComponent(profile.bundlePath) }
     public var engine: URL { bundle.appendingPathComponent("Contents/SharedSupport/wine") }
     public var wine: URL { engine.appendingPathComponent("bin/wine") }
     public var wineserver: URL { engine.appendingPathComponent("bin/wineserver") }
@@ -81,9 +82,13 @@ public struct RuntimeCheck: Sendable {
     public let prerequisite: Prerequisite
     public let status: RuntimeCheckStatus
     public let detail: String
+    public init(prerequisite: Prerequisite, status: RuntimeCheckStatus, detail: String) {
+        self.prerequisite = prerequisite; self.status = status; self.detail = detail
+    }
 }
 public struct RuntimeReport: Sendable {
     public let checks: [RuntimeCheck]
+    public init(checks: [RuntimeCheck]) { self.checks = checks }
     public var prerequisites: PrerequisiteObservation {
         let missing = checks.filter { $0.status == .failed }.map(\.prerequisite)
         if !missing.isEmpty { return .missing(missing) }
@@ -170,6 +175,10 @@ public struct RuntimeDetector: Sendable {
 
     static func safeBundle(_ layout: RuntimeLayout) -> Bool {
         do {
+            if layout.selectedBundle != nil {
+                let bundle = try ManagedDirectory.canonicalRoot(layout.bundle)
+                return try ManagedDirectory.openRoot(bundle, create: false) != nil
+            }
             let root = try EnvironmentStore(root: layout.dataRoot).root
             guard var directory = try ManagedDirectory.openRoot(root, create: false) else { return false }
             for part in try RelativePath(layout.profile.bundlePath).components {

@@ -3,6 +3,73 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testOptInPackagedAppLaunchQuitReopenStop() async throws {
+        guard ProcessInfo.processInfo.environment["GAMEKIT_PACKAGE_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in packaged app lifecycle") }
+        let path = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_PACKAGE_APP"])
+        let app = XCUIApplication(url: URL(fileURLWithPath: path))
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 45))
+        XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 15))
+        let launch = app.buttons["launch-steam"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: launch)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        launch.click()
+        XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 60))
+        app.activate()
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
+        _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: [path]))
+        XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 45))
+        let stop = app.buttons["stop-steam"]
+        let stoppable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: stop)
+        XCTAssertEqual(XCTWaiter.wait(for: [stoppable], timeout: 15), .completed)
+        stop.click()
+        XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 90))
+        app.terminate()
+    }
+
+    func testPrerequisiteFailuresDisableInstallAndExplainNextSteps() throws {
+        for (scenario, explanation) in [("missing-rosetta", "Install Rosetta using Apple's instructions, then refresh checks. Gamekit does not accept its license for you."),
+                                        ("low-disk", "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."),
+                                        ("invalid-runtime", "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable.")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", scenario]
+            app.launch()
+            XCTAssertTrue(app.staticTexts[explanation].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.buttons["install-steam"].isEnabled)
+            app.terminate()
+        }
+    }
+
+    func testRefreshEnablesInstallAfterPrerequisitesAreCorrected() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "ready-after-refresh"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Resolve the checks below before installation"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["install-steam"].isEnabled)
+        let refresh = app.buttons["refresh-prerequisites"]
+        revealRecoveryButton(refresh, in: app)
+        refresh.click()
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["install-steam"].isEnabled)
+    }
+
+    func testKeyboardRefreshDisablesConflictingActionsUntilChecksComplete() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "ready-with-delay"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
+        app.activate()
+        app.typeKey("r", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.staticTexts["Checking prerequisites"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["install-steam"].isEnabled)
+        XCTAssertFalse(app.buttons["refresh-prerequisites"].isEnabled)
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["install-steam"].isEnabled)
+    }
+
     func testConfirmedCleanResetDeletesOnlyDisposablePrefix() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
@@ -19,6 +86,7 @@ final class GamekitUITests: XCTestCase {
         defer { app.terminate() }
         app.activate()
         XCTAssertTrue(app.staticTexts["Disposable clean reset"].waitForExistence(timeout: 15))
+        showResetOptions(in: app)
         let reset = app.buttons["reset-delete-downloads"]
         XCTAssertTrue(reset.waitForExistence(timeout: 10))
         revealRecoveryButton(reset, in: app)
@@ -67,6 +135,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path]
         app.launch()
         defer { app.terminate() }
+        showResetOptions(in: app)
         let reset = app.buttons["reset-preserve-downloads"]
         XCTAssertTrue(reset.waitForExistence(timeout: 10))
         for _ in 0..<8 where !reset.isHittable { app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -500) }
@@ -137,6 +206,8 @@ final class GamekitUITests: XCTestCase {
     }
 
     private func revealRecoveryButton(_ button: XCUIElement, in app: XCUIApplication) {
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
         let scroll = app.scrollViews.firstMatch
         // A partially clipped button can report hittable while its center is
         // outside the scroll viewport. Avoid clicking during startup layout shifts.
@@ -145,6 +216,13 @@ final class GamekitUITests: XCTestCase {
             scroll.scroll(byDeltaX: 0, deltaY: -160)
         }
         XCTAssertTrue(button.isHittable && scroll.frame.contains(button.frame), button.debugDescription)
+    }
+
+    private func showResetOptions(in app: XCUIApplication) {
+        let button = app.buttons["show-reset-options"]
+        XCTAssertTrue(button.waitForExistence(timeout: 15))
+        revealRecoveryButton(button, in: app)
+        button.click()
     }
 
     func testNativeAppLaunchesWithLinkedCore() throws {

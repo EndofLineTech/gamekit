@@ -20,6 +20,7 @@ typedef struct {
 } GKProcessIdentity;
 
 int gk_identity(pid_t pid, GKProcessIdentity *identity);
+int gk_signal_identity(pid_t pid, uint64_t start_seconds, uint64_t start_microseconds, int signal_number);
 int gk_user_pids(pid_t *pids, int capacity_bytes);
 int gk_arguments(pid_t pid, char **buffer, size_t *length);
 void gk_free(void *pointer);

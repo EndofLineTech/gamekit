@@ -21,7 +21,7 @@ offer private output viewing and structured summary exports.
 The core now supports [Steam installer acquisition](docs/installer-acquisition.md)
 with HTTPS policy, artifact validation and persisted provenance.
 [Managed Steam setup](docs/steam-installation.md) creates a fresh prefix, runs the
-installer, follows bootstrap, and records explicit UI confirmation.
+installer silently, follows bootstrap, and detects stable web-UI readiness automatically.
 [Steam lifecycle controls](docs/steam-lifecycle.md) launch, observe and stop the
 managed installation, including after Gamekit restarts.
 [Recovery controls](docs/steam-recovery.md) retry interrupted setup and support a
@@ -30,6 +30,8 @@ An explicitly confirmed clean reset can instead delete the current prefix and it
 downloads while retaining older archives and external libraries.
 See [native development](docs/development.md) for setup, local signing, module
 boundaries, CI and generated-file handling.
+The [operating guide](docs/user-guide.md) covers setup, shortcuts, recovery and local
+packages. [E5 acceptance](docs/e5-acceptance.md) records completed checks and remaining gates.
 
 ## Initial scope
 
@@ -38,8 +40,9 @@ silicon. It will validate prerequisites, manage a dedicated Wine environment,
 install Windows Steam, and provide launch, stop, recovery, and diagnostic controls.
 Game evaluation follows the Steam milestone; game-specific fixes are future work.
 
-The project is building its native application foundation. Work is tracked with
-Beads (`bd`).
+The E5 local candidate provides validated setup, silent installation, automatic
+Steam UI readiness, lifecycle and recovery controls. Post-reboot release acceptance
+is tracked separately. Work is tracked with Beads (`bd`).
 
 ## Development workflow
 

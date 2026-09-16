@@ -3,7 +3,7 @@ DERIVED_DATA ?= .build/xcode
 CONFIGURATION ?= Debug
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/Gamekit.app
 
-.PHONY: generate build core-test python-test test ui-test check run
+.PHONY: generate build core-test python-test test ui-test check run package
 
 generate:
 	xcodegen generate --spec project.yml
@@ -26,3 +26,8 @@ check: test build
 
 run: build
 	open "$(APP)"
+
+package:
+	$(MAKE) build CONFIGURATION=Release
+	mkdir -p .build/packages
+	python3 tools/package_local.py --app "$(DERIVED_DATA)/Build/Products/Release/Gamekit.app" --output ".build/packages/Gamekit-$$(date -u +%Y%m%dT%H%M%SZ)"
