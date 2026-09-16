@@ -4,6 +4,34 @@ import Testing
 
 @Suite("Asynchronous command execution")
 struct ProcessExecutorTests {
+    @Test("An independently launched application owns its own macOS responsibility")
+    func independentResponsibility() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("responsibility.c")
+        let executable = root.appendingPathComponent("responsibility")
+        try Data(#"""
+        #include <dlfcn.h>
+        #include <stdio.h>
+        #include <unistd.h>
+        int main(void) {
+            typedef pid_t (*query_fn)(pid_t);
+            query_fn query = (query_fn)dlsym(RTLD_DEFAULT, "responsibility_get_pid_responsible_for_pid");
+            if (!query) return 2;
+            printf("%d %d\n", getpid(), query(getpid()));
+            return 0;
+        }
+        """#.utf8).write(to: source)
+        let built = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/clang"), arguments: [source.path, "-o", executable.path]))
+        try #require(built.termination == .exited(0))
+        let result = try await ProcessExecutor().run(.init(executable: executable, independentApplication: true))
+        #expect(result.termination == .exited(0))
+        let values = result.stdoutText.split(whereSeparator: \.isWhitespace).compactMap { Int32($0) }
+        try #require(values.count == 2)
+        #expect(values[0] == values[1])
+    }
+
     @Test("Leader exit is observable before a handed-off pipe writer finishes")
     func independentLeaderExit() async throws {
         let command = try await ProcessExecutor().start(CommandRequest(executable: URL(fileURLWithPath: "/bin/sh"),

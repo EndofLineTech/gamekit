@@ -191,3 +191,18 @@ the PR's actual CI results before merging.
 - Local UI testing hit the locked-desktop authentication barrier; the reset-dialog
   confirmation/Cancel regression is included in hosted CI. No attempt was made to
   bypass the user's screen lock.
+
+## Quit/Dock acceptance follow-up (`gamekit-75s`)
+
+- User acceptance found generic/duplicate Wine Dock entries and Gamekit retained
+  as “Running in Background” after normal Quit.
+- Launch Services inspection established `exited-with-subordinates` despite the
+  Gamekit PID having exited. The stronger live regression failed on the old build
+  and passed after independent launch responsibility was implemented.
+- A derived Windows Steam bundle supplies the correct process name and hides its
+  launcher agent. The source runtime and installed prefix remain intact.
+- `make check` passed: 131 Swift functions reported (seven opt-in skips), six
+  Python tests and native build. The normal UI suite passed five tests with two
+  live cases skipped; the new live Command-Q/ordinary-reopen UI test passed separately.
+- The user confirmed one correctly named entry and full Gamekit exit while Steam
+  remained open. See [launch identity and ownership](windows-steam-launcher.md).

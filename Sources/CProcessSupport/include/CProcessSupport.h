@@ -5,7 +5,7 @@
 #include <sys/types.h>
 
 int gk_spawn(const char *path, char *const argv[], char *const envp[], const char *cwd,
-             int discard_output, pid_t *pid, int *stdout_fd, int *stderr_fd);
+             int discard_output, int independent_responsibility, pid_t *pid, int *stdout_fd, int *stderr_fd);
 int gk_wait_without_reaping(pid_t pid, int *exit_code, int *signal_number);
 int gk_reap(pid_t pid, int *exit_code, int *signal_number);
 

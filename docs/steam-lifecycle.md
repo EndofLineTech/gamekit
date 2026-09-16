@@ -29,13 +29,12 @@ updater handoff gaps retain ownership and suppress a duplicate launch; five seco
 of observed emptiness are required before a prior receipt is treated as stopped.
 Unknown inventory results remain `unverified`, never inferred idle.
 
-Persistent launches have no setup deadline. Their stdin/stdout/stderr go to
-`/dev/null` so closing Gamekit does not close an output pipe needed by Steam.
-`ProcessExecutor` still observes/reaps its initial child while Gamekit is alive.
+Persistent launches have no setup deadline. They use a separate
+[Windows Steam application bundle](windows-steam-launcher.md) through Launch
+Services, with no Gamekit-owned output pipe that closes when Gamekit quits.
 Lifecycle operation summaries are recorded by the UI; continuous Wine stdout is
-not captured for these detached-lifetime launches. Steam's own logs remain private
-inside the prefix. One-shot commands and installation sessions retain bounded
-capture as before.
+not captured for these launches. Steam's own logs remain private inside the prefix.
+One-shot commands and installation sessions retain bounded capture as before.
 
 ## Stop policy
 

@@ -161,7 +161,10 @@ struct DiagnosticsTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(captured == Data("checkpoint marker".utf8))
-        #expect(try await reader.summaries().first?.category == .incomplete)
+        // Listing also prunes under the catalog writer lock. Use the owner actor
+        // to serialize that check with its timer; the independent reader above
+        // already proves that the output reached disk before finish.
+        #expect(try await store.summaries().first?.category == .incomplete)
         _ = try await store.finish(operation, outcome: .exited(0))
     }
 
