@@ -17,9 +17,11 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path]
         app.launch()
         defer { app.terminate() }
+        app.activate()
+        XCTAssertTrue(app.staticTexts["Disposable clean reset"].waitForExistence(timeout: 15))
         let reset = app.buttons["reset-delete-downloads"]
         XCTAssertTrue(reset.waitForExistence(timeout: 10))
-        for _ in 0..<8 where !reset.isHittable { app.scrollViews.firstMatch.scroll(byDeltaX: 0, deltaY: -500) }
+        revealRecoveryButton(reset, in: app)
         reset.click()
         let confirmation = app.windows["Gamekit"].sheets.firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
@@ -132,6 +134,17 @@ final class GamekitUITests: XCTestCase {
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: parent) }
         return parent.appendingPathComponent("Gamekit")
+    }
+
+    private func revealRecoveryButton(_ button: XCUIElement, in app: XCUIApplication) {
+        let scroll = app.scrollViews.firstMatch
+        // A partially clipped button can report hittable while its center is
+        // outside the scroll viewport. Avoid clicking during startup layout shifts.
+        for _ in 0..<12 {
+            if button.isHittable && scroll.frame.insetBy(dx: 0, dy: 16).contains(button.frame) { return }
+            scroll.scroll(byDeltaX: 0, deltaY: -160)
+        }
+        XCTAssertTrue(button.isHittable && scroll.frame.contains(button.frame), button.debugDescription)
     }
 
     func testNativeAppLaunchesWithLinkedCore() throws {
