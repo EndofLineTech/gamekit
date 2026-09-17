@@ -115,8 +115,10 @@ Helldivers process before handing control to the user. Focus/resource capture
 was armed before launch; a targeted graphics log stream was also collected.
 The user reported that this comparison was **"definitely better."** This is
 qualitative improvement, not a measured FPS result or a completed mission test.
-Whether the pauses disappeared entirely and whether the cursor workaround is
-still necessary remain to be confirmed.
+The user subsequently confirmed less-frequent pauses and much faster loading
+onto the Super Destroyer. Pauses were not eliminated. The cursor initially
+behaved without the workaround but later reappeared during active play, so
+the cursor defect remains unresolved.
 
 At inspection, `.build/helldivers-metal3-graphics-1.txt` still contained 80
 pipeline/no-op failure records and 80 stage-compilation failures—the same
@@ -125,3 +127,36 @@ be described as removal of those logged failures, nor does their presence alone
 explain the difference in perceived smoothness. Capture methods differ (live
 stream versus historical query); matching counts are not a complete pipeline
 identity or timing comparison. The automatic default remains unchanged.
+
+## Driver-warning suppression attempt and research
+
+The user requested removal of the recurring virtual-GPU warning. With the game
+closed, its configuration was backed up and only
+`IGNORE_APPROVED_DRIVER_WARNING` was changed from `false` to `true`. A bounded
+launch using the existing comparison Steam session still showed the warning;
+both the user's observation and the private screenshot confirmed failure.
+The setting remained `true` afterward, so it was not simply reset in the saved
+file. The test stopped the managed session, ending that temporary Metal 3
+session. The ineffective preference change was then reverted to `false`.
+
+Research found:
+
+- An [August 13 Steam community reply](https://steamcommunity.com/app/553850/discussions/0/803471938699811827/#c585057095914782729)
+  recommends that exact setting and reports success. It is community evidence,
+  not a guarantee for our game build and Wine/D3DMetal combination.
+- A [CrossOver user report](https://steamcommunity.com/app/553850/discussions/1/833871839865437475/)
+  describes the same all-65535 AMD driver version. Earlier local DXGI probing
+  already established this as the compatibility layer's reported value.
+- The [Helldivers community wiki](https://helldivers.wiki.gg/wiki/GPU_Driver_Recommendation)
+  describes incorrect driver warnings, but provides no verified suppression
+  alternative for this setup. Its native Windows driver-installation guidance
+  is not applicable to installing a driver for the Mac GPU inside Wine.
+- The community [launch-command reference](https://helldivers.wiki.gg/wiki/Steam_Launch_Commands)
+  did not establish another driver-check suppression argument. Generic Unreal
+  command-line suggestions are not evidence for this Stingray-based game.
+
+No verified alternative native suppression was found. A possible launcher
+workaround is narrowly scoped automatic Continue on this exact owned dialog;
+that would acknowledge the warning, not prevent the game from creating it or
+repair graphics compatibility. No such product behavior has been added.
+No driver version, game executable or anti-cheat component was modified.
