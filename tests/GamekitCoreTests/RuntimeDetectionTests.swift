@@ -6,14 +6,14 @@ import Testing
 private struct DetectionFixture {
     let parent: URL
     let layout: RuntimeLayout
-    init() throws {
+    init(revision: RuntimeRevision = .original) throws {
         parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let root = parent.appendingPathComponent("Gamekit")
         let bytes = Data("fixture payload".utf8)
         let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         let profile = RuntimeProfile(identity: RuntimeProfile.sikarugir.identity, bundlePath: "Runtimes/runtime with spaces.app",
                                      wineVersionOutput: "wine-10.0 (Sikarugir)",
-                                     hashes: RuntimeProfile.sikarugir.hashes.mapValues { _ in digest })
+                                      hashes: revision.profile.hashes.mapValues { _ in digest }, revision: revision)
         layout = RuntimeLayout(dataRoot: root, profile: profile)
         for relative in profile.hashes.keys { try Self.put(bytes, at: layout.bundle.appendingPathComponent(relative)) }
         for dependency in ["libinotify.0.dylib", "libfreetype.6.dylib", "libgnutls.30.dylib", "libSDL2-2.0.0.dylib", "GStreamer.framework/Libraries/libgstreamer-1.0.0.dylib"] {
@@ -48,6 +48,16 @@ private func detector(wineVersion: String = "wine-10.0 (Sikarugir)", rosetta: Bo
 
 @Suite("Runtime prerequisite detection")
 struct RuntimeDetectionTests {
+    @Test("A changed text-input component fails runtime validation while intact graphics still pass")
+    func changedTextInput() async throws {
+        let fixture = try DetectionFixture(revision: .textInput1); defer { fixture.remove() }
+        #expect(try await detector().detect(fixture.layout, selection: fixture.layout.profile.identity, host: goodHost).prerequisites == .ready)
+        try Data("changed component".utf8).write(to: fixture.layout.engine.appendingPathComponent("lib/wine/x86_64-windows/msctf.dll"))
+        let report = try await detector().detect(fixture.layout, selection: fixture.layout.profile.identity, host: goodHost)
+        #expect(report.checks.contains { $0.prerequisite == .runtime && $0.status == .failed })
+        #expect(report.checks.contains { $0.prerequisite == .graphicsPayload && $0.status == .passed })
+    }
+
     @Test("Pinned fixture succeeds only when executable probes and files agree")
     func validAndWrongVersion() async throws {
         let fixture = try DetectionFixture(); defer { fixture.remove() }

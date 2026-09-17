@@ -12,7 +12,7 @@ struct GameDockAcceptanceTests {
         let helper = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["GAMEKIT_IDENTITY_X86_HELPER"]))
         let store = try EnvironmentStore()
         let selected = try await RuntimeSettingsStore(store: store).layout()
-        let layout = RuntimeLayout(dataRoot: store.root, bundle: selected.bundle, identityHelper: helper)
+        let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle, identityHelper: helper)
         let lifecycle = SteamLifecycle(store: store, layout: layout)
         let record = try #require(await store.load(SteamInstallationRecipe.environmentID))
         let prefix = store.prefixURL(for: record.id)

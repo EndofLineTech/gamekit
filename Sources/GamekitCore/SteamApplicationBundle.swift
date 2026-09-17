@@ -28,7 +28,7 @@ struct SteamApplicationBundle: Sendable {
     private var bundleName: String { executableName + ".app" }
     private var parentURL: URL {
         if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/shared-pe-v2") }
-        else { layout.dataRoot.appendingPathComponent("Launchers") }
+        else { layout.launchersRoot }
     }
     var bundleURL: URL { parentURL.appendingPathComponent(bundleName) }
     var executable: URL { bundleURL.appendingPathComponent("Contents/MacOS/\(executableName)") }
@@ -88,6 +88,11 @@ struct SteamApplicationBundle: Sendable {
               let root = try ManagedDirectory.openRoot(layout.dataRoot, create: false),
               var launchers = try root.directory("Launchers", create: true)
         else { throw SteamApplicationError.invalidRuntime }
+        if layout.profile.revision != .original {
+            guard let directory = try launchers.directory("Revisions", create: true)?.directory(layout.profile.revision.rawValue, create: true)
+            else { throw SteamApplicationError.invalidBundle }
+            launchers = directory
+        }
         if let game {
             guard game.appID > 0, !game.name.isEmpty, game.name.rangeOfCharacter(from: .controlCharacters) == nil,
                   let directory = try launchers.directory("Games", create: true)?.directory(String(game.appID), create: true)?.directory("shared-pe-v2", create: true)

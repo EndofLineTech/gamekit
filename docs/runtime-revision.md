@@ -224,3 +224,10 @@ prerequisite prefix does not count as E2.3's second Steam installation. If curre
 Steam fails, use its actual logs; do not preemptively copy community flags,
 downgrade Steam, disable updates or blame authentication from unrelated reports.
 The prototype's macOS 27 support limit and macOS 28 investigation remain unchanged.
+
+## Text-input component revision
+
+The base recipe above also supports the separately identified
+[Gamekit text-input 1 revision](runtime-text-input-delivery.md), with managed
+selection, rollback and revision-specific launcher caches. It retains the same
+Wine engine and Apple graphics payload and replaces one text-input DLL.
