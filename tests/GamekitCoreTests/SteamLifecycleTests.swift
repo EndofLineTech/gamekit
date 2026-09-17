@@ -10,6 +10,7 @@ private actor LifecycleFixtureRuntime {
     var graceful = true
     var orphan = false
     var signalled = false
+    var commands: [[String]] = []
     func foreign() { token = "foreign" }
     func refuseGraceful() { graceful = false }
     func leaveOrphan() { graceful = false; orphan = true }
@@ -24,6 +25,7 @@ private actor LifecycleFixtureRuntime {
         #expect(request.timeout == nil)
     }
     func execute(_ request: CommandRequest) async throws -> CommandResult {
+        commands.append(request.arguments)
         #expect(prefix != nil && request.environment["WINEPREFIX"] == prefix)
         #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
         if request.arguments == ["-k"] { forced = true; if !orphan { token = nil } }
@@ -57,6 +59,47 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Game launch starts scoped Steam once and revalidates installation before every request")
+    func launchInstalledGame() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let apps = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Stardew Valley"), withIntermediateDirectories: true)
+        let manifest = apps.appendingPathComponent("appmanifest_413150.acf")
+        try Data(#""AppState" { "appid" "413150" "name" "Stardew Valley" "installdir" "Stardew Valley" "StateFlags" "4" }"#.utf8).write(to: manifest)
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        try await lifecycle.launchGame(appID: 413150)
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.commands.last?.suffix(2) == ["-applaunch", "413150"])
+        try await lifecycle.launchGame(appID: 413150)
+        #expect(await runtime.launches == 1)
+        await runtime.foreign()
+        await #expect(throws: SteamLifecycleError.foreignActivity) { try await lifecycle.launchGame(appID: 413150) }
+        #expect(await runtime.commands.count == 2)
+        try FileManager.default.removeItem(at: manifest)
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await lifecycle.launchGame(appID: 413150) }
+        #expect(await runtime.commands.count == 2)
+    }
+
+    @Test("Uninstall during Steam startup prevents the subsequent game command")
+    func gameRemovedDuringStartup() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let apps = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Game"), withIntermediateDirectories: true)
+        let manifest = apps.appendingPathComponent("appmanifest_413150.acf")
+        try Data(#""AppState" { "appid" "413150" "name" "Game" "installdir" "Game" "StateFlags" "4" }"#.utf8).write(to: manifest)
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        let driver = SteamLifecycleDriver(preflight: base.preflight, observe: base.observe, spawn: { request in
+            await runtime.spawn(request)
+            try FileManager.default.removeItem(at: manifest)
+        }, execute: base.execute)
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await lifecycle.launchGame(appID: 413150) }
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.commands.isEmpty)
+    }
+
     @Test("Explicit live cleanup of the recorded managed session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_STOP_ONLY"] == "1"))
     func stopRecordedSession() async throws {
         let store = try EnvironmentStore()

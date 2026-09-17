@@ -3,6 +3,31 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testInstalledGamesRefreshAndUnavailableLaunch() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Game library fixture", runtime: RuntimeProfile.sikarugir.identity,
+            installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        let apps = steam.appendingPathComponent("steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Stardew Valley"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let manifest = apps.appendingPathComponent("appmanifest_413150.acf")
+        try Data(#""AppState" { "appid" "413150" "name" "Stardew Valley" "installdir" "Stardew Valley" "StateFlags" "4" }"#.utf8).write(to: manifest)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch()
+        defer { app.terminate() }
+        let game = app.buttons["launch-game-413150"]
+        XCTAssertTrue(game.waitForExistence(timeout: 20))
+        XCTAssertEqual(game.label, "Launch Stardew Valley")
+        XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")
+        try FileManager.default.removeItem(at: manifest)
+        XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 15))
+        XCTAssertFalse(game.exists, "Uninstalled games must disappear after polling")
+    }
+
     func testOptInPackagedAppLaunchQuitReopenStop() async throws {
         guard ProcessInfo.processInfo.environment["GAMEKIT_PACKAGE_UI_SMOKE"] == "1" else { throw XCTSkip("Opt-in packaged app lifecycle") }
         let path = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_PACKAGE_APP"])

@@ -68,6 +68,30 @@ Steam should appear as **Windows Steam** in the Dock. The hidden launcher does n
 retain Gamekit as “Running in Background.” These behaviors depend on the tested
 macOS/runtime combination and must be rechecked after upgrades.
 
+## Installed games
+
+Install games using **Windows Steam**, in its default managed library. Gamekit's
+**Installed games** section detects their Steam installation records and shows
+each title with artwork and a play button. The list refreshes every three seconds,
+when Gamekit becomes active, or with **Refresh games**. Uninstalled titles disappear.
+
+Click a game's tile to launch it. Gamekit starts its managed Windows Steam session
+if necessary and sends that game's AppID to the Windows client. The native macOS
+Steam app is not used. A launch-request message means Steam received the request;
+confirm the game window, first-run setup and actual gameplay separately.
+
+Incomplete downloads, pending updates and missing game directories disable the
+tile. Let Steam complete installation or repair it there. Runtime checks and the
+shared operation gate also apply to game launches. Steam's installation record
+does not prove compatibility or verify every installed game file.
+
+Artwork comes from Steam's local header-image cache first. If unavailable or
+invalid, Gamekit requests the title's public header image from Steam's CDN. An
+offline/missing image falls back to a controller symbol beside the game title.
+External Steam libraries and the native macOS library are not scanned in this
+version. See the repository's [library contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/installed-games.md)
+for detection and launch details.
+
 ## Recovery
 
 **Retry interrupted install** inspects saved progress and current files. It can

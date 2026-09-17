@@ -167,6 +167,41 @@ public actor SteamLifecycle {
             workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
         guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
     }
+
+    /// Send a numeric AppID to the owned Windows client, never the host's Steam
+    /// URL handler or a manifest-supplied executable. Success means request sent.
+    public func launchGame(appID: UInt32) async throws {
+        let initial = try await installed()
+        guard try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
+            .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        _ = try await launch()
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: id)
+        defer { withExtendedLifetime(lease) {} }
+        guard let receipt = try receipt() else { throw SteamLifecycleError.foreignActivity }
+        try await driver.preflight()
+        var clientReady = false
+        for _ in 0..<120 {
+            try Task.checkCancellation()
+            let snapshot = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+            if snapshot.processes.contains(where: { $0.role == .steam || $0.role == .steamUI }) { clientReady = true; break }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        guard clientReady else { throw SteamLifecycleError.observationUnavailable }
+        guard try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable)
+            .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        try lease.validate()
+        let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
+        let result = try await driver.execute(.init(executable: layout.wine,
+            arguments: [steam.path, "-applaunch", String(appID)],
+            environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
+            workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
+        guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+    }
     public func stop() async throws -> SteamStopResult {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
