@@ -108,4 +108,20 @@ the trial; a fresh normal launch restores the automatic backend. The option is
 not a persisted preference or a new default. Compare both the user's pauses and
 the pipeline-failure log before deciding whether the fallback helps.
 
-No Metal 3 gameplay result is claimed at this checkpoint.
+## First Metal 3 comparison
+
+The opt-in launcher verified `D3DM_MTL4=0` in both managed Steam and the
+Helldivers process before handing control to the user. Focus/resource capture
+was armed before launch; a targeted graphics log stream was also collected.
+The user reported that this comparison was **"definitely better."** This is
+qualitative improvement, not a measured FPS result or a completed mission test.
+Whether the pauses disappeared entirely and whether the cursor workaround is
+still necessary remain to be confirmed.
+
+At inspection, `.build/helldivers-metal3-graphics-1.txt` still contained 80
+pipeline/no-op failure records and 80 stage-compilation failures—the same
+counts observed in the automatic-backend run. Therefore the improvement cannot
+be described as removal of those logged failures, nor does their presence alone
+explain the difference in perceived smoothness. Capture methods differ (live
+stream versus historical query); matching counts are not a complete pipeline
+identity or timing comparison. The automatic default remains unchanged.
