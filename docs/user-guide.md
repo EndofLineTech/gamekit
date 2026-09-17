@@ -36,9 +36,11 @@ manifest does not assert that release acceptance or reboot testing has passed.
 ## First setup
 
 1. Review **Setup and prerequisites**. Each failed check explains its next step.
-2. Use **Choose runtime…** if the validated runtime app is in another local
-   location, or **Use managed runtime** for the default. The prefix storage stays
-   fixed. Runtime selection cannot change while a managed session owns it.
+2. Choose **Use updated runtime** for the prepared text-input revision, or
+   **Use original runtime** for the original recipe. **Choose runtime…** locates
+   the currently displayed revision elsewhere. See the
+   [revision preparation and rollback guide](runtime-text-input-delivery.md).
+   Prefix storage stays fixed; Stop Steam before changing revisions.
 3. Click **Refresh checks** (Command-Shift-R) after fixing prerequisites.
 4. Click **Install Steam**. Gamekit downloads and validates Valve's installer,
    initializes its prefix, and invokes the installer silently with `/S`.
@@ -72,8 +74,9 @@ macOS/runtime combination and must be rechecked after upgrades.
 
 Current builds explicitly advertise Rosetta's supported AVX/AVX2 capabilities.
 After this update, **Stop Windows Steam** and launch a fresh session so games
-inherit the setting. This resolves Helldivers 2's AVX startup message; its later
-driver warning/startup crash remains under investigation. See the
+inherit the setting. This resolves Helldivers 2's AVX startup message. The
+**updated text-input runtime** also resolves the reproduced subsequent startup
+crash; Continue on the remaining GPU warning reached the ship in testing. See the
 [AVX investigation](https://github.com/EndofLineTech/gamekit/blob/dev/docs/avx-capability.md).
 
 After upgrading to the VC++ prerequisite fix, save and exit games, **Stop Windows

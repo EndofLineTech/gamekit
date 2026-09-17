@@ -1,11 +1,13 @@
 import Foundation
 
 /// A local selection only: it neither installs a runtime nor changes the prefix.
-/// The one supported catalog recipe still has to pass real runtime validation.
+/// Component revisions use the same base Wine/prefix identity. Selection is an
+/// atomic pointer switch while stopped; each revision has its own launcher cache.
 public actor RuntimeSettingsStore {
     private struct Settings: Codable {
-        var schemaVersion = 1
+        var schemaVersion = 2
         let bundle: URL?
+        let revision: RuntimeRevision?
     }
     private let store: EnvironmentStore
     public init(store: EnvironmentStore) { self.store = store }
@@ -17,12 +19,14 @@ public actor RuntimeSettingsStore {
     public func layout() throws -> RuntimeLayout {
         guard let bytes = try metadata(create: false)?.read("RuntimeSelection.json") else { return RuntimeLayout(dataRoot: store.root) }
         let settings = try JSONDecoder().decode(Settings.self, from: bytes)
-        guard settings.schemaVersion == 1 else { throw MetadataError.unsupportedSchema(settings.schemaVersion) }
+        guard (settings.schemaVersion == 1 && settings.revision == nil)
+                || (settings.schemaVersion == 2 && settings.revision != nil)
+        else { throw MetadataError.unsupportedSchema(settings.schemaVersion) }
         if let bundle = settings.bundle {
             guard bundle.isFileURL, bundle.path.hasPrefix("/"), bundle.path != "/", !bundle.path.utf8.contains(0),
                   bundle.user == nil, bundle.password == nil, bundle.query == nil, bundle.fragment == nil else { throw EnvironmentStoreError.unsafePath }
         }
-        return RuntimeLayout(dataRoot: store.root, bundle: settings.bundle)
+        return RuntimeLayout(dataRoot: store.root, profile: (settings.revision ?? .original).profile, bundle: settings.bundle)
     }
 
     public func isSelectionLocked() throws -> Bool {
@@ -30,7 +34,7 @@ public actor RuntimeSettingsStore {
         return try directory.names().contains { $0.hasSuffix(".json") }
     }
 
-    public func select(_ supplied: URL?) async throws {
+    public func select(_ supplied: URL?, revision: RuntimeRevision = .original) async throws {
         let installation = try await store.installationLease()
         defer { withExtendedLifetime(installation) {} }
         guard !(try isSelectionLocked()) else { throw EnvironmentStoreError.busy }
@@ -52,7 +56,7 @@ public actor RuntimeSettingsStore {
         } else { bundle = nil }
         guard let directory = try metadata(create: true) else { throw EnvironmentStoreError.notFound }
         try directory.withWriteLock {
-            try directory.write(JSONEncoder().encode(Settings(bundle: bundle)), to: "RuntimeSelection.json", createOnly: false, beforeCommit: {})
+            try directory.write(JSONEncoder().encode(Settings(bundle: bundle, revision: revision)), to: "RuntimeSelection.json", createOnly: false, beforeCommit: {})
         }
     }
 }

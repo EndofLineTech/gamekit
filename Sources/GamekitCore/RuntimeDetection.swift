@@ -2,11 +2,44 @@ import CryptoKit
 import Darwin
 import Foundation
 
+/// Component revisions share the Wine/prefix ABI; selecting one never rewrites
+/// an environment's base-engine identity or its saved installation state.
+public enum RuntimeRevision: String, Codable, Sendable {
+    case original
+    case textInput1 = "text-input-1"
+
+    public var title: String {
+        switch self {
+        case .original: "Sikarugir 10.0 revision 6 (original)"
+        case .textInput1: "Sikarugir 10.0 revision 6 + Gamekit text-input 1"
+        }
+    }
+    public var profile: RuntimeProfile {
+        self == .original ? .sikarugir : .sikarugirTextInput1
+    }
+}
+
 public struct RuntimeProfile: Sendable {
     public let identity: RuntimeIdentity
     public let bundlePath: String
     public let wineVersionOutput: String
     public let hashes: [String: String]
+    public let revision: RuntimeRevision
+
+    public init(identity: RuntimeIdentity, bundlePath: String, wineVersionOutput: String,
+                hashes: [String: String], revision: RuntimeRevision = .original) {
+        self.identity = identity; self.bundlePath = bundlePath; self.wineVersionOutput = wineVersionOutput
+        self.hashes = hashes; self.revision = revision
+    }
+
+    public static var sikarugirTextInput1: RuntimeProfile {
+        var hashes = sikarugir.hashes
+        hashes["Contents/SharedSupport/wine/lib/wine/x86_64-windows/msctf.dll"] =
+            "bb8db266526cff89c2bc6a436482b24c632c13596c1864adb4cb2e42e58fca8b"
+        return RuntimeProfile(identity: sikarugir.identity,
+            bundlePath: "Runtimes/sikarugir10.0_6-d3dmetal4.0b2-text-input1/Template-1.0.11.app",
+            wineVersionOutput: sikarugir.wineVersionOutput, hashes: hashes, revision: .textInput1)
+    }
 
     public static let sikarugir = RuntimeProfile(
         identity: RuntimeIdentity(provider: "Sikarugir", distribution: "10.0_6", wine: "10.0", graphics: "4.0b2"),
@@ -45,8 +78,12 @@ public struct RuntimeLayout: Sendable {
     public var wineserver: URL { engine.appendingPathComponent("bin/wineserver") }
     public var frameworks: URL { bundle.appendingPathComponent("Contents/Frameworks") }
     public var graphics: URL { engine.appendingPathComponent("lib/external/D3DMetal.framework") }
-    public var steamApplicationBundle: URL { dataRoot.appendingPathComponent("Launchers/Windows Steam.app") }
-    public var gameApplicationsRoot: URL { dataRoot.appendingPathComponent("Launchers/Games") }
+    public var launchersRoot: URL {
+        let root = dataRoot.appendingPathComponent("Launchers")
+        return profile.revision == .original ? root : root.appendingPathComponent("Revisions/\(profile.revision.rawValue)")
+    }
+    public var steamApplicationBundle: URL { launchersRoot.appendingPathComponent("Windows Steam.app") }
+    public var gameApplicationsRoot: URL { launchersRoot.appendingPathComponent("Games") }
 
     public func environment(prefix: URL? = nil, session: String? = nil,
                             inheriting inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
@@ -151,7 +188,7 @@ public struct RuntimeDetector: Sendable {
             for (relative, hash) in layout.profile.hashes {
                 try Task.checkCancellation()
                 let valid = Self.matches(layout.bundle.appendingPathComponent(relative), root: layout.bundle, hash: hash)
-                if relative.contains("/bin/") { runtimeValid = runtimeValid && valid }
+                if relative.contains("/bin/") || relative.hasSuffix("/msctf.dll") { runtimeValid = runtimeValid && valid }
                 else { graphicsValid = graphicsValid && valid }
             }
             let dependencies = ["libinotify.0.dylib", "libfreetype.6.dylib", "libgnutls.30.dylib", "libSDL2-2.0.0.dylib",
@@ -186,7 +223,7 @@ public struct RuntimeDetector: Sendable {
             graphicsValid = signature?.termination == .exited(0)
         }
         checks.append(.init(prerequisite: .runtime, status: runtimeValid ? (versionChecked ? .passed : .unknown) : .failed,
-                            detail: runtimeValid ? (versionChecked ? "Validated Sikarugir 10.0 revision 6" : "Runtime files match; execution not checked")
+                            detail: runtimeValid ? (versionChecked ? layout.profile.revision.title : "Runtime files match; execution not checked")
                                 : "Runtime selection, files, dependencies or version do not match"))
         checks.append(.init(prerequisite: .graphicsPayload, status: graphicsValid ? .passed : .failed,
                             detail: graphicsValid ? "Apple D3DMetal 4.0b2 integrity verified" : "Graphics payload does not match the validated recipe"))

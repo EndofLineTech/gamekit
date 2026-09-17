@@ -63,7 +63,7 @@ struct ReleaseAcceptanceTests {
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let root = parent.appendingPathComponent("E5 acceptance " + UUID().uuidString.lowercased())
         let store = try EnvironmentStore(root: root)
-        try await RuntimeSettingsStore(store: store).select(selected.bundle)
+        try await RuntimeSettingsStore(store: store).select(selected.bundle, revision: selected.profile.revision)
         #expect(try await store.loadAll().isEmpty)
         print("E5_ACCEPTANCE_ROOT=\(store.root.path)")
     }

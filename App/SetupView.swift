@@ -27,10 +27,14 @@ struct SetupView: View {
                 }
                 HStack {
                     Button("Choose runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
-                    Button("Use managed runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true) }
+                    Button("Use updated runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .textInput1) }
+                        .accessibilityIdentifier("use-text-input-runtime")
+                    Button("Use original runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .original) }
+                        .accessibilityIdentifier("use-original-runtime")
                 }.disabled(setup.isBusy || setup.selectionLocked)
                 if setup.selectionLocked { Text("Stop the recorded Steam session before changing runtimes.").font(.caption) }
                 Text("Selected runtime: \(setup.layout.bundle.path)").font(.caption).textSelection(.enabled)
+                Text("Revision: \(setup.layout.profile.revision.title)").font(.caption)
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)
                 HStack {

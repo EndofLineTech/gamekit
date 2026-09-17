@@ -16,7 +16,8 @@ struct GameEvaluationLaunchTests {
         let appID = try #require(UInt32(rawID))
         try #require([553850, 413150].contains(appID))
         let seconds = Double(env["GAMEKIT_E6_OBSERVE_SECONDS"] ?? "45") ?? 45
-        let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil ? 90 : 180
+        let observeExisting = env["GAMEKIT_E6_OBSERVE_EXISTING"] == "1"
+        let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil && !observeExisting ? 90 : 180
         try #require((15...maximumSeconds).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
         let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1"
@@ -45,16 +46,26 @@ struct GameEvaluationLaunchTests {
         if let experiment { layout = HelldiversTextInputExperiment.layout(root: experiment, helper: helper) }
         else {
             let selected = try await RuntimeSettingsStore(store: store).layout()
-            layout = RuntimeLayout(dataRoot: store.root, bundle: selected.bundle, identityHelper: helper)
+            layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle, identityHelper: helper)
         }
         try #require(layout.hasGameIdentityHelper)
         let lifecycle = SteamLifecycle(store: store, layout: layout)
         let record = try #require(await store.load(SteamInstallationRecipe.environmentID))
         let prefix = store.prefixURL(for: record.id)
-        let game = try #require(try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable).games.first { $0.id == appID })
+        let library = try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable)
+        let game = try #require(library.games.first { $0.id == appID })
         try #require(game.state == .ready)
         let initial = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
-        try #require(initial.complete && !initial.processes.contains { $0.role == .other }, "Close other managed games before the observation")
+        try #require(initial.complete && (observeExisting || !initial.processes.contains { $0.role == .other }), "Close other managed games before the observation")
+        if observeExisting {
+            try #require(try await lifecycle.status() == .running)
+            let owned = Set(initial.processes.filter { $0.role == .other }.map(\.identity.pid))
+            let otherNames = Set(library.games.filter { $0.id != appID }.map(\.name))
+            let names = await MainActor.run {
+                NSWorkspace.shared.runningApplications.filter { owned.contains($0.processIdentifier) }.compactMap(\.localizedName)
+            }
+            try #require(names.contains(game.name) && Set(names).isDisjoint(with: otherNames), "Observe only the game just launched from Gamekit")
+        }
         var activeSession: String?
 
         func cleanup() async throws {
@@ -75,7 +86,7 @@ struct GameEvaluationLaunchTests {
 
         do {
             print("E6 AppID=\(appID), build=\(game.buildID ?? "unknown"), observation=\(Int(seconds))s")
-            try await lifecycle.launchGame(appID: appID)
+            if !observeExisting { try await lifecycle.launchGame(appID: appID) }
             struct Receipt: Decodable { let token: UUID }
             let root = try #require(try ManagedDirectory.openRoot(store.root, create: false))
             let receiptData = try #require(try root.directory("Metadata")?.directory("Lifecycle")?.read("steam.json"))

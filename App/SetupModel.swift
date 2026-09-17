@@ -54,7 +54,9 @@ final class SetupModel: ObservableObject {
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
                 let settings = RuntimeSettingsStore(store: store)
                 let selected = try await settings.layout()
-                if layout.bundle != selected.bundle { layout = selected; selectionRevision = UUID() }
+                if layout.bundle != selected.bundle || layout.profile.revision != selected.profile.revision {
+                    layout = selected; selectionRevision = UUID()
+                }
                 selectionLocked = try await settings.isSelectionLocked()
                 let detector = RuntimeDetector { [diagnostics] request in try await diagnostics.execute(request, layout: selected) }
                 let actual = try await detector.detect(selected, selection: selected.profile.identity)
@@ -92,14 +94,15 @@ final class SetupModel: ObservableObject {
         }
     }
 
-    func chooseRuntime(diagnostics: AppDiagnosticsModel, useDefault: Bool = false) {
+    func chooseRuntime(diagnostics: AppDiagnosticsModel, useDefault: Bool = false, revision: RuntimeRevision? = nil) {
         guard !isBusy, !selectionLocked else { return }
+        let revision = revision ?? layout.profile.revision
         let selected: URL?
         if useDefault { selected = nil }
         else {
             let panel = NSOpenPanel()
             panel.title = "Choose the validated Sikarugir runtime app"
-            panel.message = "Select Template-1.0.11.app containing Sikarugir 10.0 revision 6 and D3DMetal 4.0b2."
+            panel.message = "Select the prepared app for \(revision.title), with D3DMetal 4.0b2."
             panel.allowedContentTypes = [.applicationBundle]
             panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
             guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -110,7 +113,7 @@ final class SetupModel: ObservableObject {
         Task { [self] in
             do {
                 let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
-                try await settings.select(selected)
+                try await settings.select(selected, revision: revision)
                 layout = try await settings.layout(); selectionRevision = UUID()
                 end(token); refresh(diagnostics: diagnostics)
             } catch { problem = AppFailure.message(error); end(token) }

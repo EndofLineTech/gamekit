@@ -25,6 +25,33 @@ private struct ApplicationBundleFixture {
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("A component revision creates coherent new Steam/game PE caches and preserves rollback caches")
+    func componentCaches() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let relative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/msctf.dll"
+        try Data("original".utf8).write(to: fixture.layout.bundle.appendingPathComponent(relative))
+        let old = try await SteamApplicationBundle(layout: fixture.layout).prepare()
+        let updatedBundle = try ManagedDirectory.canonicalRoot(fixture.parent.appendingPathComponent("Updated.app"))
+        try FileManager.default.copyItem(at: fixture.layout.bundle, to: updatedBundle)
+        let bytes = Data("backport".utf8)
+        try bytes.write(to: updatedBundle.appendingPathComponent(relative))
+        var hashes = fixture.layout.profile.hashes
+        hashes[relative] = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let profile = RuntimeProfile(identity: fixture.layout.profile.identity, bundlePath: "unused", wineVersionOutput: "fixture",
+            hashes: hashes, revision: .textInput1)
+        let layout = RuntimeLayout(dataRoot: fixture.layout.dataRoot, profile: profile, bundle: updatedBundle)
+        let steam = try await SteamApplicationBundle(layout: layout).prepare()
+        let game = try await SteamApplicationBundle(layout: layout, game: .init(appID: 553850, name: "Helldivers")).prepare()
+        let suffix = "Contents/lib/wine/x86_64-windows/msctf.dll"
+        #expect(steam != old)
+        #expect(try Data(contentsOf: old.appendingPathComponent(suffix)) == Data("original".utf8))
+        #expect(try Data(contentsOf: game.appendingPathComponent(suffix)) == bytes)
+        let steamInfo = try FileManager.default.attributesOfItem(atPath: steam.appendingPathComponent(suffix).path)
+        let gameInfo = try FileManager.default.attributesOfItem(atPath: game.appendingPathComponent(suffix).path)
+        #expect(steamInfo[.systemFileNumber] as? NSNumber == gameInfo[.systemFileNumber] as? NSNumber)
+        #expect(try await SteamApplicationBundle(layout: fixture.layout).prepare() == old)
+    }
+
     @Test("Games receive distinct filesystem identities without changing Steam or runtime bytes")
     func gameIdentity() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
