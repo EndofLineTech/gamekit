@@ -82,3 +82,24 @@ where possible; document any unavoidable differences.
 
 Suppressing the GPU warning or advertising a fabricated driver version would
 not implement these missing interfaces. No such change has been made.
+
+## Newer engine candidate constraint
+
+The official Sikarugir engine release lists `WS11WineSikarugir11.0_1.tar.xz`,
+updated September 17, 2026. Its 167,218,856-byte archive was downloaded locally;
+SHA-256 matches the GitHub asset digest:
+`266e852bdb98e80da09f09d4ee10fd9fd3dbb6b18b0801c0836f1430c4979fb6`.
+Archive inspection identifies `wine sikarugir 11.0 (revision 1)` and includes
+the explicit **`wswine.bundle/no_d3dmetal`** marker. It has not been installed
+or executed, and cannot be treated as a drop-in update to our D3DMetal recipe.
+
+The Sikarugir Wine source at
+[`36b6a2c`](https://github.com/Sikarugir-App/wine/blob/36b6a2cf679fb395f668a917b76537190e212d9c/dlls/msctf/threadmgr.c)
+contains provider and reconversion implementations. This source observation
+does not prove which source revision produced the archive.
+
+Consequently, the next runtime experiment needs either a verified
+D3DMetal-compatible engine containing these interfaces or an isolated backport
+to the existing Wine 10 recipe. Replacing the accepted engine with the downloaded
+Wine 11 archive would combine text-input and graphics changes and would not be
+a controlled fix for this issue.
