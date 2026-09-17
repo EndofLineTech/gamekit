@@ -28,8 +28,16 @@ public struct RuntimeLayout: Sendable {
     public let dataRoot: URL
     public let profile: RuntimeProfile
     fileprivate let selectedBundle: URL?
-    public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir, bundle: URL? = nil) {
+    public let identityHelper: URL?
+    public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir, bundle: URL? = nil,
+                identityHelper: URL? = nil) {
         self.dataRoot = dataRoot; self.profile = profile; selectedBundle = bundle
+        self.identityHelper = identityHelper ?? (Bundle.main.bundleIdentifier == "tech.endofline.gamekit"
+            ? Bundle.main.privateFrameworksURL?.appendingPathComponent("WineGameIdentity.dylib") : nil)
+    }
+    public var hasGameIdentityHelper: Bool {
+        guard let identityHelper else { return false }
+        return RuntimeDetector.containedRegularFile(identityHelper, root: identityHelper.deletingLastPathComponent())
     }
     public var bundle: URL { selectedBundle ?? dataRoot.appendingPathComponent(profile.bundlePath) }
     public var engine: URL { bundle.appendingPathComponent("Contents/SharedSupport/wine") }
@@ -54,6 +62,10 @@ public struct RuntimeLayout: Sendable {
         result["DYLD_FALLBACK_FRAMEWORK_PATH"] = "\(engine.path)/lib/external:\(frameworks.path)"
         if let prefix { result["WINEPREFIX"] = prefix.path }
         if let session { result["GAMEKIT_SESSION_ID"] = session }
+        if let prefix, session != nil, hasGameIdentityHelper, let identityHelper {
+            result["DYLD_INSERT_LIBRARIES"] = identityHelper.path
+            result["GAMEKIT_GAME_NAMES_FILE"] = GameDockNames.url(root: dataRoot, prefix: prefix).path
+        }
         return result
     }
 }

@@ -131,6 +131,7 @@ public actor SteamLifecycle {
         try directory.withWriteLock {
             try directory.write(JSONEncoder().encode(receipt), to: filename, createOnly: false, beforeCommit: { try lease.validate() })
         }
+        try publishGameNames(record: record, lease: lease, receipt: receipt)
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
         // Suppress the separate bootstrapper UI, then explicitly open the main
         // web UI. This avoids retaining an empty client-side Dock application.
@@ -194,6 +195,7 @@ public actor SteamLifecycle {
         guard clientReady else { throw SteamLifecycleError.observationUnavailable }
         guard try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable)
             .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        try publishGameNames(record: record, lease: lease, receipt: receipt)
         try lease.validate()
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
         let result = try await driver.execute(.init(executable: layout.wine,
@@ -202,6 +204,28 @@ public actor SteamLifecycle {
             workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
         guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
     }
+    private func publishGameNames(record: EnvironmentRecord, lease: EnvironmentExecutionLease, receipt: SteamLaunchReceipt) throws {
+        guard layout.hasGameIdentityHelper else { return }
+        let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games
+        try GameDockNames.publish(root: store.root, prefix: lease.prefix, session: receipt.token, games: games,
+                                  validate: { try lease.validate() })
+    }
+
+    /// Refresh the map for games installed through Steam while Gamekit is open.
+    public func refreshGameNames() async throws {
+        guard layout.hasGameIdentityHelper else { return }
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: id)
+        defer { withExtendedLifetime(lease) {} }
+        guard let receipt = try receipt() else { return }
+        _ = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+        try publishGameNames(record: record, lease: lease, receipt: receipt)
+    }
+
     public func stop() async throws -> SteamStopResult {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }

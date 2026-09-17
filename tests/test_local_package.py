@@ -11,6 +11,24 @@ SPEC.loader.exec_module(MODULE)
 
 
 class LocalPackageTests(unittest.TestCase):
+    def test_requires_embedded_identity_helper_and_refuses_redirect(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = pathlib.Path(temporary) / "Gamekit.app"
+            (app / "Contents/MacOS").mkdir(parents=True)
+            (app / "Contents/MacOS/Gamekit").write_bytes(b"fixture")
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit", "CFBundleExecutable": "Gamekit"}, handle)
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
+            helper.parent.mkdir()
+            helper.symlink_to(app / "Contents/MacOS/Gamekit")
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            helper.unlink()
+            helper.write_bytes(b"helper fixture")
+            self.assertEqual(MODULE.validate_app(app)["CFBundleExecutable"], "Gamekit")
+
     def test_refuses_existing_destination_and_wrong_app(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)

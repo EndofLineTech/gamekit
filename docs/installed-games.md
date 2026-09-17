@@ -64,6 +64,10 @@ Gamekit does not yet classify game-specific running state or expose per-game Sto
 Normal Quit leaves the session running; **Stop Windows Steam** includes games in
 that managed environment.
 
+[Running-game Dock identity](game-dock-identity.md) uses a session-bound title map
+and an embedded Wine-side helper. It does not change the game's Steam AppID or
+launch route.
+
 ## Verification
 
 Core regressions cover nested/escaped KeyValues, ambiguous/malformed/oversized

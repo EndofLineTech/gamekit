@@ -8,6 +8,7 @@ private final class InstalledGamesModel: ObservableObject {
     @Published private(set) var refreshing = false
     @Published private(set) var warning: String?
     @Published private(set) var message: String?
+    private var namesNeedRefresh = true
 
     func refresh(setup: SetupModel) async {
         guard !refreshing, !setup.isBusy else { return }
@@ -23,9 +24,19 @@ private final class InstalledGamesModel: ObservableObject {
                 try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable)
             }.value
             guard !setup.isBusy, !Task.isCancelled else { return }
-            if games != result.games { games = result.games }
+            if games != result.games { games = result.games; namesNeedRefresh = true }
             warning = result.unreadableManifests == 0 ? nil :
                 "\(result.unreadableManifests) Steam installation records could not be read. Let Steam finish its changes, then refresh."
+            if namesNeedRefresh {
+                do {
+                    try await SteamLifecycle(store: store, layout: setup.layout).refreshGameNames()
+                    namesNeedRefresh = false
+                } catch EnvironmentStoreError.busy {
+                    // A concurrent control operation owns the lease; the next poll retries.
+                } catch {
+                    warning = "Games were detected, but their Dock names could not be refreshed. Refresh after checking the managed Steam session."
+                }
+            }
         } catch {
             games = []
             warning = "The managed game library could not be read. Refresh after checking Steam and the environment."
