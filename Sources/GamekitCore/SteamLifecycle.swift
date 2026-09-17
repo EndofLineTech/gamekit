@@ -173,8 +173,11 @@ public actor SteamLifecycle {
     /// URL handler or a manifest-supplied executable. Success means request sent.
     public func launchGame(appID: UInt32) async throws {
         let initial = try await installed()
-        guard try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
-            .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        guard let game = try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
+            .games.first(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        if layout.hasGameIdentityHelper {
+            _ = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
+        }
         _ = try await launch()
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
@@ -207,8 +210,17 @@ public actor SteamLifecycle {
     private func publishGameNames(record: EnvironmentRecord, lease: EnvironmentExecutionLease, receipt: SteamLaunchReceipt) throws {
         guard layout.hasGameIdentityHelper else { return }
         let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games
+        var loaders: [String: String] = [:]
+        for game in games {
+            let bundle = SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name))
+            if FileManager.default.fileExists(atPath: bundle.bundleURL.path) {
+                try bundle.validate(bundle.bundleURL)
+                loaders[String(game.id)] = bundle.executable.path
+            }
+        }
         try GameDockNames.publish(root: store.root, prefix: lease.prefix, session: receipt.token, games: games,
-                                  steamExecutable: record.steamExecutable,
+                                  steamExecutable: record.steamExecutable, loaders: loaders,
+                                  defaultLoader: SteamApplicationBundle(layout: layout).executable.path,
                                   validate: { try lease.validate() })
     }
 

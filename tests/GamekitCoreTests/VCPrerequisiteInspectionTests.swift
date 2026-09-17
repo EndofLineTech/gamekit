@@ -4,6 +4,35 @@ import Testing
 
 @Suite("Opt-in VC prerequisite inspection")
 struct VCPrerequisiteInspectionTests {
+    @Test("Compare system image addresses across managed loader identities", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_WINE_IMAGE_COMPARISON"] == "1"))
+    func compareImages() async throws {
+        let executable = try #require(ProcessInfo.processInfo.environment["GAMEKIT_VC_PROBE_PATH"])
+        let store = try EnvironmentStore()
+        let layout = try await RuntimeSettingsStore(store: store).layout()
+        let lifecycle = SteamLifecycle(store: store, layout: layout)
+        _ = try await lifecycle.launch()
+        do {
+            struct Receipt: Decodable { let token: UUID }
+            let bytes = try Data(contentsOf: store.root.appendingPathComponent("Metadata/Lifecycle/steam.json"))
+            let receipt = try JSONDecoder().decode(Receipt.self, from: bytes)
+            let lease = try await store.executionLease(for: SteamInstallationRecipe.environmentID)
+            defer { withExtendedLifetime(lease) {} }
+            let game = SteamApplicationBundle(layout: layout, game: .init(appID: 526870, name: "Satisfactory"))
+            _ = try await game.prepare()
+            var images: [String: String] = [:]
+            for (name, loader) in [("source", layout.wine), ("Steam", SteamApplicationBundle(layout: layout).executable), ("game", game.executable)] {
+                let result = try await ProcessExecutor().run(.init(executable: loader, arguments: [executable],
+                    environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
+                    workingDirectory: lease.prefix, timeout: 15, outputLimit: 8192))
+                images[name] = result.stdoutText.components(separatedBy: .newlines).filter { $0.hasPrefix("System image") }.joined()
+                print(name + ": " + (images[name] ?? "missing"))
+                #expect(result.termination == .exited(0))
+            }
+            #expect(images["Steam"]?.isEmpty == false && images["Steam"] == images["game"], "Steam remote-thread entry points must resolve to the same PE image addresses")
+        } catch { _ = try? await lifecycle.stop(); throw error }
+        _ = try await lifecycle.stop()
+    }
+
     @Test("Inspect installed VC libraries in the owned live session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_VC_PROBE"] == "1"))
     func inspect() async throws {
         let executable = try #require(ProcessInfo.processInfo.environment["GAMEKIT_VC_PROBE_PATH"])

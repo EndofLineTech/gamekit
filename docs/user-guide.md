@@ -97,11 +97,12 @@ External Steam libraries and the native macOS library are not scanned in this
 version. See the repository's [library contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/installed-games.md)
 for detection and launch details.
 
-New Steam sessions also load Gamekit's small Intel Wine-side helper so running
-games can use their own titles in the Dock while Steam remains **Windows Steam**.
+New Steam sessions also load Gamekit's small Intel Wine-side helper. The first
+game-tile launch prepares a game-named Wine bundle so the game uses its own Dock
+title while Steam remains **Windows Steam**.
 Restart Steam after updating Gamekit to pick up this helper. Keep the app bundle
 in place while Steam is running; stop Steam before moving/removing it. The helper
-changes only its own process name and retains the game's Windows-provided icon.
+routes the Wine child to that identity and retains the game's Windows-provided icon.
 See the [Dock identity contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/game-dock-identity.md)
 for scope and validation.
 

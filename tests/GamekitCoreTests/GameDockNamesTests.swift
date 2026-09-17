@@ -32,20 +32,68 @@ struct GameDockNamesTests {
         defer { try? FileManager.default.removeItem(at: temporary) }
         let name = "Gamekit Wine Probe " + UUID().uuidString.prefix(8)
         let windowsDirectory = "z:" + executable.deletingLastPathComponent().path.replacingOccurrences(of: "/", with: "\\") + "\\"
-        let mapping = GameDockNames(schemaVersion: 1, prefix: lease.prefix.path, sessionID: receipt.token.uuidString,
+        var mapping = GameDockNames(schemaVersion: 1, prefix: lease.prefix.path, sessionID: receipt.token.uuidString,
             games: ["1": name], directories: ["1": windowsDirectory])
         let mapURL = temporary.appendingPathComponent("names.json")
         try JSONEncoder().encode(mapping).write(to: mapURL)
         var environment = layout.environment(prefix: lease.prefix, session: receipt.token.uuidString)
         environment["GAMEKIT_GAME_NAMES_FILE"] = mapURL.path
-        let request = CommandRequest(executable: layout.wine,
-            arguments: ["Z:" + executable.path.replacingOccurrences(of: "/", with: "\\")],
+        var loader = layout.wine
+        var probeBundle: (ManagedDirectory, String, (device: Int32, inode: UInt64))?
+        defer {
+            if let (parent, name, identity) = probeBundle { try? parent.removeStagingDirectory(name, identity: identity) }
+        }
+        if env["GAMEKIT_DOCK_NAMED_LOADER_PROBE"] == "1" {
+            let probeLayout = RuntimeLayout(dataRoot: temporary, bundle: selected.bundle)
+            let original = try await SteamApplicationBundle(layout: probeLayout).prepare()
+            let bundle = original.deletingLastPathComponent().appendingPathComponent(name + ".app")
+            try FileManager.default.moveItem(at: original, to: bundle)
+            loader = bundle.appendingPathComponent("Contents/MacOS/\(name)")
+            try FileManager.default.moveItem(at: bundle.appendingPathComponent("Contents/MacOS/Windows Steam"), to: loader)
+            let plist: [String: Any] = ["CFBundleIdentifier": "tech.endofline.gamekit.probe", "CFBundleExecutable": name,
+                "CFBundleName": name, "CFBundleDisplayName": name, "CFBundlePackageType": "APPL", "LSUIElement": true]
+            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+                .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
+            environment.removeValue(forKey: "DYLD_INSERT_LIBRARIES")
+        } else {
+            let defaultBundle = SteamApplicationBundle(layout: layout)
+            _ = try await defaultBundle.prepare()
+            loader = defaultBundle.executable
+            let builder = SteamApplicationBundle(layout: layout, game: .init(appID: UInt32.random(in: 3_000_000_000...4_000_000_000), name: name))
+            let bundle = try await builder.prepare()
+            let parent = try #require(try ManagedDirectory.openRoot(bundle.deletingLastPathComponent(), create: false))
+            let created = try #require(try parent.directory(bundle.lastPathComponent))
+            probeBundle = (parent, bundle.lastPathComponent, try created.identity())
+            mapping.loaders = ["1": builder.executable.path]
+            mapping.defaultLoader = defaultBundle.executable.path
+            try JSONEncoder().encode(mapping).write(to: mapURL)
+        }
+        let request = CommandRequest(executable: loader,
+            arguments: ["cmd.exe", "/c", "Z:" + executable.path.replacingOccurrences(of: "/", with: "\\")],
             environment: environment, workingDirectory: lease.prefix, timeout: 15, outputLimit: 4096)
         let running = Task { try await ProcessExecutor().run(request) }
         var observed = false
         for _ in 0..<25 {
             if await MainActor.run(body: { NSWorkspace.shared.runningApplications.contains { $0.localizedName == name } }) { observed = true; break }
             try await Task.sleep(for: .milliseconds(250))
+        }
+        if observed && env["GAMEKIT_DOCK_NAMED_LOADER_PROBE"] != "1" {
+            let pid = await MainActor.run { NSWorkspace.shared.runningApplications.first { $0.localizedName == name }?.processIdentifier }
+            let owned = await RuntimeProcessObserver().inspect(record: record, prefix: lease.prefix, layout: layout)
+            #expect(owned.complete && owned.processes.contains { $0.identity.pid == pid && $0.sessionID == receipt.token.uuidString },
+                    "Routing must retain prefix/session ownership so Stop can still find the game")
+        }
+        if env["GAMEKIT_DOCK_AX_TEST"] == "1" {
+            let script = "tell application \"System Events\" to tell process \"Dock\" to return exists (UI element \"\(name)\" of list 1)"
+            var visible = false
+            for _ in 0..<10 {
+                let dock = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+                    arguments: ["-e", script], timeout: 5, outputLimit: 1024))
+                try #require(dock.termination == .exited(0), "Accessibility permission is required for the visible Dock check")
+                if dock.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) == "true" { visible = true; break }
+                try await Task.sleep(for: .milliseconds(200))
+            }
+            #expect(visible, "The visible Dock label must match, not merely the Launch Services registry")
         }
         let result = try await running.value
         #expect(result.termination == .exited(0))

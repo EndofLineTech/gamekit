@@ -6,6 +6,7 @@
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (argc != 2) return 2;
+        if (getenv("GAMEKIT_IDENTITY_ROUTED")) return 3;
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];

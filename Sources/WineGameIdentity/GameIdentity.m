@@ -1,5 +1,6 @@
-#import <AppKit/AppKit.h>
-#include <dlfcn.h>
+#import <Foundation/Foundation.h>
+#include <crt_externs.h>
+#include <mach-o/dyld.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -35,7 +36,7 @@ static NSString *ReadArgument(const unsigned char *bytes, NSUInteger length, NSU
 }
 #endif
 
-/* Wine rewrites argv to the Windows image. Read only this process's first two
+/* Wine rewrites argv to the Windows image. Read only this process's first three
  * arguments, not its environment or another process's private command line. */
 static NSString *WindowsImage(void) {
 #ifdef GAMEKIT_IDENTITY_READER_TEST
@@ -50,14 +51,16 @@ static NSString *WindowsImage(void) {
     int argc = 0; memcpy(&argc, bytes, sizeof(argc));
     if (argc < 1 || argc > 4096) return nil;
     NSUInteger offset = sizeof(argc);
-    if (!ReadArgument(bytes, length, &offset)) return nil; // Unix image path
+    NSString *unixImage = ReadArgument(bytes, length, &offset);
+    if (!unixImage) return nil;
     while (offset < length && bytes[offset] == 0) ++offset;
-    NSString *first = ReadArgument(bytes, length, &offset);
-    NSString *leaf = [[first stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-    if (argc > 1 && [@[@"wine", @"wine64", @"wine-preloader", @"wine64-preloader", @"windows steam"] containsObject:leaf]) {
-        return ReadArgument(bytes, length, &offset);
+    for (int i = 0; i < argc && i < 3; ++i) {
+        NSString *argument = ReadArgument(bytes, length, &offset);
+        if (!argument) return nil;
+        if ([argument isEqual:unixImage]) continue;
+        if ([argument.lowercaseString hasSuffix:@".exe"]) return argument;
     }
-    return first;
+    return nil;
 #endif
 }
 
@@ -98,7 +101,8 @@ static NSData *ReadMapping(NSString *path) {
     return data;
 }
 
-static NSString *ReadGameName(void) {
+static NSString *ReadGameNameWithLoader(NSString **loader) {
+    if (loader) *loader = nil;
     NSString *appID = GameAppID();
     NSString *prefix = EnvironmentString("WINEPREFIX");
     NSString *session = EnvironmentString("GAMEKIT_SESSION_ID");
@@ -112,6 +116,7 @@ static NSString *ReadGameName(void) {
         ![document[@"prefix"] isEqual:prefix] || ![document[@"sessionID"] isEqual:session]) return nil;
     id games = document[@"games"];
     if (![games isKindOfClass:NSDictionary.class] || [games count] > 512) return nil;
+    if (loader && [document[@"defaultLoader"] isKindOfClass:NSString.class]) *loader = document[@"defaultLoader"];
     if (!appID) {
         id directories = document[@"directories"];
         if (![directories isKindOfClass:NSDictionary.class] || [directories count] > 512) return nil;
@@ -136,58 +141,62 @@ static NSString *ReadGameName(void) {
     id name = games[appID];
     if (![name isKindOfClass:NSString.class] || ![name length] || [name length] > 1024 ||
         [name rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
+    id loaders = document[@"loaders"];
+    if (loader && [loaders isKindOfClass:NSDictionary.class] && [loaders count] <= 512 &&
+        [loaders[appID] isKindOfClass:NSString.class]) *loader = loaders[appID];
     return name;
 }
 
 #ifdef GAMEKIT_IDENTITY_READER_TEST
 int main(void) {
     @autoreleasepool {
-        NSString *name = ReadGameName();
+        NSString *name = ReadGameNameWithLoader(NULL);
         if (name) puts(name.UTF8String);
     }
     return 0;
 }
 #else
-/* Launch Services permits the process itself to update its display name. This
- * macOS-specific SPI is optional: an unavailable symbol leaves Wine's name intact.
- * The helper never changes another process, hides windows or modifies game files. */
-static BOOL SetOwnGameName(NSString *name) {
-    static void *library;
-    static CFTypeRef (*currentASN)(void);
-    static OSStatus (*setItem)(int, CFTypeRef, CFStringRef, CFTypeRef, CFDictionaryRef *);
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        library = dlopen("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/LaunchServices", RTLD_LAZY);
-        if (!library) return;
-        currentASN = dlsym(library, "_LSGetCurrentApplicationASN");
-        if (!currentASN) currentASN = dlsym(library, "_LSASNGetCurrentApplicationASN");
-        setItem = dlsym(library, "_LSSetApplicationInformationItem");
-    });
-    if (!currentASN || !setItem) return NO;
-    CFTypeRef asn = currentASN();
-    return asn && setItem(-2, asn, CFSTR("LSDisplayName"), (__bridge CFStringRef)name, NULL) == noErr;
+static NSString *CurrentLoaderPath(void) {
+    char path[PATH_MAX], resolved[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) || !realpath(path, resolved)) return nil;
+    return [NSString stringWithUTF8String:resolved];
 }
 
-static void TryGameIdentity(CFAbsoluteTime deadline) {
-    @autoreleasepool {
-        if (NSApp && NSApp.activationPolicy == NSApplicationActivationPolicyRegular) {
-            NSString *name = ReadGameName();
-            if (name && SetOwnGameName(name)) return;
-        }
-        if (CFAbsoluteTimeGetCurrent() >= deadline) return;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 4), dispatch_get_main_queue(), ^{
-            TryGameIdentity(deadline);
-        });
-    }
-}
-
+/* Dock takes its label from the executable/bundle on disk, not LSDisplayName.
+ * Before Wine starts, re-exec the byte-identical loader in the prepared game
+ * bundle. Preserve Wine's arguments, environment and inherited server socket.
+ * The one-shot marker is removed before Wine creates any Windows children. */
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
-        // SteamAppId can be absent in the native Wine environment; a Windows
-        // image under an installed game directory is the fallback identity.
         if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
-        CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + 120;
-        dispatch_async(dispatch_get_main_queue(), ^{ TryGameIdentity(deadline); });
+        NSString *current = CurrentLoaderPath();
+        NSString *routed = EnvironmentString("GAMEKIT_IDENTITY_ROUTED");
+        if (routed) {
+            unsetenv("GAMEKIT_IDENTITY_ROUTED");
+            if ([routed isEqual:current]) return;
+        }
+        NSString *target = nil;
+        (void)ReadGameNameWithLoader(&target);
+        if (!current || !target.length || [current isEqual:target]) return;
+        NSString *root = [[[[EnvironmentString("WINEPREFIX") stringByDeletingLastPathComponent]
+            stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Launchers"] stringByAppendingString:@"/"];
+        if (![current hasPrefix:root] || ![target hasPrefix:root]) return;
+        NSData *sourceBytes = ReadMapping(current);
+        NSData *targetBytes = ReadMapping(target);
+        if (!sourceBytes.length || ![sourceBytes isEqual:targetBytes]) return;
+        int argc = *_NSGetArgc();
+        if (argc < 1 || argc > 4096) return;
+        char **original = *_NSGetArgv();
+        char **arguments = calloc((size_t)argc + 1, sizeof(char *));
+        if (!arguments) return;
+        arguments[0] = (char *)target.fileSystemRepresentation;
+        for (int i = 1; i < argc; ++i) arguments[i] = original[i];
+        if (setenv("GAMEKIT_IDENTITY_ROUTED", target.fileSystemRepresentation, 1) == 0) {
+            execve(target.fileSystemRepresentation, arguments, *_NSGetEnviron());
+            unsetenv("GAMEKIT_IDENTITY_ROUTED");
+        }
+        free(arguments); // Failed routing leaves the original Wine launch intact.
     }
 }
 #endif

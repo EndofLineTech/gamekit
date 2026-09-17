@@ -16,12 +16,40 @@ private struct ApplicationBundleFixture {
         ]))
         try FileManager.default.createDirectory(at: layout.wine.deletingLastPathComponent(), withIntermediateDirectories: true)
         try wine.write(to: layout.wine); try server.write(to: layout.wineserver)
+        let pe = layout.engine.appendingPathComponent("lib/wine/x86_64-windows")
+        try FileManager.default.createDirectory(at: pe, withIntermediateDirectories: true)
+        try Data("shared PE image".utf8).write(to: pe.appendingPathComponent("ntdll.dll"))
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
 }
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("Games receive distinct filesystem identities without changing Steam or runtime bytes")
+    func gameIdentity() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let steam = try await SteamApplicationBundle(layout: fixture.layout).prepare()
+        let builder = SteamApplicationBundle(layout: fixture.layout, game: .init(appID: 526870, name: "Satisfactory"))
+        let game = try await builder.prepare()
+        #expect(game.lastPathComponent == "Satisfactory.app")
+        #expect(game.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "526870")
+        #expect(game != steam)
+        #expect(try Data(contentsOf: builder.executable) == Data(contentsOf: fixture.layout.wine))
+        #expect(try await builder.prepare() == game)
+        try SteamApplicationBundle(layout: fixture.layout).validate(steam)
+        #expect(try Data(contentsOf: fixture.layout.wine) == Data("wine fixture".utf8))
+        let steamPE = steam.appendingPathComponent("Contents/lib/wine/x86_64-windows/ntdll.dll")
+        let gamePE = game.appendingPathComponent("Contents/lib/wine/x86_64-windows/ntdll.dll")
+        let sourceInfo = try FileManager.default.attributesOfItem(atPath: steamPE.path)
+        let gameInfo = try FileManager.default.attributesOfItem(atPath: gamePE.path)
+        #expect(sourceInfo[.systemFileNumber] as? NSNumber == gameInfo[.systemFileNumber] as? NSNumber)
+        let bytes = try Data(contentsOf: steamPE)
+        try FileManager.default.removeItem(at: gamePE)
+        try bytes.write(to: gamePE)
+        await #expect(throws: EnvironmentStoreError.identityMismatch) { try await builder.prepare() }
+        #expect(try Data(contentsOf: steamPE) == bytes)
+    }
+
     @Test("The derived launcher preserves source bytes and is reused without replacement")
     func immutableSourceAndReuse() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }

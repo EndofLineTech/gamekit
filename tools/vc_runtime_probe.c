@@ -6,6 +6,8 @@
  * Prints only dependency names, numeric versions and Win32 status codes. */
 int main(void) {
     int failed = 0;
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    printf("System image ntdll=%p RtlUserThreadStart=%p\n", (void *)ntdll, (void *)GetProcAddress(ntdll, "RtlUserThreadStart"));
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX | SEM_NOGPFAULTERRORBOX);
     HKEY key;
     LONG status = RegOpenKeyExW(HKEY_LOCAL_MACHINE,

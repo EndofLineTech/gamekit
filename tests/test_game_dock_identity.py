@@ -1,6 +1,8 @@
 """Exercise the native helper's bounded, read-only identity selection."""
 import json
 import os
+import plistlib
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -36,7 +38,7 @@ class GameDockIdentityTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.mapping = self.root / "names.json"
-        self.prefix = str(self.root / "prefix")
+        self.prefix = str(self.root / "Environments/steam")
         self.session = "59435B07-8324-4A5D-AD68-578E7AA813DB"
         self.document = {
             "schemaVersion": 1, "prefix": self.prefix,
@@ -110,37 +112,60 @@ class GameDockIdentityTests(unittest.TestCase):
         self.write()
         self.assertEqual(self.run_reader(), 'A "quoted" game — 森')
 
-    def test_loaded_helper_changes_only_its_own_application_name(self):
-        self.document["games"]["526870"] = "Gamekit Dock Probe"
+    def make_bundle(self, title, executable):
+        bundle = self.root / "Launchers" / (title + ".app")
+        binary = bundle / "Contents/MacOS" / title
+        binary.parent.mkdir(parents=True)
+        shutil.copy2(executable, binary)
+        with (bundle / "Contents/Info.plist").open("wb") as handle:
+            plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit.test." + title.replace(" ", ""),
+                           "CFBundleExecutable": title, "CFBundleName": title,
+                           "CFBundleDisplayName": title, "CFBundlePackageType": "APPL", "LSUIElement": True}, handle)
+        return binary
+
+    def routing_fixture(self, executable, helper):
+        source = self.make_bundle("Windows Steam", executable)
+        target = self.make_bundle("Gamekit Route Probe", executable)
+        self.document["games"]["526870"] = "Gamekit Route Probe"
+        self.document["loaders"] = {"526870": str(target)}
+        self.document["defaultLoader"] = str(source)
         self.write()
-        env = dict(os.environ, WINEPREFIX=self.prefix,
-                   GAMEKIT_SESSION_ID=self.session, SteamAppId="526870",
-                   GAMEKIT_GAME_NAMES_FILE=str(self.mapping), DYLD_INSERT_LIBRARIES=str(self.helper))
-        result = subprocess.run([str(self.probe), "Gamekit Dock Probe"], env=env,
+        env = dict(os.environ, WINEPREFIX=self.prefix, GAMEKIT_SESSION_ID=self.session,
+                   SteamAppId="526870", GAMEKIT_GAME_NAMES_FILE=str(self.mapping),
+                   DYLD_INSERT_LIBRARIES=str(helper))
+        return source, target, env
+
+    def test_routes_to_identical_named_loader_and_refuses_changed_bytes(self):
+        source, target, env = self.routing_fixture(self.probe, self.helper)
+        result = subprocess.run([str(source), "Gamekit Route Probe"], env=env,
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(result.stdout.strip(), "Gamekit Dock Probe")
-        env["SteamAppId"] = "0"
-        unchanged = subprocess.run([str(self.probe), "dock-probe"], env=env,
-                                   capture_output=True, text=True, timeout=15)
-        self.assertEqual(unchanged.returncode, 0, unchanged.stdout + unchanged.stderr)
-        del env["SteamAppId"]
-        image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\Game.exe"
-        fallback = subprocess.run([image, "Gamekit Dock Probe"], executable=str(self.probe), env=env,
-                                  capture_output=True, text=True, timeout=15)
-        self.assertEqual(fallback.returncode, 0, fallback.stdout + fallback.stderr)
+        self.assertEqual(result.stdout.strip(), "Gamekit Route Probe")
+        target.write_bytes(b"not the validated loader")
+        refused = subprocess.run([str(source), "Windows Steam"], env=env,
+                                 capture_output=True, text=True, timeout=15)
+        self.assertEqual(refused.returncode, 0, refused.stdout + refused.stderr)
+
+    def test_refuses_redirected_or_external_loader(self):
+        source, target, env = self.routing_fixture(self.probe, self.helper)
+        target.unlink()
+        target.symlink_to(source)
+        refused = subprocess.run([str(source), "Windows Steam"], env=env,
+                                 capture_output=True, text=True, timeout=15)
+        self.assertEqual(refused.returncode, 0, refused.stdout + refused.stderr)
+        self.document["loaders"]["526870"] = str(self.probe)
+        self.write()
+        refused = subprocess.run([str(source), "Windows Steam"], env=env,
+                                 capture_output=True, text=True, timeout=15)
+        self.assertEqual(refused.returncode, 0, refused.stdout + refused.stderr)
 
     @unittest.skipUnless(os.environ.get("GAMEKIT_IDENTITY_X86_HELPER"), "Opt-in packaged x86_64 helper")
     def test_packaged_x86_helper_under_rosetta(self):
-        self.document["games"]["526870"] = "Gamekit Rosetta Dock Probe"
-        self.write()
         probe = self.root / "rosetta-dock-probe"
         source = Path(__file__).resolve().parents[1] / "tools/dock_identity_probe.m"
         subprocess.run(["xcrun", "clang", "-arch", "x86_64", "-fobjc-arc", "-framework", "AppKit",
                         str(source), "-o", str(probe)], check=True, capture_output=True)
-        env = dict(os.environ, WINEPREFIX=self.prefix, GAMEKIT_SESSION_ID=self.session,
-                   SteamAppId="526870", GAMEKIT_GAME_NAMES_FILE=str(self.mapping),
-                   DYLD_INSERT_LIBRARIES=os.environ["GAMEKIT_IDENTITY_X86_HELPER"])
-        result = subprocess.run([str(probe), "Gamekit Rosetta Dock Probe"], env=env,
+        source, _, env = self.routing_fixture(probe, os.environ["GAMEKIT_IDENTITY_X86_HELPER"])
+        result = subprocess.run([str(source), "Gamekit Route Probe"], env=env,
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
