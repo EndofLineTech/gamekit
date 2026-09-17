@@ -6,6 +6,8 @@
   "wine": "10.0 (Sikarugir)",
   "graphics": "Apple D3DMetal 4.0b2, unchanged payload",
   "gstreamer": "1.28.1",
+  "visualCppDLLPreference": "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b",
+  "observedVisualCppRedistributable": "14.51.36247 x64 installed by Steam; native DLL version/load probe passed; game acceptance recorded separately",
   "installerSource": "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe",
   "observedInstallerSHA256": "7d3654531c32d941b8cae81c4137fc542172bfa9635f169cb392f245a0a12bcb",
   "observedSteamWin64Manifest": "1788652215",

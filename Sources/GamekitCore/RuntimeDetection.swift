@@ -46,6 +46,10 @@ public struct RuntimeLayout: Sendable {
         result["PATH"] = result["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         result["WINEDEBUG"] = "-all"
         result["WINEARCH"] = "win64"
+        // Steam installs the genuine VC++ redistributables. Prefer that coherent
+        // DLL family when present: builtin version resources can make Unreal's
+        // bootstrapper repeatedly request an already-installed runtime.
+        result["WINEDLLOVERRIDES"] = "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b"
         result["DYLD_FALLBACK_LIBRARY_PATH"] = "\(engine.path)/lib:\(frameworks.path):\(frameworks.path)/GStreamer.framework/Libraries"
         result["DYLD_FALLBACK_FRAMEWORK_PATH"] = "\(engine.path)/lib/external:\(frameworks.path)"
         if let prefix { result["WINEPREFIX"] = prefix.path }

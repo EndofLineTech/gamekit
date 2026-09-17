@@ -70,6 +70,11 @@ macOS/runtime combination and must be rechecked after upgrades.
 
 ## Installed games
 
+After upgrading to the VC++ prerequisite fix, save and exit games, **Stop Windows
+Steam**, then launch again. The new DLL preference takes effect in a fresh Steam
+session. See the repository's
+[VC++ prerequisite investigation](https://github.com/EndofLineTech/gamekit/blob/dev/docs/visual-cpp-prerequisites.md).
+
 Install games using **Windows Steam**, in its default managed library. Gamekit's
 **Installed games** section detects their Steam installation records and shows
 each title with artwork and a play button. The list refreshes every three seconds,
