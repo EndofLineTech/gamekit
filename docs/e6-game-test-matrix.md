@@ -14,8 +14,9 @@ The user approved a hands-on budget of **90 minutes total**, approximately
 a documentation PR into `dev` on 2026-09-16.
 
 E6.2 performs the tests using Windows Steam through the accepted Gamekit
-package. All execution results are currently **not tested**. This is a baseline
-evaluation; game-specific fixes, renderer replacements and compatibility
+package. [Evaluation evidence](e6-game-results.md) records the actual tested
+package, observed results and deviations from this planning snapshot. This is a
+baseline evaluation; game-specific fixes, renderer replacements and compatibility
 workarounds are outside its scope.
 
 ## Selected builds and size estimates

@@ -63,8 +63,8 @@ subsequent acceptance evidence; it does not change the tested binaries.
 | Desktop | macOS logical 1800×1169 at 2× backing scale |
 | Install | Passed |
 | Launch / game identity | Passed with the accepted package above |
-| Gameplay | User entered gameplay; complete 15-minute assessment pending |
-| Audio/input/save reload | Full matrix confirmation pending |
+| Gameplay | User confirmed the full 15-minute checklist was completed successfully |
+| Audio/input/save reload | User confirmed rendering, audio, keyboard/mouse and save/reload all worked; no issues reported |
 | Performance | Unmeasured; no FPS pass claimed |
 
 This is **not a 1920×1080 result**. The available-resolution deviation is recorded
@@ -89,9 +89,118 @@ These were explicitly user-requested launcher/runtime integration changes during
 E6.2. No game binary was patched. Obsolete generated-cache inspection/cleanup is
 tracked separately as `gamekit-m3k`.
 
-## Other selected titles
+## Helldivers 2 — reproducible launch failure
 
-Helldivers 2 and Stardew Valley have not yet completed E6.2 installation/gameplay
-evaluation. Their planning estimates and dependency risks remain in the approved
-matrix. Launcher acceptance for Satisfactory establishes neither their
-compatibility nor a full Satisfactory gameplay/performance pass.
+The user authorized accepting the displayed PlayStation software EULA. Windows
+Steam's install dialog showed 22.25 GB. Installation completed with StateFlags=4:
+
+| Measurement | Result |
+| --- | --- |
+| AppID / installed BuildID | 553850 / 24826606 |
+| Download bytes | 22,685,221,824 (21.127 GiB) |
+| Staged bytes | 24,046,538,179 (22.395 GiB) |
+| Installed bytes | 23,886,952,713 (22.246 GiB) |
+| Install | Passed |
+| Launch | Failed twice under the same recorded runtime configuration |
+| Gameplay / graphics / audio / input / saves / FPS | Not tested: interactive game menu was not reached |
+
+Both bounded 60-second observations produced the same **Fatal Error!** dialog:
+
+> Incompatible CPU detected! Your CPU must support AVX instructions to run this game.
+
+Private captures are retained locally in `.build/e6-helldivers-launch-1/` and
+`.build/e6-helldivers-launch-2/`. Each observation ended with graceful managed-session
+cleanup. The successful operator-test result means the observation/cleanup ran;
+it does **not** mean the game passed.
+
+This is a CPU-capability startup gate on the current recipe, not proof that Apple
+silicon has no possible translation path. `gamekit-5ta` tracks investigation of
+guest CPU feature exposure and documented runtime/Rosetta capabilities. The
+previously documented anti-cheat risk has not been established as the cause of
+this result. No CPU flags or game-specific workarounds were applied.
+
+## Stardew Valley — installed and menu reached; gameplay deferred
+
+The user confirmed it was available for evaluation here. Windows Steam's install
+dialog showed 659.8 MB. The Windows build installed successfully:
+
+| Measurement | Result |
+| --- | --- |
+| AppID / installed BuildID | 413150 / 16826371 |
+| Package version | 1.6.15.24356, from installed dependency metadata |
+| Frameworks | .NET 6.0.32 win-x64; MonoGame.Framework.DesktopGL 3.8.0.1641 |
+| Download bytes | 510,452,384 (0.475 GiB) |
+| Staged bytes | 749,358,116 |
+| Installed bytes | 691,846,347 (0.644 GiB) |
+| Install | Passed |
+| First launch observation | Blocked by Steam concurrent-account-use dialog |
+| Launch/rendering after that gate cleared | New / Load / Co-op / Exit menu captured |
+| Gameplay, audio/input, save/reload, measured FPS | Deferred by user; not passed by inference from the menu |
+
+The first observation showed that another computer was playing a game and that
+continuing would disconnect it. The assistant did not continue through that gate;
+the local session was closed gracefully. The user chose to close the other game
+first. This is not a Stardew compatibility failure.
+
+After the account gate cleared, the Windows game rendered its startup scene and,
+when foregrounded, the New / Load / Co-op / Exit menu. The installed metadata
+identifies the DesktopGL framework; no live OpenGL driver-version measurement is
+claimed. The initial capture filters and foreground handling missed the game
+window, and an intermediate attempt to capture hidden windows produced
+capture errors. These were observation-harness gaps, not game failures. The
+operator now foregrounds the selected owned game and captures visible owned
+windows without restricting them to layer zero.
+
+Private captures are under `.build/e6-stardew-launch-1/` through
+`.build/e6-stardew-launch-4/`. The last captured menu is `sample-5-0.png` in run 4.
+Some earlier bounded observations required the scoped forced-stop fallback; the
+final foreground observation ended with graceful cleanup. No existing save was
+opened or overwritten. The user chose to perform the 15-minute gameplay and
+save/reload check later, so Stardew remains installed and closed.
+
+## Budget accounting
+
+The three game manifests record approximately **33.751 GiB downloaded** and
+**51.015 GiB installed**, within the separate 75 GiB caps. These totals do not
+claim complete accounting of separately delivered shared prerequisites, external
+updaters or all network retries. The host still reported about **63 GiB available**
+after installation, above the 15 GiB reserve.
+
+### Continuation checkpoint
+
+PRs #17–#20 were merged into `dev` on 2026-09-17, ending at
+`c4905fdd438abe7dd779c6e666062f60c51bd1fd`. The accepted package's application,
+core, tooling and build sources match the merged branch.
+
+Before the permission restart, a scoped operator test sent
+`steam://install/553850` to the owned Windows Steam client. Command delivery passed;
+the dialog contents and sizes had not yet been visually verified, and its download
+had not been confirmed at that point. Available disk space was still
+about 87 GiB.
+
+Steam's Windows window exposes no usable child controls through macOS Accessibility.
+Window capture was denied. The user granted capture permission and requested a pause
+to restart iTerm. After resume, Steam-window capture and measured pointer events
+worked; installation and observation results above supersede that pause. Captures
+remain local. The user subsequently authorized Stardew testing here.
+
+### Reproducing a bounded launch observation
+
+With the approved Windows game installed, window-capture/Accessibility permissions
+enabled, and other managed games closed, use a fresh private evidence directory:
+
+```bash
+GAMEKIT_E6_OBSERVE_LAUNCH=1 GAMEKIT_E6_APPID=553850 \
+GAMEKIT_E6_OBSERVE_SECONDS=60 \
+GAMEKIT_E6_PACKAGE="$PWD/.build/packages/Gamekit-20260917T043130Z/Gamekit.app" \
+GAMEKIT_E6_EVIDENCE="$PWD/.build/e6-observation-new" \
+  swift test --filter GameEvaluationLaunchTests
+```
+
+The operator allows only the approved Helldivers/Stardew AppIDs and a 15–90 second
+observation. It foregrounds the owned game, captures bounded samples of visible
+owned windows, and closes the managed session afterward. Inspect the captures to
+classify launch outcomes; the operator's pass/fail concerns its execution and
+cleanup, not game compatibility. Transient window disappearance is recorded as a
+capture gap. Authentication, cloud conflicts and license decisions remain explicit
+user interactions. This does not replace the human gameplay/audio/save assessment.
