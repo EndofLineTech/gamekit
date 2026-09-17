@@ -106,3 +106,7 @@ Dock-identity and shutdown regression also passed with AVX advertisement enabled
 **Conclusion:** AVX availability is now correctly advertised and the Helldivers
 CPU gate is resolved. Helldivers 2 is still not verified playable because startup
 fails after the subsequent warning.
+
+Follow-up: the [text-input investigation](helldivers-text-input.md) reproduces
+an unimplemented system function-provider interface and identifies related
+upstream Wine fixes. A controlled runtime comparison is still required.
