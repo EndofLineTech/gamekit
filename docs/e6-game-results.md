@@ -95,3 +95,21 @@ Helldivers 2 and Stardew Valley have not yet completed E6.2 installation/gamepla
 evaluation. Their planning estimates and dependency risks remain in the approved
 matrix. Launcher acceptance for Satisfactory establishes neither their
 compatibility nor a full Satisfactory gameplay/performance pass.
+
+### Continuation checkpoint
+
+PRs #17–#20 were merged into `dev` on 2026-09-17, ending at
+`c4905fdd438abe7dd779c6e666062f60c51bd1fd`. The accepted package's application,
+core, tooling and build sources match the merged branch.
+
+The next evaluation is Helldivers 2. A scoped operator test sent
+`steam://install/553850` to the owned Windows Steam client. Command delivery passed;
+the dialog contents and download/disk sizes have **not yet been visually verified**,
+and the assistant has not confirmed the download. Available disk space was still
+about 87 GiB.
+
+Steam's Windows window exposes no usable child controls through macOS Accessibility.
+Window capture was denied. The user granted capture permission and requested a pause
+to restart iTerm; resume by checking capture access and the pending Steam dialog.
+Keep captures local and recheck the current install size/budget before confirming.
+Stardew's earlier in-use-on-another-computer constraint remains recorded.
