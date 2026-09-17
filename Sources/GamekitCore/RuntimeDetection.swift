@@ -57,14 +57,20 @@ public struct RuntimeProfile: Sendable {
     )
 }
 
+public enum D3DMetalBackend: Sendable {
+    case automatic, metal3
+}
+
 public struct RuntimeLayout: Sendable {
     public let dataRoot: URL
     public let profile: RuntimeProfile
     fileprivate let selectedBundle: URL?
     public let identityHelper: URL?
+    public let graphicsBackend: D3DMetalBackend
     public init(dataRoot: URL = EnvironmentStore.applicationSupportRoot, profile: RuntimeProfile = .sikarugir, bundle: URL? = nil,
-                identityHelper: URL? = nil) {
+                identityHelper: URL? = nil, graphicsBackend: D3DMetalBackend = .automatic) {
         self.dataRoot = dataRoot; self.profile = profile; selectedBundle = bundle
+        self.graphicsBackend = graphicsBackend
         self.identityHelper = identityHelper ?? (Bundle.main.bundleIdentifier == "tech.endofline.gamekit"
             ? Bundle.main.privateFrameworksURL?.appendingPathComponent("WineGameIdentity.dylib") : nil)
     }
@@ -95,6 +101,9 @@ public struct RuntimeLayout: Sendable {
         // GPTK documents this opt-in on macOS 15+. The validated macOS 27
         // translator executes AVX/AVX2; publish those capabilities to games.
         result["ROSETTA_ADVERTISE_AVX"] = "1"
+        // Apple documents this per-process fallback inside the same D3DMetal
+        // payload. Normal launches keep Apple's default; diagnostics opt in.
+        if graphicsBackend == .metal3 { result["D3DM_MTL4"] = "0" }
         // Steam installs the genuine VC++ redistributables. Prefer that coherent
         // DLL family when present: builtin version resources can make Unreal's
         // bootstrapper repeatedly request an already-installed runtime.
