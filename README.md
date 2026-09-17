@@ -42,8 +42,10 @@ Game evaluation follows the Steam milestone; game-specific fixes are future work
 
 The E5 personal prototype is accepted on the recorded Mac/runtime combination,
 including the post-reboot checks. It provides validated setup, silent installation,
-automatic Steam UI readiness, lifecycle and recovery controls. Game evaluation is
-next. Work is tracked with Beads (`bd`).
+automatic Steam UI readiness, lifecycle and recovery controls. The
+[E6 game test matrix](docs/e6-game-test-matrix.md) defines the selected games,
+budgets and baseline criteria for the upcoming evaluation. Work is tracked with
+Beads (`bd`).
 
 ## Development workflow
 
