@@ -66,8 +66,10 @@ no reset. A record explicitly prepared as `notStarted` with no prefix can use
 `install` again; pending reset journals must first be completed through recovery.
 
 Recipe 1 uses the runtime layout's explicit `WINEPREFIX`, `WINEARCH=win64`,
-`WINEDEBUG=-all`, and validated packaged library/framework paths. It adds no DLL,
-registry, MetalFX, MSync/ESync or AVX overrides. Wine is invoked with literal argv.
+`WINEDEBUG=-all`, and validated packaged library/framework paths. Current launches
+also use the verified [VC++ DLL preference](visual-cpp-prerequisites.md) and
+[AVX advertisement](avx-capability.md). Registry, MetalFX and MSync/ESync overrides
+are not added. Wine is invoked with literal argv.
 The `/S` invocation and automatic readiness were verified in a fresh E5 acceptance
 root; the original E4 evidence below used the earlier interactive workflow.
 

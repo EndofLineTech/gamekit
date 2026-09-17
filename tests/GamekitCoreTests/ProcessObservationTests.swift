@@ -22,11 +22,12 @@ struct ProcessObservationTests {
         let env = layout.environment(prefix: URL(fileURLWithPath: "/owned prefix"), session: "ours",
                                      inheriting: ["HOME": "/home", "API_KEY": "secret", "WINEPREFIX": "/other",
                                                   "DYLD_INSERT_LIBRARIES": "bad", "GAMEKIT_SESSION_ID": "foreign",
-                                                  "WINEDLLOVERRIDES": "kernel32=n"])
+                                                  "WINEDLLOVERRIDES": "kernel32=n", "ROSETTA_ADVERTISE_AVX": "0"])
         #expect(env["HOME"] == "/home")
         #expect(env["API_KEY"] == nil && env["DYLD_INSERT_LIBRARIES"] == nil)
         #expect(env["WINEPREFIX"] == "/owned prefix" && env["GAMEKIT_SESSION_ID"] == "ours")
         #expect(env["WINEARCH"] == "win64")
+        #expect(env["ROSETTA_ADVERTISE_AVX"] == "1", "Managed launches advertise the instruction extensions supported by the validated translator")
         #expect(env["WINEDLLOVERRIDES"] == "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b")
     }
     @Test("Kernel argument parsing retains only the prefix and session environment keys")

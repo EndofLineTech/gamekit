@@ -70,6 +70,12 @@ macOS/runtime combination and must be rechecked after upgrades.
 
 ## Installed games
 
+Current builds explicitly advertise Rosetta's supported AVX/AVX2 capabilities.
+After this update, **Stop Windows Steam** and launch a fresh session so games
+inherit the setting. This resolves Helldivers 2's AVX startup message; its later
+driver warning/startup crash remains under investigation. See the
+[AVX investigation](https://github.com/EndofLineTech/gamekit/blob/dev/docs/avx-capability.md).
+
 After upgrading to the VC++ prerequisite fix, save and exit games, **Stop Windows
 Steam**, then launch again. The new DLL preference takes effect in a fresh Steam
 session. See the repository's

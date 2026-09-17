@@ -105,6 +105,9 @@ The supplied README documents:
 | `D3DM_ENABLE_METALFX` | Experimental DLSS-to-MetalFX path, defaults off | Leave unset; omit optional DLL renaming/copy steps |
 | `D3DM_MAX_FPS` | Optional frame-rate cap | Leave unset |
 
+These are the original E1 first-test choices. The later reproducible Helldivers
+CPU gate led to [AVX capability verification and explicit advertisement](avx-capability.md).
+
 Graphics messages are prefixed `D3DM` and use the `D3DMetal` system-log category.
 The debugging section discusses SIP changes for debugging CrossOver processes;
 that is **not** a prerequisite for basic launch or this feasibility test. Keep
