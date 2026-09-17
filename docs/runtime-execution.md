@@ -89,7 +89,9 @@ The Wine environment carries only an allowlist of ordinary host values, plus
 explicit `WINEPREFIX`, `WINEARCH=win64`, `WINEDEBUG=-all`, the validated library /
 framework fallback paths, and a fresh `GAMEKIT_SESSION_ID` for managed operations.
 Inherited API credentials and conflicting Wine/DYLD/renderer controls are not
-forwarded. Optional MetalFX, MSync/ESync and AVX controls remain unset.
+forwarded. `ROSETTA_ADVERTISE_AVX=1` explicitly advertises the validated translator's
+AVX/AVX2 support; see [capability evidence](avx-capability.md). Optional MetalFX and
+MSync/ESync controls remain unset.
 
 `RuntimeProcessObserver` enumerates the current user's processes, filters by the
 selected runtime/prefix executable paths, and reads kernel arguments only for

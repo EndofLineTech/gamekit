@@ -55,6 +55,9 @@ public struct RuntimeLayout: Sendable {
         result["PATH"] = result["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         result["WINEDEBUG"] = "-all"
         result["WINEARCH"] = "win64"
+        // GPTK documents this opt-in on macOS 15+. The validated macOS 27
+        // translator executes AVX/AVX2; publish those capabilities to games.
+        result["ROSETTA_ADVERTISE_AVX"] = "1"
         // Steam installs the genuine VC++ redistributables. Prefer that coherent
         // DLL family when present: builtin version resources can make Unreal's
         // bootstrapper repeatedly request an already-installed runtime.

@@ -91,6 +91,11 @@ tracked separately as `gamekit-m3k`.
 
 ## Helldivers 2 — reproducible launch failure
 
+The following is the original baseline with AVX advertisement unset. A subsequent
+user-requested [AVX experiment](avx-capability.md) clears that CPU gate with
+`ROSETTA_ADVERTISE_AVX=1`, but exposes a driver-version warning and a crash after
+Continue. It does not turn this baseline into a gameplay pass.
+
 The user authorized accepting the displayed PlayStation software EULA. Windows
 Steam's install dialog showed 22.25 GB. Installation completed with StateFlags=4:
 

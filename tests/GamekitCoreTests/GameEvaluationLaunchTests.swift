@@ -18,6 +18,8 @@ struct GameEvaluationLaunchTests {
         let seconds = Double(env["GAMEKIT_E6_OBSERVE_SECONDS"] ?? "45") ?? 45
         try #require((15...90).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
+        let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1"
+        try #require(!continueDriverWarning || (appID == 553850 && CGPreflightPostEventAccess()))
         let package = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_PACKAGE"]))
         let destination = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_EVIDENCE"]))
         try #require(!FileManager.default.fileExists(atPath: destination.path))
@@ -62,6 +64,7 @@ struct GameEvaluationLaunchTests {
             activeSession = token
             let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
             var sample = 0
+            var continuedDriverWarning = false
             repeat {
                 try await Task.sleep(for: .seconds(10))
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
@@ -78,6 +81,36 @@ struct GameEvaluationLaunchTests {
                         timeout: 5, outputLimit: 1024))
                 }
                 try await Task.sleep(for: .milliseconds(500))
+                if continueDriverWarning && !continuedDriverWarning {
+                    let warning = await MainActor.run { () -> (Int32, CGRect)? in
+                        for window in CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [] {
+                            guard let pid = window[kCGWindowOwnerPID as String] as? Int32, gamePIDs.contains(pid),
+                                  window[kCGWindowName as String] as? String == "GPU drivers are out of date",
+                                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                                  let rectangle = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+                                  rectangle.width >= 300, rectangle.width <= 1200,
+                                  rectangle.height >= 120, rectangle.height <= 600 else { continue }
+                            return (pid, rectangle)
+                        }
+                        return nil
+                    }
+                    if let (pid, bounds) = warning {
+                        _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+                            arguments: ["-e", "tell application \"System Events\" to set frontmost of (first application process whose unix id is \(pid)) to true"],
+                            timeout: 5, outputLimit: 1024))
+                        // Coordinates are relative to the exact observed Windows
+                        // warning, excluding the screenshot's shadow padding.
+                        let point = CGPoint(x: bounds.minX + bounds.width * 0.806, y: bounds.minY + bounds.height * 0.866)
+                        CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                        try await Task.sleep(for: .milliseconds(300))
+                        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                        try await Task.sleep(for: .milliseconds(150))
+                        CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                        continuedDriverWarning = true
+                        print("E6 selected Continue on the exact Helldivers GPU-driver warning")
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                }
                 let pids = Set(snapshot.processes.filter { $0.role == .other || $0.role == .steamUI }.map(\.identity.pid))
                 let windows = await MainActor.run {
                     (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []).compactMap { window -> UInt32? in
@@ -91,7 +124,7 @@ struct GameEvaluationLaunchTests {
                 var captured = 0
                 for (index, window) in windows.prefix(6).enumerated() {
                     let capture = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/sbin/screencapture"),
-                        arguments: ["-x", "-l", String(window), destination.appendingPathComponent("sample-\(sample)-\(index).png").path],
+                        arguments: ["-x", "-o", "-l", String(window), destination.appendingPathComponent("sample-\(sample)-\(index).png").path],
                         timeout: 5, outputLimit: 1024))
                     // A window can close between enumeration and capture. That
                     // is an observation gap, not a game-compatibility assertion.

@@ -162,6 +162,11 @@ Clear inherited Wine/DYLD/renderer overrides before setting these values. Use
 validated baseline. No DLL override or `WINEDLLPATH_PREPEND` was needed: the
 exact Apple DLLs occupy the selected engine's builtin paths.
 
+That paragraph records the original E2 baseline. Subsequent managed-launch updates
+add the verified [VC++ DLL preference](visual-cpp-prerequisites.md) and
+[`ROSETTA_ADVERTISE_AVX=1`](avx-capability.md); the source runtime/graphics payload
+is unchanged, and the earlier baseline evidence is retained.
+
 `cmd /c ver` reports **Microsoft Windows 10.0.19043**. `bin/wine`, not `wine64`,
 is the executable for this engine. This revises the E1 launch recipe. Do not run
 the template's generic launch target or its internal `Contents/drive_c` shortcut;

@@ -20,6 +20,13 @@ int main()
         if (FAILED(hr)) break;
         DXGI_ADAPTER_DESC1 desc = {};
         if (SUCCEEDED(adapter->GetDesc1(&desc)) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            LARGE_INTEGER driver = {};
+            HRESULT versionResult = adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &driver);
+            unsigned long long version = static_cast<unsigned long long>(driver.QuadPart);
+            std::printf("DXGI driver query: hr=0x%08lx raw=0x%016llx version=%u.%u.%u.%u\n",
+                static_cast<unsigned long>(versionResult), version,
+                static_cast<unsigned>((version >> 48) & 0xffff), static_cast<unsigned>((version >> 32) & 0xffff),
+                static_cast<unsigned>((version >> 16) & 0xffff), static_cast<unsigned>(version & 0xffff));
             hr = D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
                                   reinterpret_cast<void **>(&device));
             if (SUCCEEDED(hr)) {
