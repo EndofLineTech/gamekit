@@ -106,6 +106,43 @@ contents and intra-revision PE sharing. Runtime preparation tests cover source
 preservation, mismatched DLL rejection, no-overwrite publication and redirected
 provenance paths.
 
-Packaged-app game/lifecycle acceptance and the selected default are recorded
-after the local candidate checks. Mission stability, audio and measured FPS are
-separate from runtime delivery and startup acceptance.
+### Packaged-app acceptance, September 17, 2026
+
+Candidate `.build/packages/Gamekit-20260917T191349Z/Gamekit.app` was built from
+clean source commit `f41fa7e6d5f2263736adb61960c2bac674a42dca`.
+Executable SHA-256:
+`0c0a418035c10e294d30338b33b2af228b2b243e879c1fb020b0007643cdad83`.
+Source-tree fingerprint:
+`290918a741e2329917e48ddfac7a57679ff94db4cf82a5347b1f380d29a38fc8`.
+The embedded Intel helper remains
+`5a4c55c7151bd97345289d0388b998286c182d072a9b9407a9d627bea082a797`.
+
+Actual app accessibility controls, rather than a test-only game launch, selected
+the updated revision and launched Helldivers and Stardew from their game tiles.
+The existing-session observer then verified ownership, captured the windows and
+closed the sessions. The primary managed Steam prefix was used throughout.
+
+| Check | Observed result |
+| --- | --- |
+| Use updated runtime | Schema-2 selection persisted as `text-input-1`; prerequisites passed |
+| Helldivers tile | Cleared CPU/post-warning crash gates and rendered onboarding; graceful shutdown |
+| Satisfactory tile | Named game Dock entry; normal Gamekit Quit preserved game; ordinary reopen, Show Steam and Stop passed |
+| Satisfactory process regression | Actual shipping process observed; one game/one Steam Dock entry; graceful shutdown |
+| Stardew tile | Rendered New/Load/Co-op/Exit menu; graceful shutdown |
+| UI rollback and reselect | Original button restored capability result 0; updated button restored result 1; both scoped probe sessions stopped |
+
+The normal-prefix Helldivers observation stopped at audio setup. Its first-run
+default was Open Microphone, so the operator's Disabled-voice-chat condition
+prevented advancing it. This is a remaining user setup choice, not the previous
+startup crash. The earlier isolated run's ship/input result remains recorded
+separately; no primary-prefix mission or FPS pass is inferred.
+
+Private captures are in `.build/runtime-delivery-helldivers-ui-1/` and
+`.build/runtime-delivery-stardew-ui-1/`. Final selection is the updated revision
+and all observed game/probe sessions are stopped. The original runtime and
+launcher caches remain available through **Use original runtime**.
+
+Local `make check` passed (183 reported Swift tests, 23 Python tests with one
+opt-in skip, native build). The final full Swift run, including the additional
+component-corruption regression, passed 184 tests in 30 suites. Mission stability, audio and
+measured FPS remain separate from runtime delivery and startup acceptance.

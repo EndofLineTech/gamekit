@@ -76,8 +76,9 @@ def prepare(source, destination, dll, archive, idl):
             shutil.copyfile(inputs[name], materials / name)
             require_digest(materials / name, ARTIFACT_HASHES[name])
         shutil.copyfile(patch, materials / patch.name)
+        require_digest(materials / patch.name, "e5c0f03beba1093ae01aea456686a397278a6a0b48e93e664077d4f80c23994e")
         shutil.copyfile(guide, materials / "BUILD.md")
-        with tarfile.open(archive, "r:gz") as sources:
+        with tarfile.open(materials / "wine-10.0.tar.gz", "r:gz") as sources:
             license_file = sources.extractfile("wine-wine-10.0/COPYING.LIB")
             if license_file is None:
                 raise ValueError("Wine source license is missing")

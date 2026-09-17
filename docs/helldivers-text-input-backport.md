@@ -1,5 +1,9 @@
 # Helldivers Wine 10 text-input backport experiment
 
+**Delivery update:** [normal Gamekit runtime selection](runtime-text-input-delivery.md)
+now supports this component revision, with packaged-app startup/regression checks
+and a rollback button. The experiments below retain their original scope.
+
 Investigation `gamekit-1ae`, September 17, 2026. This continues the
 [initial text-input diagnosis](helldivers-text-input.md).
 
