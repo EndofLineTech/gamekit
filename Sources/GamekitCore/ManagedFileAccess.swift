@@ -133,7 +133,7 @@ final class ManagedDirectory {
 
     /// Copy a validated runtime tree without resolving source symlinks or following
     /// a replaced destination pathname. APFS clones avoid duplicating binary data.
-    func copyContents(from source: ManagedDirectory) throws {
+    func copyContents(from source: ManagedDirectory, shareRegularFiles: Bool = false) throws {
         for name in try source.names() {
             var info = stat()
             guard fstatat(source.descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect copy source") }
@@ -141,12 +141,19 @@ final class ManagedDirectory {
             case mode_t(S_IFDIR):
                 guard let child = try source.directory(name) else { throw EnvironmentStoreError.notFound }
                 let copy = try createExclusiveDirectory(name)
-                try copy.copyContents(from: child)
+                try copy.copyContents(from: child, shareRegularFiles: shareRegularFiles)
                 guard fchmod(copy.descriptor, info.st_mode & 0o777) == 0 else { throw ioError("copy directory permissions") }
             case mode_t(S_IFREG):
                 guard let input = try source.regularFile(name) else { throw EnvironmentStoreError.notFound }
                 defer { Darwin.close(input) }
-                if fclonefileat(input, descriptor, name, 0) != 0 {
+                if shareRegularFiles {
+                    guard linkat(source.descriptor, name, descriptor, name, 0) == 0 else { throw ioError("share runtime image") }
+                    guard let output = try regularFile(name) else { throw EnvironmentStoreError.notFound }
+                    defer { Darwin.close(output) }
+                    var original = stat(), linked = stat()
+                    guard fstat(input, &original) == 0, fstat(output, &linked) == 0,
+                          original.st_dev == linked.st_dev, original.st_ino == linked.st_ino else { throw EnvironmentStoreError.identityMismatch }
+                } else if fclonefileat(input, descriptor, name, 0) != 0 {
                     guard errno == ENOTSUP || errno == EXDEV else { throw ioError("clone runtime file") }
                     let output = openat(descriptor, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(0o600))
                     guard output >= 0 else { throw ioError("create runtime copy") }
@@ -161,6 +168,33 @@ final class ManagedDirectory {
                 else { throw EnvironmentStoreError.unsafePath }
                 try createSymbolicLink(name, target: link)
             default: throw EnvironmentStoreError.unsafePath
+            }
+        }
+    }
+
+    /// Wine shares PE image mappings by file identity. Game loaders must retain
+    /// the Steam client's PE inodes so remote-thread entry points remain valid.
+    func validateSharedFiles(from source: ManagedDirectory) throws {
+        guard try names() == source.names() else { throw EnvironmentStoreError.identityMismatch }
+        for name in try names() {
+            var original = stat(), linked = stat()
+            guard fstatat(source.descriptor, name, &original, AT_SYMLINK_NOFOLLOW) == 0,
+                  fstatat(descriptor, name, &linked, AT_SYMLINK_NOFOLLOW) == 0,
+                  original.st_mode & mode_t(S_IFMT) == linked.st_mode & mode_t(S_IFMT) else { throw EnvironmentStoreError.identityMismatch }
+            if original.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) {
+                guard let a = try source.directory(name), let b = try directory(name) else { throw EnvironmentStoreError.notFound }
+                try b.validateSharedFiles(from: a)
+            } else if original.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) {
+                guard original.st_dev == linked.st_dev, original.st_ino == linked.st_ino else { throw EnvironmentStoreError.identityMismatch }
+            } else if original.st_mode & mode_t(S_IFMT) == mode_t(S_IFLNK) {
+                var a = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)
+                var b = a
+                let left = readlinkat(source.descriptor, name, &a, a.count - 1)
+                let right = readlinkat(descriptor, name, &b, b.count - 1)
+                guard left >= 0, left < a.count - 1, left == right,
+                      a.prefix(left).elementsEqual(b.prefix(right)) else { throw EnvironmentStoreError.identityMismatch }
+            } else {
+                throw EnvironmentStoreError.unsafePath
             }
         }
     }

@@ -116,7 +116,8 @@ public struct RuntimeProcessObserver: Sendable {
             }
             if first.zombie != 0 || first.uid != getuid() { continue }
             let executable = withUnsafeBytes(of: first.path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
-            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: layout.steamApplicationBundle) || Self.isWithin(executable, root: prefix) else { continue }
+            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: layout.steamApplicationBundle)
+                    || Self.isWithin(executable, root: layout.gameApplicationsRoot) || Self.isWithin(executable, root: prefix) else { continue }
             var buffer: UnsafeMutablePointer<CChar>?, length = 0
             let code = gk_arguments(pid, &buffer, &length)
             guard code == 0, let buffer else {

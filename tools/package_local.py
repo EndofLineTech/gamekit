@@ -47,6 +47,9 @@ def validate_app(app):
     binary = app / "Contents/MacOS/Gamekit"
     if binary.is_symlink() or not binary.is_file():
         raise ValueError("Expected the native Gamekit executable")
+    helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
+    if helper.parent.is_symlink() or helper.is_symlink() or not helper.is_file():
+        raise ValueError("Expected the embedded Wine game identity helper")
     if (app / "Contents/SharedSupport/wine").exists():
         raise ValueError("The local package must not bundle the external Wine runtime")
     return info
@@ -76,6 +79,9 @@ def package(app, destination, root):
     binary = app / "Contents/MacOS/Gamekit"
     if command("/usr/bin/lipo", "-archs", str(binary)) != "arm64":
         raise ValueError("Expected the arm64 prototype build")
+    helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
+    if command("/usr/bin/lipo", "-archs", str(helper)) != "x86_64":
+        raise ValueError("Expected the x86_64 Wine-side identity helper")
     manifest = {
         "schemaVersion": 1,
         "status": "local-candidate; release acceptance recorded separately",
@@ -85,6 +91,8 @@ def package(app, destination, root):
         "minimumOS": info.get("LSMinimumSystemVersion"),
         "architecture": "arm64",
         "executableSHA256": digest(binary),
+        "wineIdentityHelper": {"path": "Contents/Frameworks/WineGameIdentity.dylib",
+                               "architecture": "x86_64", "sha256": digest(helper)},
         "sourceCommit": command("git", "-C", str(root), "rev-parse", "HEAD"),
         "sourceDirty": bool(command("git", "-C", str(root), "status", "--porcelain")),
         "sourceTreeSHA256": source_fingerprint(root),
@@ -106,6 +114,8 @@ def package(app, destination, root):
         command("/usr/bin/codesign", "--verify", "--deep", "--strict", str(copied))
         if digest(copied / "Contents/MacOS/Gamekit") != manifest["executableSHA256"]:
             raise ValueError("Copied application identity changed")
+        if digest(copied / manifest["wineIdentityHelper"]["path"]) != manifest["wineIdentityHelper"]["sha256"]:
+            raise ValueError("Copied Wine identity helper changed")
         (stage / "build-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
         # A no-clobber directory move; existing output is never removed or replaced.
