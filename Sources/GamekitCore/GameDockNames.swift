@@ -7,15 +7,19 @@ struct GameDockNames: Codable {
     let prefix: String
     let sessionID: String
     let games: [String: String]
+    let directories: [String: String]
 
     static func url(root: URL, prefix: URL) -> URL {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
     }
 
-    static func publish(root: URL, prefix: URL, session: UUID, games: [InstalledSteamGame], validate: () throws -> Void) throws {
+    static func publish(root: URL, prefix: URL, session: UUID, games: [InstalledSteamGame],
+                        steamExecutable: RelativePath = .steamDefault, validate: () throws -> Void) throws {
         guard games.count <= 512 else { throw EnvironmentStoreError.documentTooLarge }
+        let common = "c:\\" + steamExecutable.components.dropFirst().dropLast().joined(separator: "\\") + "\\steamapps\\common\\"
         let document = Self(schemaVersion: 1, prefix: prefix.path, sessionID: session.uuidString,
-                            games: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), $0.name) }))
+                            games: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), $0.name) }),
+                            directories: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), common + $0.installDirectory + "\\") }))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(document)
         guard let root = try ManagedDirectory.openRoot(root, create: true),

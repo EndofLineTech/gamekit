@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 
 static NSString *EnvironmentString(const char *key) {
@@ -11,13 +12,53 @@ static NSString *EnvironmentString(const char *key) {
     return value ? [NSString stringWithUTF8String:value] : nil;
 }
 
-static NSString *GameAppID(void) {
-    NSString *value = EnvironmentString("SteamAppId");
+static NSString *CanonicalAppID(NSString *value) {
+    if (![value isKindOfClass:NSString.class]) return nil;
     if (!value.length || value.length > 10 ||
         [value rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet]].location != NSNotFound) return nil;
     unsigned long long number = strtoull(value.UTF8String, NULL, 10);
     if (!number || number > UINT32_MAX) return nil;
     return [NSString stringWithFormat:@"%llu", number];
+}
+
+static NSString *GameAppID(void) { return CanonicalAppID(EnvironmentString("SteamAppId")); }
+
+#ifndef GAMEKIT_IDENTITY_READER_TEST
+static NSString *ReadArgument(const unsigned char *bytes, NSUInteger length, NSUInteger *offset) {
+    if (*offset >= length) return nil;
+    const unsigned char *end = memchr(bytes + *offset, 0, length - *offset);
+    if (!end) return nil;
+    NSUInteger count = (NSUInteger)(end - bytes) - *offset;
+    NSString *value = [[NSString alloc] initWithBytes:bytes + *offset length:count encoding:NSUTF8StringEncoding];
+    *offset += count + 1;
+    return value;
+}
+#endif
+
+/* Wine rewrites argv to the Windows image. Read only this process's first two
+ * arguments, not its environment or another process's private command line. */
+static NSString *WindowsImage(void) {
+#ifdef GAMEKIT_IDENTITY_READER_TEST
+    return EnvironmentString("GAMEKIT_TEST_WINDOWS_IMAGE");
+#else
+    int mib[] = { CTL_KERN, KERN_PROCARGS2, getpid() };
+    size_t length = 0;
+    if (sysctl(mib, 3, NULL, &length, NULL, 0) || length < sizeof(int) || length > 1048576) return nil;
+    NSMutableData *data = [NSMutableData dataWithLength:length];
+    if (sysctl(mib, 3, data.mutableBytes, &length, NULL, 0)) return nil;
+    const unsigned char *bytes = data.bytes;
+    int argc = 0; memcpy(&argc, bytes, sizeof(argc));
+    if (argc < 1 || argc > 4096) return nil;
+    NSUInteger offset = sizeof(argc);
+    if (!ReadArgument(bytes, length, &offset)) return nil; // Unix image path
+    while (offset < length && bytes[offset] == 0) ++offset;
+    NSString *first = ReadArgument(bytes, length, &offset);
+    NSString *leaf = [[first stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
+    if (argc > 1 && [@[@"wine", @"wine64", @"wine-preloader", @"wine64-preloader", @"windows steam"] containsObject:leaf]) {
+        return ReadArgument(bytes, length, &offset);
+    }
+    return first;
+#endif
 }
 
 /* Follow only pinned, non-symlink components and read a bounded regular file.
@@ -61,7 +102,7 @@ static NSString *ReadGameName(void) {
     NSString *appID = GameAppID();
     NSString *prefix = EnvironmentString("WINEPREFIX");
     NSString *session = EnvironmentString("GAMEKIT_SESSION_ID");
-    if (!appID || !prefix.length || !session.length || ![[NSUUID alloc] initWithUUIDString:session]) return nil;
+    if ((!appID && EnvironmentString("SteamAppId").length) || !prefix.length || !session.length || ![[NSUUID alloc] initWithUUIDString:session]) return nil;
     NSData *data = ReadMapping(EnvironmentString("GAMEKIT_GAME_NAMES_FILE"));
     if (!data) return nil;
     id document = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
@@ -71,6 +112,27 @@ static NSString *ReadGameName(void) {
         ![document[@"prefix"] isEqual:prefix] || ![document[@"sessionID"] isEqual:session]) return nil;
     id games = document[@"games"];
     if (![games isKindOfClass:NSDictionary.class] || [games count] > 512) return nil;
+    if (!appID) {
+        id directories = document[@"directories"];
+        if (![directories isKindOfClass:NSDictionary.class] || [directories count] > 512) return nil;
+        NSString *image = [WindowsImage() stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"\""]];
+        NSString *unixBase = [prefix stringByAppendingString:@"/drive_c/"];
+        if ([image hasPrefix:unixBase]) image = [@"c:\\" stringByAppendingString:[image substringFromIndex:unixBase.length]];
+        image = [image stringByReplacingOccurrencesOfString:@"/" withString:@"\\"].lowercaseString;
+        NSArray *parts = [image componentsSeparatedByString:@"\\"];
+        if (![image hasSuffix:@".exe"] || [parts containsObject:@".."] || [parts containsObject:@"."] ||
+            [image rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
+        for (id key in directories) {
+            id directory = directories[key];
+            if (![CanonicalAppID(key) isEqual:key] || ![directory isKindOfClass:NSString.class] ||
+                ![directory hasSuffix:@"\\"] || ![directory length]) continue;
+            if ([image hasPrefix:[directory lowercaseString]]) {
+                if (appID) return nil; // Ambiguous directories cannot name the process.
+                appID = key;
+            }
+        }
+        if (!appID) return nil;
+    }
     id name = games[appID];
     if (![name isKindOfClass:NSString.class] || ![name length] || [name length] > 1024 ||
         [name rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
@@ -108,8 +170,10 @@ static BOOL SetOwnGameName(NSString *name) {
 
 static void TryGameIdentity(CFAbsoluteTime deadline) {
     @autoreleasepool {
-        NSString *name = ReadGameName();
-        if (name && NSApp && NSApp.activationPolicy == NSApplicationActivationPolicyRegular && SetOwnGameName(name)) return;
+        if (NSApp && NSApp.activationPolicy == NSApplicationActivationPolicyRegular) {
+            NSString *name = ReadGameName();
+            if (name && SetOwnGameName(name)) return;
+        }
         if (CFAbsoluteTimeGetCurrent() >= deadline) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 4), dispatch_get_main_queue(), ^{
             TryGameIdentity(deadline);
@@ -119,9 +183,9 @@ static void TryGameIdentity(CFAbsoluteTime deadline) {
 
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
-        // Steam and its general services have no game AppID. Avoid initializing
-        // an application or changing activation policy merely to assign a name.
-        if (!GameAppID() || !getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
+        // SteamAppId can be absent in the native Wine environment; a Windows
+        // image under an installed game directory is the fallback identity.
+        if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
         CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + 120;
         dispatch_async(dispatch_get_main_queue(), ^{ TryGameIdentity(deadline); });
     }

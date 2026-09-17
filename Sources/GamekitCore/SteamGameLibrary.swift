@@ -6,6 +6,7 @@ public enum SteamGameInstallState: String, Sendable { case ready, updating, miss
 public struct InstalledSteamGame: Identifiable, Equatable, Sendable {
     public let id: UInt32
     public let name: String
+    public let installDirectory: String
     public let buildID: String?
     public let state: SteamGameInstallState
     public let artwork: Data?
@@ -53,7 +54,7 @@ public enum SteamGameLibrary {
                 // Prefer Steam's cache; no account files or arbitrary manifest URLs.
                 let artwork = (try? cache?.directory(String(id))?.read("header.jpg", maximumBytes: 262_144))
                     ?? (try? cache?.read("\(id)_header.jpg", maximumBytes: 262_144))
-                games.append(.init(id: id, name: name, buildID: fields["buildid"]?.string, state: state, artwork: artwork))
+                games.append(.init(id: id, name: name, installDirectory: folder, buildID: fields["buildid"]?.string, state: state, artwork: artwork))
             } catch { rejected += 1 }
         }
         return .init(games: games.sorted {

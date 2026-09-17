@@ -15,9 +15,11 @@ neither the external Wine binary nor Apple's graphics payload is modified.
 
 For managed sessions only, Gamekit supplies its own helper path using
 `DYLD_INSERT_LIBRARIES`. Arbitrary inherited loader settings remain excluded.
-Steam assigns `SteamAppId` to game children. A child helper uses that numeric ID
-to find the installed title in Gamekit's private map, waits for its own regular
-GUI application registration, then changes **its own** Launch Services display
+The helper uses a numeric `SteamAppId` when present. Live inspection showed that
+Satisfactory's native Wine environment has no such field, despite carrying the
+helper and session settings. In that case it reads its own Windows executable
+argument and matches it against the installed game's directory. It waits for its
+own regular GUI application registration, then changes **its own** Launch Services display
 name. It does not rename Steam, change another PID, hide applications, patch the
 game executable or alter Steam's launch command. Windows/Wine continues supplying
 the game icon.
@@ -33,15 +35,19 @@ bounded to 120 seconds and does not initialize a GUI merely to name it.
 ## Identity map
 
 `Metadata/GameDock/<environment>.json` stores schema version 1, the exact prefix,
-the current session token and an AppID-to-title map from validated Steam manifests.
+the current session token, an AppID-to-title map and corresponding Windows install
+directories from validated Steam manifests.
 It is private runtime metadata, not an exportable diagnostic or a launch receipt.
 
 The lifecycle writes it atomically under existing installation/execution leases
 before a new Steam session or game launch. The installed-games view updates it
 when its library snapshot changes while Gamekit is open. The reader requires
-matching prefix/session and a positive UInt32 AppID, reads at most 1 MiB without
-following symlinks, and accepts only bounded non-control-character titles from a
-map of at most 512 games. Invalid or unrelated input leaves the process unchanged.
+matching prefix/session, reads at most 1 MiB without following symlinks, and accepts
+only bounded non-control-character titles from a map of at most 512 games. IDs
+must be positive UInt32 values. The path fallback reads only the current process's
+first two arguments using `KERN_PROCARGS2`, accepts executable descendants of one
+mapped directory, and rejects traversal, sibling-prefix collisions and ambiguous
+matches. Invalid or unrelated input leaves the process unchanged.
 
 Games installed through Steam while Gamekit is closed may lack a current name
 entry until the next Gamekit library refresh or launch request. Already-running
@@ -56,9 +62,9 @@ is running: its child processes use the embedded helper. Stop Steam before movin
 or removing the app bundle.
 
 Unit tests exercise session/prefix binding, stale-map replacement, environment
-isolation, invalid IDs/names/JSON, bounds and symlink refusal. A standalone native
+isolation, invalid IDs/names/JSON, bounds, path boundaries and symlink refusal. A standalone native
 probe verifies that a loaded helper changes the matching process name and leaves
-a process without a game AppID unchanged. An opt-in test exercises the actual
+an unrelated process unchanged. An opt-in test exercises the actual
 embedded Intel helper under Rosetta:
 
 ```bash
@@ -71,3 +77,18 @@ records both hashes, and verifies both copies and the app's code signature.
 Live acceptance must confirm **Windows Steam** plus one **Satisfactory** entry,
 correct game artwork, repeated launch/exit, normal Gamekit Quit/reopen and scoped
 Stop. Native probes alone do not establish Wine-child inheritance or gameplay.
+
+The initial AppID-only candidate passed standalone tests but failed real game
+naming. After reproducing the missing-AppID condition, the fallback passed both
+standalone argument-based tests and a real, seven-second Windows GUI probe in the
+owned Wine session. That probe uses its own temporary mapping and executable,
+without changing game files or the session's normal mapping:
+
+```bash
+x86_64-w64-mingw32-gcc -Wall -Wextra -Werror -static -municode -mwindows \
+  -o .build/game-dock-wine-probe.exe tools/game_dock_wine_probe.c -luser32
+GAMEKIT_WINE_DOCK_PROBE=1 \
+GAMEKIT_IDENTITY_X86_HELPER="$PWD/.build/game-dock-xcode/Build/Products/Debug/Gamekit.app/Contents/Frameworks/WineGameIdentity.dylib" \
+GAMEKIT_WINE_DOCK_PROBE_PATH="$PWD/.build/game-dock-wine-probe.exe" \
+  swift test --filter GameDockNamesTests.liveWineName
+```

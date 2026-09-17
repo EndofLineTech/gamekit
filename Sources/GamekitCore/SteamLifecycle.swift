@@ -208,6 +208,7 @@ public actor SteamLifecycle {
         guard layout.hasGameIdentityHelper else { return }
         let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games
         try GameDockNames.publish(root: store.root, prefix: lease.prefix, session: receipt.token, games: games,
+                                  steamExecutable: record.steamExecutable,
                                   validate: { try lease.validate() })
     }
 

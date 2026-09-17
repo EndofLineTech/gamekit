@@ -41,6 +41,7 @@ class GameDockIdentityTests(unittest.TestCase):
         self.document = {
             "schemaVersion": 1, "prefix": self.prefix,
             "sessionID": self.session, "games": {"526870": "Satisfactory"},
+            "directories": {"526870": "c:\\program files (x86)\\steam\\steamapps\\common\\satisfactory\\"},
         }
 
     def run_reader(self, app_id="526870", **overrides):
@@ -61,6 +62,17 @@ class GameDockIdentityTests(unittest.TestCase):
         self.assertEqual(self.run_reader("0"), "")
         self.assertEqual(self.run_reader("526870;bad"), "")
         self.assertEqual(self.run_reader("4294967296"), "")
+
+    def test_matches_actual_windows_image_when_native_appid_is_absent(self):
+        self.write()
+        image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\FactoryGame\\Binaries\\Win64\\FactoryGameSteam-Win64-Shipping.exe"
+        self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image), "Satisfactory")
+        self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image.replace("Satisfactory\\", "Satisfactory-other\\")), "")
+        self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image.replace("FactoryGame\\", "..\\Other\\")), "")
+        self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE="C:\\Program Files (x86)\\Steam\\Steam.exe"), "")
+        self.document["directories"]["413150"] = self.document["directories"]["526870"]
+        self.write()
+        self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image), "")
 
     def test_prefix_and_session_must_match(self):
         self.write()
@@ -112,6 +124,11 @@ class GameDockIdentityTests(unittest.TestCase):
         unchanged = subprocess.run([str(self.probe), "dock-probe"], env=env,
                                    capture_output=True, text=True, timeout=15)
         self.assertEqual(unchanged.returncode, 0, unchanged.stdout + unchanged.stderr)
+        del env["SteamAppId"]
+        image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\Game.exe"
+        fallback = subprocess.run([image, "Gamekit Dock Probe"], executable=str(self.probe), env=env,
+                                  capture_output=True, text=True, timeout=15)
+        self.assertEqual(fallback.returncode, 0, fallback.stdout + fallback.stderr)
 
     @unittest.skipUnless(os.environ.get("GAMEKIT_IDENTITY_X86_HELPER"), "Opt-in packaged x86_64 helper")
     def test_packaged_x86_helper_under_rosetta(self):
