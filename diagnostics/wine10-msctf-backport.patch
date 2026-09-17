@@ -1,0 +1,180 @@
+Experimental Wine 10.0 backport of the provider/reconversion portions of
+ValveSoftware/wine 1527888ecafb61f8fe80a1441bb40af009065d6b and
+f8442ce00f4eeb010c0e428dfa1b91c00b313018, adapted to the Wine 10 layout.
+Copyright 2026 Paul Gofman for CodeWeavers; Wine 10 implementation copyright
+2008 Aric Stewart, CodeWeavers. SPDX-License-Identifier: LGPL-2.1-or-later
+Upstream license: https://github.com/wine-mirror/wine/blob/wine-10.0/COPYING.LIB
+Fetch include/ctffunc.idl from f8442ce as documented before building.
+The unrelated ntdll exception fragment is deliberately excluded.
+
+diff --git a/include/Makefile.in b/include/Makefile.in
+--- a/include/Makefile.in
++++ b/include/Makefile.in
+@@ -102,6 +102,7 @@ SOURCES = \
+ 	cryptdlg.h \
+ 	cryptuiapi.h \
+ 	ctfutb.idl \
++	ctffunc.idl \
+ 	ctxtcall.idl \
+ 	custcntl.h \
+ 	cvconst.h \
+diff --git a/include/msctf.idl b/include/msctf.idl
+--- a/include/msctf.idl
++++ b/include/msctf.idl
+@@ -172,6 +172,16 @@ typedef [uuid(d678c645-eb6a-45c9-b4ee-0f3e3a991348)] struct TF_PROPERTYVAL
+     VARIANT varValue;
+ } TF_PROPERTYVAL;
+ 
++[
++  object,
++  uuid(db593490-098f-11d3-8df0-00105a2799b5),
++  pointer_default(unique)
++]
++interface ITfFunction : IUnknown
++{
++    HRESULT GetDisplayName([out] BSTR *name);
++}
++
+ [
+     object,
+     uuid(101d6610-0990-11d3-8df0-00105a2799b5),
+diff --git a/dlls/msctf/threadmgr.c b/dlls/msctf/threadmgr.c
+--- a/dlls/msctf/threadmgr.c
++++ b/dlls/msctf/threadmgr.c
+@@ -35,6 +35,9 @@
+ #include "msctf.h"
+ #include "msctf_internal.h"
+ 
++#include "initguid.h"
++#include "ctffunc.h"
++
+ WINE_DEFAULT_DEBUG_CHANNEL(msctf);
+ 
+ typedef struct tagPreservedKey
+@@ -70,6 +73,7 @@ typedef struct tagACLMulti {
+     /* const ITfLangBarItemMgrVtbl *LangBarItemMgrVtbl; */
+     ITfUIElementMgr ITfUIElementMgr_iface;
+     ITfSourceSingle ITfSourceSingle_iface;
++    ITfFunctionProvider ITfFunctionProvider_iface;
+     LONG refCount;
+ 
+     /* Aggregation */
+@@ -155,6 +159,98 @@ static inline EnumTfDocumentMgr *impl_from_IEnumTfDocumentMgrs(IEnumTfDocumentMg
+     return CONTAINING_RECORD(iface, EnumTfDocumentMgr, IEnumTfDocumentMgrs_iface);
+ }
+ 
++static ThreadMgr *impl_from_ITfFunctionProvider(ITfFunctionProvider *iface)
++{
++    return CONTAINING_RECORD(iface, ThreadMgr, ITfFunctionProvider_iface);
++}
++
++static HRESULT WINAPI reconversion_QueryInterface(ITfFnReconversion *iface, REFIID iid, LPVOID *ppvOut)
++{
++    *ppvOut = NULL;
++    if (IsEqualIID(iid, &IID_IUnknown) || IsEqualIID(iid, &IID_ITfFnReconversion)
++            || IsEqualIID(iid, &IID_ITfFunction))
++    {
++        *ppvOut = iface;
++        return S_OK;
++    }
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI reconversion_AddRef(ITfFnReconversion *iface) { return 2; }
++static ULONG WINAPI reconversion_Release(ITfFnReconversion *iface) { return 1; }
++
++static HRESULT WINAPI reconversion_GetDisplayName(ITfFnReconversion *iface, BSTR *name)
++{
++    *name = SysAllocString(L"Stub");
++    return S_OK;
++}
++
++static HRESULT WINAPI reconversion_QueryRange(ITfFnReconversion *iface, ITfRange *range,
++                                             ITfRange **new_range, BOOL *convertable)
++{
++    *convertable = FALSE;
++    *new_range = NULL;
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI reconversion_GetReconversion(ITfFnReconversion *iface, ITfRange *range,
++                                                  ITfCandidateList **cand_list)
++{
++    *cand_list = NULL;
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI reconversion_Reconvert(ITfFnReconversion *iface, ITfRange *range)
++{
++    return E_NOTIMPL;
++}
++
++static ITfFnReconversionVtbl reconversion_vtbl =
++{
++    reconversion_QueryInterface, reconversion_AddRef, reconversion_Release,
++    reconversion_GetDisplayName, reconversion_QueryRange,
++    reconversion_GetReconversion, reconversion_Reconvert,
++};
++static ITfFnReconversion reconversion_stub = { &reconversion_vtbl };
++
++static HRESULT WINAPI func_provider_QueryInterface(ITfFunctionProvider *iface, REFIID iid, LPVOID *ppvOut)
++{
++    ThreadMgr *This = impl_from_ITfFunctionProvider(iface);
++    return ITfThreadMgrEx_QueryInterface(&This->ITfThreadMgrEx_iface, iid, ppvOut);
++}
++
++static ULONG WINAPI func_provider_AddRef(ITfFunctionProvider *iface)
++{
++    ThreadMgr *This = impl_from_ITfFunctionProvider(iface);
++    return ITfThreadMgrEx_AddRef(&This->ITfThreadMgrEx_iface);
++}
++
++static ULONG WINAPI func_provider_Release(ITfFunctionProvider *iface)
++{
++    ThreadMgr *This = impl_from_ITfFunctionProvider(iface);
++    return ITfThreadMgrEx_Release(&This->ITfThreadMgrEx_iface);
++}
++
++static HRESULT WINAPI func_provider_GetType(ITfFunctionProvider *iface, GUID *guid) { return E_NOTIMPL; }
++static HRESULT WINAPI func_provider_GetDescription(ITfFunctionProvider *iface, BSTR *desc) { return E_NOTIMPL; }
++
++static HRESULT WINAPI func_provider_GetFunction(ITfFunctionProvider *iface, REFGUID guid,
++                                               REFIID riid, IUnknown **func)
++{
++    if (IsEqualIID(riid, &IID_ITfFnReconversion))
++    {
++        *func = (IUnknown *)&reconversion_stub;
++        return S_OK;
++    }
++    return E_NOTIMPL;
++}
++
++static const ITfFunctionProviderVtbl TfFunctionProviderVtbl =
++{
++    func_provider_QueryInterface, func_provider_AddRef, func_provider_Release,
++    func_provider_GetType, func_provider_GetDescription, func_provider_GetFunction,
++};
++
+ static void ThreadMgr_Destructor(ThreadMgr *This)
+ {
+     struct list *cursor, *cursor2;
+@@ -493,8 +589,9 @@ static HRESULT WINAPI ThreadMgr_GetFunctionProvider(ITfThreadMgrEx *iface, REFCL
+ ITfFunctionProvider **ppFuncProv)
+ {
+     ThreadMgr *This = impl_from_ITfThreadMgrEx(iface);
+-    FIXME("STUB:(%p)\n",This);
+-    return E_NOTIMPL;
++    *ppFuncProv = &This->ITfFunctionProvider_iface;
++    ITfFunctionProvider_AddRef(*ppFuncProv);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI ThreadMgr_EnumFunctionProviders(ITfThreadMgrEx *iface,
+@@ -1366,6 +1463,7 @@ HRESULT ThreadMgr_Constructor(IUnknown *pUnkOuter, IUnknown **ppOut)
+     This->ITfThreadMgrEventSink_iface.lpVtbl = &ThreadMgrEventSinkVtbl;
+     This->ITfUIElementMgr_iface.lpVtbl = &ThreadMgrUIElementMgrVtbl;
+     This->ITfSourceSingle_iface.lpVtbl = &SourceSingleVtbl;
++    This->ITfFunctionProvider_iface.lpVtbl = &TfFunctionProviderVtbl;
+     This->refCount = 1;
+     TlsSetValue(tlsIndex,This);
+ 

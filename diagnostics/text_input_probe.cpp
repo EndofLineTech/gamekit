@@ -11,13 +11,35 @@ static const GUID systemFunctionProvider =
 
 // Observe the text-input interfaces needed by newer Helldivers builds without
 // launching a game, replacing DLLs, or dereferencing failed COM results.
-int main()
+int main(int argc, char **argv)
 {
+    if (argc > 2) return 1;
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) return 1;
     ITfThreadMgr *manager = nullptr;
-    hr = CoCreateInstance(CLSID_TF_ThreadMgr, nullptr, CLSCTX_INPROC_SERVER,
-                          IID_ITfThreadMgr, reinterpret_cast<void **>(&manager));
+    HMODULE candidate = nullptr;
+    if (argc == 2) {
+        candidate = LoadLibraryExA(argv[1], nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!candidate) {
+            std::printf("Candidate DLL load failed: %lu\n", GetLastError());
+            CoUninitialize();
+            return 1;
+        }
+        using GetClassObject = HRESULT (WINAPI *)(REFCLSID, REFIID, void **);
+        auto getClassObject = reinterpret_cast<GetClassObject>(
+            reinterpret_cast<void *>(GetProcAddress(candidate, "DllGetClassObject")));
+        IClassFactory *factory = nullptr;
+        hr = getClassObject ? getClassObject(CLSID_TF_ThreadMgr, IID_IClassFactory,
+            reinterpret_cast<void **>(&factory)) : E_NOINTERFACE;
+        if (SUCCEEDED(hr) && factory) {
+            hr = factory->CreateInstance(nullptr, IID_ITfThreadMgr,
+                                         reinterpret_cast<void **>(&manager));
+            factory->Release();
+        }
+    } else {
+        hr = CoCreateInstance(CLSID_TF_ThreadMgr, nullptr, CLSCTX_INPROC_SERVER,
+                              IID_ITfThreadMgr, reinterpret_cast<void **>(&manager));
+    }
     std::printf("Create thread manager: 0x%08lx\n", static_cast<unsigned long>(hr));
     bool supported = false;
     if (SUCCEEDED(hr) && manager) {
@@ -43,6 +65,7 @@ int main()
         manager->Release();
     }
     CoUninitialize();
+    if (candidate) FreeLibrary(candidate);
     std::printf("Text-input reconversion available=%d\n", supported);
     std::puts("Text-input observation complete");
     return 0;
