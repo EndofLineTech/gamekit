@@ -109,4 +109,6 @@ fails after the subsequent warning.
 
 Follow-up: the [text-input investigation](helldivers-text-input.md) reproduces
 an unimplemented system function-provider interface and identifies related
-upstream Wine fixes. A controlled runtime comparison is still required.
+upstream Wine fixes. The subsequent [controlled backport](helldivers-text-input-backport.md)
+resolves that startup crash and reaches the ship in an isolated experimental
+runtime; full gameplay acceptance remains separate.

@@ -16,18 +16,37 @@ struct GameEvaluationLaunchTests {
         let appID = try #require(UInt32(rawID))
         try #require([553850, 413150].contains(appID))
         let seconds = Double(env["GAMEKIT_E6_OBSERVE_SECONDS"] ?? "45") ?? 45
-        try #require((15...90).contains(seconds))
+        let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil ? 90 : 180
+        try #require((15...maximumSeconds).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
         let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1"
+        let confirmEnglish = env["GAMEKIT_E6_CONFIRM_ENGLISH"] == "1"
+        let advanceTitle = env["GAMEKIT_E6_ADVANCE_TITLE"] == "1"
+        let declineOptionalData = env["GAMEKIT_E6_DECLINE_OPTIONAL_DATA"] == "1"
+        let advanceSetupDefaults = env["GAMEKIT_E6_ADVANCE_SETUP_DEFAULTS"] == "1"
         try #require(!continueDriverWarning || (appID == 553850 && CGPreflightPostEventAccess()))
+        try #require(!confirmEnglish || (appID == 553850 && CGPreflightPostEventAccess()))
+        try #require(!advanceTitle || (appID == 553850 && CGPreflightPostEventAccess()))
+        try #require(!declineOptionalData || (appID == 553850 && CGPreflightPostEventAccess()))
+        try #require(!advanceSetupDefaults || (appID == 553850 && CGPreflightPostEventAccess()))
+        if confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults {
+            let tool = try #require(env["GAMEKIT_E6_OCR_TOOL"])
+            try #require(tool.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: tool))
+        }
         let package = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_PACKAGE"]))
         let destination = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_EVIDENCE"]))
         try #require(!FileManager.default.fileExists(atPath: destination.path))
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-        let store = try EnvironmentStore()
-        let selected = try await RuntimeSettingsStore(store: store).layout()
-        let layout = RuntimeLayout(dataRoot: store.root, bundle: selected.bundle,
-            identityHelper: package.appendingPathComponent("Contents/Frameworks/WineGameIdentity.dylib"))
+        let experiment = try HelldiversTextInputExperiment.root()
+        try #require(experiment == nil || appID == 553850)
+        let store = try EnvironmentStore(root: experiment?.appendingPathComponent("Gamekit") ?? EnvironmentStore.applicationSupportRoot)
+        let helper = package.appendingPathComponent("Contents/Frameworks/WineGameIdentity.dylib")
+        let layout: RuntimeLayout
+        if let experiment { layout = HelldiversTextInputExperiment.layout(root: experiment, helper: helper) }
+        else {
+            let selected = try await RuntimeSettingsStore(store: store).layout()
+            layout = RuntimeLayout(dataRoot: store.root, bundle: selected.bundle, identityHelper: helper)
+        }
         try #require(layout.hasGameIdentityHelper)
         let lifecycle = SteamLifecycle(store: store, layout: layout)
         let record = try #require(await store.load(SteamInstallationRecipe.environmentID))
@@ -65,6 +84,7 @@ struct GameEvaluationLaunchTests {
             let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
             var sample = 0
             var continuedDriverWarning = false
+            var completedScreenActions = Set<String>()
             repeat {
                 try await Task.sleep(for: .seconds(10))
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
@@ -128,7 +148,79 @@ struct GameEvaluationLaunchTests {
                         timeout: 5, outputLimit: 1024))
                     // A window can close between enumeration and capture. That
                     // is an observation gap, not a game-compatibility assertion.
-                    if capture.termination == .exited(0) { captured += 1 }
+                    if capture.termination == .exited(0) {
+                        captured += 1
+                        if (confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults) && completedScreenActions.count < 9 {
+                            let image = destination.appendingPathComponent("sample-\(sample)-\(index).png")
+                            let observations = try await recognize(image, crop: nil)
+                            func text(_ observation: ScreenText) -> String {
+                                observation.text.lowercased().replacingOccurrences(of: " ", with: "")
+                            }
+                            let stage = observations.contains(where: { text($0) == "speechlanguage" }) ? "speech" : "text"
+                            let language = confirmEnglish && !completedScreenActions.contains(stage) && observations.count <= 10
+                                && observations.allSatisfy({ ["english(us)", "confirm", "speechlanguage", "textlanguage"].contains(text($0)) })
+                                && observations.contains(where: { text($0) == "english(us)" })
+                            let title = advanceTitle && !completedScreenActions.contains("title")
+                                && observations.contains(where: { text($0).hasSuffix("voidofliberty") })
+                                && observations.contains(where: { text($0) == "pressanybutton" })
+                            let optionalData = declineOptionalData && !completedScreenActions.contains("optional data")
+                                && Set(["aboutgamedata", "decline", "accept"]).isSubset(of: Set(observations.map(text)))
+                            let words = Set(observations.map(text))
+                            var defaults: String?
+                            if advanceSetupDefaults, words.contains(where: { $0.hasSuffix("setup") }) {
+                                if Set(["subtitles", "subtitlemode", "subtitlesize", "texttospeech"]).isSubset(of: words) { defaults = "subtitles" }
+                                if Set(["audio", "audiodevice", "mastervolume", "voicechat", "disabled"]).isSubset(of: words) { defaults = "audio" }
+                                if words.contains("crossplay") { defaults = "crossplay" }
+                                if let seen = defaults, completedScreenActions.contains(seen) { defaults = nil }
+                            }
+                            if advanceSetupDefaults, !completedScreenActions.contains("account"),
+                               words.contains(where: { $0.hasPrefix("accountlinkstatus") }) {
+                                // Continue the observed account-status page; never
+                                // operate a Link, sign-in, or account-change control.
+                                defaults = "account"
+                            }
+                            if advanceSetupDefaults, !completedScreenActions.contains("brightness"),
+                               words.contains("adjustbrightness"),
+                               words.contains(where: { $0.contains("theleftsideoftheskullshouldbebarelyvisible") }) {
+                                defaults = "brightness"
+                            }
+                            let action = defaults ?? (optionalData ? "optional data" : (title ? "title" : stage))
+                            let label = defaults != nil ? "next" : (optionalData ? "decline" : (title ? "pressanybutton" : "confirm"))
+                            var buttonBounds = observations.first(where: { text($0) == label })?.boundingBox
+                            if defaults != nil {
+                                let cropped = try await recognize(image, crop: defaults == "brightness" ? "brightness" : "next-button")
+                                if let found = cropped.first(where: { text($0) == "next" })?.boundingBox {
+                                    buttonBounds = found
+                                }
+                            }
+                            if language || title || optionalData || defaults != nil, let buttonBounds {
+                                let target = await MainActor.run { () -> (Int32, CGRect)? in
+                                    for info in CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [] {
+                                        guard info[kCGWindowNumber as String] as? UInt32 == window,
+                                              let pid = info[kCGWindowOwnerPID as String] as? Int32, gamePIDs.contains(pid),
+                                              let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                                              let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { continue }
+                                        return (pid, rect)
+                                    }
+                                    return nil
+                                }
+                                if let (pid, rect) = target {
+                                    _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+                                        arguments: ["-e", "tell application \"System Events\" to set frontmost of (first application process whose unix id is \(pid)) to true"],
+                                        timeout: 5, outputLimit: 1024))
+                                    let point = CGPoint(x: rect.minX + rect.width * buttonBounds.midX,
+                                                        y: rect.minY + rect.height * (1 - buttonBounds.midY))
+                                    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                                    try await Task.sleep(for: .milliseconds(300))
+                                    CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                                    try await Task.sleep(for: .milliseconds(150))
+                                    CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                                    completedScreenActions.insert(action)
+                                    print("E6 selected \(label) on recognized \(action) screen")
+                                }
+                            }
+                        }
+                    }
                 }
                 print("E6 sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count), captured windows=\(captured)")
                 sample += 1
@@ -138,5 +230,21 @@ struct GameEvaluationLaunchTests {
             throw error
         }
         try await cleanup()
+    }
+
+    private struct ScreenText: Decodable {
+        let text: String
+        let boundingBox: CGRect
+    }
+
+    private func recognize(_ image: URL, crop: String?) async throws -> [ScreenText] {
+        let tool = try #require(ProcessInfo.processInfo.environment["GAMEKIT_E6_OCR_TOOL"])
+        let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: tool),
+            arguments: [image.path] + (crop.map { [$0] } ?? []), timeout: 5, outputLimit: 16384))
+        guard result.termination == .exited(0) else {
+            print("E6 OCR observation gap; no action taken")
+            return []
+        }
+        return try JSONDecoder().decode([ScreenText].self, from: Data(result.stdoutText.utf8))
     }
 }

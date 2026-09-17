@@ -1,0 +1,2 @@
+# Unified-diff context markers are part of the archived upstream patch format.
+diagnostics/*.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

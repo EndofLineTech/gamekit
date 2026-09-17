@@ -91,6 +91,11 @@ tracked separately as `gamekit-m3k`.
 
 ## Helldivers 2 — reproducible launch failure
 
+**Later experimental result:** the [Wine 10 text-input backport](helldivers-text-input-backport.md)
+resolves the post-AVX startup crash and reaches the ship scene in an isolated
+runtime/prefix. The user confirmed controlling the game. This is changed-recipe
+evidence, not a rewrite of the original baseline or a complete mission/FPS pass.
+
 The following is the original baseline with AVX advertisement unset. A subsequent
 user-requested [AVX experiment](avx-capability.md) clears that CPU gate with
 `ROSETTA_ADVERTISE_AVX=1`, but exposes a driver-version warning and a crash after

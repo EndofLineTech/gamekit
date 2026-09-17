@@ -1,5 +1,10 @@
 # Helldivers post-AVX text-input investigation
 
+**Update:** the [controlled Wine 10 backport](helldivers-text-input-backport.md)
+now resolves the reproduced startup crash and reaches the ship scene. The
+initial diagnostic findings and candidate constraint below are retained as
+the investigation history.
+
 Investigation `gamekit-1ae`, 2026-09-17. The [AVX fix](avx-capability.md)
 is delivered in [PR22](https://github.com/EndofLineTech/gamekit/pull/22).
 Helldivers build 24826606 still crashes after Continue on the virtual GPU-driver
