@@ -101,8 +101,9 @@ static NSData *ReadMapping(NSString *path) {
     return data;
 }
 
-static NSString *ReadGameNameWithLoader(NSString **loader) {
+static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace) {
     if (loader) *loader = nil;
+    if (fullscreenSpace) *fullscreenSpace = NO;
     NSString *appID = GameAppID();
     NSString *prefix = EnvironmentString("WINEPREFIX");
     NSString *session = EnvironmentString("GAMEKIT_SESSION_ID");
@@ -144,13 +145,27 @@ static NSString *ReadGameNameWithLoader(NSString **loader) {
     id loaders = document[@"loaders"];
     if (loader && [loaders isKindOfClass:NSDictionary.class] && [loaders count] <= 512 &&
         [loaders[appID] isKindOfClass:NSString.class]) *loader = loaders[appID];
+    if (fullscreenSpace && [appID isEqualToString:@"553850"]) {
+        id spaces = document[@"fullscreenSpaces"];
+        id enabled = [spaces isKindOfClass:NSDictionary.class] ? spaces[appID] : nil;
+        NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
+        if ([enabled isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)enabled) == CFBooleanGetTypeID() &&
+            [enabled boolValue] && [image isEqualToString:@"helldivers2.exe"]) *fullscreenSpace = YES;
+    }
     return name;
+}
+
+BOOL GamekitShouldUseFullscreenSpace(void) {
+    BOOL enabled = NO;
+    (void)ReadGameNameWithLoader(NULL, &enabled);
+    return enabled;
 }
 
 #ifdef GAMEKIT_IDENTITY_READER_TEST
 int main(void) {
     @autoreleasepool {
-        NSString *name = ReadGameNameWithLoader(NULL);
+        if (getenv("GAMEKIT_TEST_SPACE_SETTING")) { puts(GamekitShouldUseFullscreenSpace() ? "enabled" : "disabled"); return 0; }
+        NSString *name = ReadGameNameWithLoader(NULL, NULL);
         if (name) puts(name.UTF8String);
     }
     return 0;
@@ -177,7 +192,7 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
             if ([routed isEqual:current]) return;
         }
         NSString *target = nil;
-        (void)ReadGameNameWithLoader(&target);
+        (void)ReadGameNameWithLoader(&target, NULL);
         if (!current || !target.length || [current isEqual:target]) return;
         NSString *root = [[[[EnvironmentString("WINEPREFIX") stringByDeletingLastPathComponent]
             stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Launchers"] stringByAppendingString:@"/"];

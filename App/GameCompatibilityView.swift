@@ -28,11 +28,24 @@ struct GameCompatibilityView: View {
                     HStack {
                         Button("Enable capture") { run(capture: .enabled) }.accessibilityIdentifier("enable-game-capture")
                         Button("Disable capture") { run(capture: .disabled) }.accessibilityIdentifier("disable-game-capture")
-                        Button("Restore per-game defaults") { run(capture: .inherit) }.accessibilityIdentifier("restore-game-defaults")
+                        Button("Restore capture default") { run(capture: .inherit) }.accessibilityIdentifier("restore-game-defaults")
                     }
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
+                    Divider()
+                    Text("Fullscreen presentation — this game only").font(.headline)
+                    Text(snapshot.fullscreenSpace ? "Dedicated fullscreen Space" : "Fullscreen on the desktop")
+                        .accessibilityIdentifier("game-fullscreen-presentation")
+                    HStack {
+                        Button("Use fullscreen Space") { run(space: true) }
+                            .disabled(snapshot.fullscreenSpace).accessibilityIdentifier("enable-fullscreen-space")
+                        Button("Use desktop fullscreen") { run(space: false) }
+                            .disabled(!snapshot.fullscreenSpace).accessibilityIdentifier("disable-fullscreen-space")
+                    }
+                    .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
+                    Text("Select Fullscreen inside Helldivers. The optional Space keeps the full display area, including behind the notch, and closes when the game window closes. Changes apply at the next launch.")
+                        .font(.caption)
                 }
-                Text("Stop Windows Steam and its games before changing settings. Restoring defaults removes only this game's capture override; it preserves the shared graphics backend and other settings.")
+                Text("Stop Windows Steam and its games before changing settings. Restore capture default removes only the capture override; fullscreen presentation and the shared graphics backend are separate settings.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text(status).font(.callout).accessibilityIdentifier("game-compatibility-status")
                 Button("Refresh saved settings") { run() }.disabled(setup.isBusy)
@@ -48,13 +61,16 @@ struct GameCompatibilityView: View {
         }
     }
 
-    private func run(capture: GameCaptureOverride? = nil) {
-        guard let token = setup.begin(capture == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
+    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil) {
+        guard let token = setup.begin(capture == nil && space == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
             do {
                 let settings = GameCompatibilityStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
-                if let capture {
+                if let space {
+                    snapshot = try await settings.setFullscreenSpace(space, appID: game.id)
+                    status = "Saved and verified. Applies when the game next launches."
+                } else if let capture {
                     snapshot = try await settings.setCapture(capture, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else {

@@ -25,6 +25,14 @@ struct GameEvaluationLaunchTests {
         let advanceTitle = env["GAMEKIT_E6_ADVANCE_TITLE"] == "1"
         let declineOptionalData = env["GAMEKIT_E6_DECLINE_OPTIONAL_DATA"] == "1"
         let advanceSetupDefaults = env["GAMEKIT_E6_ADVANCE_SETUP_DEFAULTS"] == "1"
+        let spaceRoundTrip = env["GAMEKIT_E6_SPACE_ROUND_TRIP"] == "1"
+        let spaceHost = env["GAMEKIT_E6_SPACE_HOST"] == "1"
+        let quitWithSpace = env["GAMEKIT_E6_QUIT_WITH_SPACE"] == "1"
+        try #require(!quitWithSpace || spaceHost)
+        let expectNoSpaceHost = env["GAMEKIT_E6_EXPECT_NO_SPACE_HOST"] == "1"
+        try #require(!expectNoSpaceHost || !spaceRoundTrip)
+        try #require(!spaceHost || spaceRoundTrip)
+        try #require(!spaceRoundTrip || (appID == 553850 && seconds >= 90 && CGPreflightPostEventAccess()))
         try #require(!continueDriverWarning || (appID == 553850 && CGPreflightPostEventAccess()))
         try #require(!confirmEnglish || (appID == 553850 && CGPreflightPostEventAccess()))
         try #require(!advanceTitle || (appID == 553850 && CGPreflightPostEventAccess()))
@@ -82,6 +90,7 @@ struct GameEvaluationLaunchTests {
             }
             let result = try await lifecycle.stop()
             #expect(try await lifecycle.status() == .stopped)
+            if quitWithSpace { #expect(result != .forced, "Normal game quit with a Space host must not need forced cleanup") }
             print("E6 cleanup: \(result); managed session stopped")
         }
 
@@ -97,6 +106,7 @@ struct GameEvaluationLaunchTests {
             var sample = 0
             var continuedDriverWarning = false
             var completedScreenActions = Set<String>()
+            var completedSpaceRoundTrip = false
             repeat {
                 try await Task.sleep(for: .seconds(10))
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
@@ -144,6 +154,53 @@ struct GameEvaluationLaunchTests {
                     }
                 }
                 let pids = Set(snapshot.processes.filter { $0.role == .other || $0.role == .steamUI }.map(\.identity.pid))
+                if expectNoSpaceHost {
+                    let unexpected = await MainActor.run {
+                        (CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []).contains {
+                            guard let pid = $0[kCGWindowOwnerPID as String] as? Int32, pids.contains(pid) else { return false }
+                            return $0[kCGWindowName as String] as? String == "Gamekit fullscreen Space"
+                        }
+                    }
+                    try #require(!unexpected, "Desktop fullscreen must not create a native Space host")
+                }
+                if spaceRoundTrip && sample >= 6 && !completedSpaceRoundTrip, let foregroundPID {
+                    func script(_ source: String) async throws -> String {
+                        let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+                            arguments: ["-e", source], timeout: 5, outputLimit: 1024))
+                        guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+                        return result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    let target = "tell application \"System Events\" to tell (first application process whose unix id is \(foregroundPID)) "
+                    let nativeWindow = spaceHost ? "(first window whose name is \"Gamekit fullscreen Space\")" : "window 1"
+                    try #require(try await script(target + "to get value of attribute \"AXFullScreen\" of " + nativeWindow) == "true")
+                    _ = try await script("tell application \"Finder\" to activate")
+                    try await Task.sleep(for: .seconds(2))
+                    _ = try await script(target + "to set frontmost to true")
+                    try await Task.sleep(for: .seconds(2))
+                    _ = try await script("tell application \"System Events\" to key code 48 using {command down}")
+                    try await Task.sleep(for: .seconds(3))
+                    let away = await MainActor.run { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+                    try #require(away == "com.apple.finder", "Command-Tab must actually leave the game")
+                    _ = try await script("tell application \"System Events\" to key code 48 using {command down}")
+                    try await Task.sleep(for: .seconds(3))
+                    let returned = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+                    try #require(returned == foregroundPID, "Command-Tab must return to the owned game")
+                    try #require(try await script(target + "to get value of attribute \"AXFullScreen\" of " + nativeWindow) == "true")
+                    print("E6 native fullscreen survived a real Command-Tab round trip")
+                    if quitWithSpace {
+                        print("E6 retaining native Space for normal game-quit cleanup verification")
+                    } else {
+                        _ = try await script(target + "to set value of attribute \"AXFullScreen\" of " + nativeWindow + " to false")
+                        try await Task.sleep(for: .seconds(3))
+                        if spaceHost {
+                            try #require(try await script(target + "to count (windows whose name is \"Gamekit fullscreen Space\")") == "0")
+                        } else {
+                            try #require(try await script(target + "to get value of attribute \"AXFullScreen\" of " + nativeWindow) == "false")
+                        }
+                        print("E6 exited native fullscreen successfully")
+                    }
+                    completedSpaceRoundTrip = true
+                }
                 let windows = await MainActor.run {
                     (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []).compactMap { window -> UInt32? in
                         guard let pid = window[kCGWindowOwnerPID as String] as? Int32, pids.contains(pid),
@@ -237,6 +294,7 @@ struct GameEvaluationLaunchTests {
                 print("E6 sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count), captured windows=\(captured)")
                 sample += 1
             } while ContinuousClock.now < deadline
+            try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
         } catch {
             try await cleanup()
             throw error

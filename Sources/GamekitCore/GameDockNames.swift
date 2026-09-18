@@ -11,6 +11,7 @@ struct GameDockNames: Codable {
     let directories: [String: String]
     var loaders: [String: String] = [:]
     var defaultLoader: String? = nil
+    var fullscreenSpaces: [String: Bool]? = nil
 
     static func url(root: URL, prefix: URL) -> URL {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
@@ -24,7 +25,8 @@ struct GameDockNames: Codable {
         let document = Self(schemaVersion: 1, prefix: prefix.path, sessionID: session.uuidString,
                             games: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), $0.name) }),
                             directories: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), common + $0.installDirectory + "\\") }),
-                            loaders: loaders, defaultLoader: defaultLoader)
+                            loaders: loaders, defaultLoader: defaultLoader,
+                            fullscreenSpaces: try GamePresentationPreferences.read(root: root).fullscreenSpaces.filter { key, enabled in enabled && games.contains { String($0.id) == key } })
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(document)
         guard let root = try ManagedDirectory.openRoot(root, create: true),

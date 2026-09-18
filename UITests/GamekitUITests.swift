@@ -41,6 +41,21 @@ final class GamekitUITests: XCTestCase {
         app.terminate(); app.launch()
         openSettings()
         XCTAssertTrue((app.staticTexts["game-capture-setting"].value as? String ?? "").hasPrefix("Enabled for this game"))
+        let spaceButton = app.buttons["enable-fullscreen-space"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: spaceButton)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        spaceButton.click()
+        let space = app.staticTexts["game-fullscreen-presentation"]
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Dedicated fullscreen Space"), object: space)
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
+        app.terminate(); app.launch(); openSettings()
+        XCTAssertEqual(space.value as? String, "Dedicated fullscreen Space")
+        let desktop = app.buttons["disable-fullscreen-space"]
+        let unlocked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: desktop)
+        XCTAssertEqual(XCTWaiter.wait(for: [unlocked], timeout: 15), .completed)
+        desktop.click()
+        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Fullscreen on the desktop"), object: space)
+        XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
     }
 
     func testEmptyLauncherCacheCleanup() async throws {

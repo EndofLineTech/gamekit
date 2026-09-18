@@ -141,12 +141,21 @@ override for the Dock-edge cursor issue:
 
 - **Enable capture** saves the game-specific override.
 - **Disable capture** explicitly disables it for this game.
-- **Restore per-game defaults** removes that override and inherits Wine's global
+- **Restore capture default** removes that override and inherits Wine's global
   setting (disabled when no global override exists).
 
 The panel shows the saved override, inherited setting and effective capture state.
-Select **Fullscreen** inside Helldivers itself. These controls do not change its
-resolution, create a fullscreen Space, or suppress the GPU-driver warning.
+Select **Fullscreen** inside Helldivers itself. The capture controls do not change
+its resolution or suppress the GPU-driver warning.
+
+Helldivers also offers **Use fullscreen Space**, an opt-in native macOS desktop
+for its full-display game window. The image uses the entire display, including
+behind the notch. Keep the game's own Fullscreen mode selected. **Use desktop
+fullscreen** restores its original presentation; this choice is separate from
+the capture override and Metal 3 selection. The Space closes with the game.
+Stop Steam before changing it, then launch a fresh session. This option is
+validated for Helldivers on this Mac's built-in display; other games retain their
+current presentation.
 
 Stop Windows Steam and all its games before making changes; launch a fresh session
 after saving. The existing accepted override is displayed as-is on first use.

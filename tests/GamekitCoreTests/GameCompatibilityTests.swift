@@ -46,6 +46,44 @@ private struct CompatibilityFixture {
 
 @Suite("Per-game compatibility settings")
 struct GameCompatibilityTests {
+    @Test("Explicit live fullscreen Space selection through the product store", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_SPACE_SETTING"] != nil))
+    func liveSpaceSetting() async throws {
+        let requested = try #require(ProcessInfo.processInfo.environment["GAMEKIT_SPACE_SETTING"])
+        try #require(["enabled", "disabled"].contains(requested))
+        let store = try EnvironmentStore()
+        let result = try await GameCompatibilityStore(store: store).setFullscreenSpace(requested == "enabled", appID: 553850)
+        #expect(result.fullscreenSpace == (requested == "enabled"))
+        print("Saved Helldivers fullscreen Space: \(result.fullscreenSpace); capture: \(result.capture.rawValue); graphics: \(result.graphicsBackend.rawValue)")
+    }
+
+    @Test("Fullscreen Space is an opt-in saved separately from the accepted capture setting")
+    func fullscreenSpacePreference() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let settings = fixture.settings()
+        #expect(try await settings.inspect(appID: 553850).fullscreenSpace == false)
+        let enabled = try await settings.setFullscreenSpace(true, appID: 553850)
+        #expect(enabled.fullscreenSpace)
+        #expect(try await fixture.settings().inspect(appID: 553850).fullscreenSpace)
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+        let disabled = try await settings.setFullscreenSpace(false, appID: 553850)
+        #expect(!disabled.fullscreenSpace)
+        #expect(disabled.capture == .disabled)
+        await #expect(throws: GameCompatibilityError.unsupportedGame) { try await settings.setFullscreenSpace(true, appID: 526870) }
+    }
+
+    @Test("Fullscreen Space changes require a stopped session and reject malformed settings")
+    func fullscreenSpaceGuards() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setFullscreenSpace(true, appID: 553850) }
+        await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setFullscreenSpace(true, appID: 553850) }
+        let file = fixture.store.root.appendingPathComponent("Metadata/GamePresentation.json")
+        for invalid in [#"{"schemaVersion":9,"fullscreenSpaces":{"553850":true}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"553850":1}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"413150":true}}"#] {
+            try Data(invalid.utf8).write(to: file)
+            await #expect(throws: (any Error).self) { try await fixture.settings().setFullscreenSpace(true, appID: 553850) }
+            #expect(try String(contentsOf: file, encoding: .utf8) == invalid)
+        }
+    }
+
     @Test("Independent Windows registry queries observe saved choices after each fresh Wine session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_COMPATIBILITY_WINE_SMOKE"] == "1"))
     func wineReadback() async throws {
         let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
@@ -127,6 +165,7 @@ struct GameCompatibilityTests {
         try FileManager.default.createDirectory(at: lifecycle, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: lifecycle.appendingPathComponent("steam.json"))
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setCapture(.enabled, appID: 553850) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setFullscreenSpace(true, appID: 553850) }
         #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
     }
 
