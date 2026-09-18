@@ -73,6 +73,7 @@ struct InstalledGamesView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = InstalledGamesModel()
+    @State private var compatibilityGame: InstalledSteamGame?
 
     var body: some View {
         GroupBox {
@@ -111,6 +112,8 @@ struct InstalledGamesView: View {
                     .accessibilityValue(status(game))
                     .accessibilityIdentifier("launch-game-\(game.id)")
                     .help(game.state == .ready ? "Launch through managed Windows Steam" : "Finish installation or updates in Windows Steam")
+                    Button("Compatibility settings…") { compatibilityGame = game }
+                        .disabled(setup.isBusy).accessibilityIdentifier("game-compatibility-\(game.id)")
                 }
                 if let warning = model.warning { Text(warning).font(.callout).foregroundStyle(.orange) }
                 if let message = model.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
@@ -131,6 +134,7 @@ struct InstalledGamesView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refresh(setup: setup) } }
         }
+        .sheet(item: $compatibilityGame) { game in GameCompatibilityView(game: game) }
     }
 
     private func status(_ game: InstalledSteamGame) -> String {

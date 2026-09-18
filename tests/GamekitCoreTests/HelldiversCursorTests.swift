@@ -23,7 +23,7 @@ struct HelldiversCursorTests {
             #expect(result.termination == .exited(expectedExit))
             if expectedExit == 1 { #expect(result.stdoutText.contains("Refused: existing preference")) }
             if let expected = env["GAMEKIT_CURSOR_EXPECT"] {
-                try #require(["absent", "event-tap", "enabled", "existing-other"].contains(expected))
+                try #require(["absent", "event-tap", "enabled", "disabled", "existing-other"].contains(expected))
                 let label = action.contains("display") ? "display_capture=" : "cursor_override="
                 #expect(result.stdoutText.contains(label + expected))
             }

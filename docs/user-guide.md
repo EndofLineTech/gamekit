@@ -129,6 +129,32 @@ routes the Wine child to that identity and retains the game's Windows-provided i
 See the [Dock identity contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/game-dock-identity.md)
 for scope and validation.
 
+## Per-game compatibility
+
+Choose **Compatibility settings…** below an installed game's launcher. Every game
+shows the saved graphics backend and explains that it is shared by the managed
+Steam environment. Change Automatic/Metal 3 under **Setup and prerequisites**;
+it is not a per-game switch.
+
+Helldivers 2 additionally offers the validated **Fullscreen display capture**
+override for the Dock-edge cursor issue:
+
+- **Enable capture** saves the game-specific override.
+- **Disable capture** explicitly disables it for this game.
+- **Restore per-game defaults** removes that override and inherits Wine's global
+  setting (disabled when no global override exists).
+
+The panel shows the saved override, inherited setting and effective capture state.
+Select **Fullscreen** inside Helldivers itself. These controls do not change its
+resolution, create a fullscreen Space, or suppress the GPU-driver warning.
+
+Stop Windows Steam and all its games before making changes; launch a fresh session
+after saving. The existing accepted override is displayed as-is on first use.
+Gamekit reads the saved registry, changes only the supported app-specific value,
+and verifies it after saving. Other registry settings, saves, runtime binaries and
+launcher caches are preserved. Unsupported or ambiguous registry values are
+refused. Other titles show that validated per-game overrides are not yet available.
+
 ## Recovery
 
 **Retry interrupted install** inspects saved progress and current files. It can

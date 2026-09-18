@@ -1,0 +1,150 @@
+import Foundation
+import Testing
+@testable import GamekitCore
+
+private let registryFixture = """
+WINE REGISTRY Version 2
+;; All keys relative to REGISTRY\\\\User\\\\fixture
+
+#arch=win64
+
+[Software\\\\Wine\\\\Mac Driver] 1
+"CaptureDisplaysForFullscreen"="y"
+
+[Software\\\\Wine\\\\AppDefaults\\\\helldivers2.exe\\\\Mac Driver] 1
+"OtherSetting"="keep"
+"CaptureDisplaysForFullscreen"="n"
+
+[Software\\\\Other] 1
+"CaptureDisplaysForFullscreen"="unrelated"
+
+"""
+
+private struct CompatibilityFixture {
+    let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let store: EnvironmentStore
+    let prefix: URL
+    init() async throws {
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Steam", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
+        prefix = store.prefixURL(for: id)
+        let steam = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Helldivers"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "553850" "name" "Helldivers" "installdir" "Helldivers" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_553850.acf"))
+        try Data(registryFixture.utf8).write(to: prefix.appendingPathComponent("user.reg"))
+    }
+    func remove() { try? FileManager.default.removeItem(at: parent) }
+    func settings(complete: Bool = true, running: Bool = false) -> GameCompatibilityStore {
+        GameCompatibilityStore(store: store, observe: { _, _, _ in
+            .init(processes: running ? [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .other, sessionID: nil)] : [], complete: complete)
+        })
+    }
+}
+
+@Suite("Per-game compatibility settings")
+struct GameCompatibilityTests {
+    @Test("Independent Windows registry queries observe saved choices after each fresh Wine session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_COMPATIBILITY_WINE_SMOKE"] == "1"))
+    func wineReadback() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let selected = try await RuntimeSettingsStore(store: EnvironmentStore()).layout()
+        let layout = RuntimeLayout(dataRoot: fixture.store.root, profile: selected.profile, bundle: selected.bundle, graphicsBackend: selected.graphicsBackend)
+        let helper = try #require(ProcessInfo.processInfo.environment["GAMEKIT_CURSOR_PROBE_PATH"])
+        func execute(_ arguments: [String]) async throws -> CommandResult {
+            let session = try await RuntimeSession.start(store: fixture.store, id: SteamInstallationRecipe.environmentID,
+                layout: layout, arguments: arguments, timeout: 120)
+            let result = await session.command.result()
+            _ = try await session.stop()
+            try #require(result.termination == .exited(0))
+            return result
+        }
+        _ = try await execute(SteamInstallationRecipe.initializeArguments)
+        let settings = GameCompatibilityStore(store: fixture.store)
+        for (value, expected) in [(GameCaptureOverride.enabled, "enabled"), (.disabled, "disabled"), (.inherit, "absent")] {
+            _ = try await settings.setCapture(value, appID: 553850)
+            let result = try await execute([helper, "query-display"])
+            #expect(result.stdoutText.contains("display_capture=" + expected))
+            #expect(try await settings.inspect(appID: 553850).capture == value)
+            print("Disposable Wine registry readback: \(value.rawValue) -> \(expected)")
+        }
+    }
+
+    @Test("Capture override persists, reads back and restores inheritance without touching siblings")
+    func savedOverride() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let settings = fixture.settings()
+        let initial = try await settings.inspect(appID: 553850)
+        #expect(initial.capture == .disabled)
+        #expect(initial.inheritedCapture)
+        #expect(!initial.effectiveCapture)
+        let enabled = try await settings.setCapture(.enabled, appID: 553850)
+        #expect(enabled.effectiveCapture)
+        #expect(try await fixture.settings().inspect(appID: 553850).capture == .enabled)
+        let restored = try await settings.setCapture(.inherit, appID: 553850)
+        #expect(restored.capture == .inherit && restored.effectiveCapture)
+        let bytes = try String(contentsOf: fixture.prefix.appendingPathComponent("user.reg"), encoding: .utf8)
+        #expect(bytes.contains("\"OtherSetting\"=\"keep\""))
+        #expect(bytes.contains("\"CaptureDisplaysForFullscreen\"=\"unrelated\""))
+        #expect(bytes == registryFixture.replacingOccurrences(of: "\"CaptureDisplaysForFullscreen\"=\"n\"\n", with: ""))
+    }
+
+    @Test("Missing app section can be created; Wine default capture is disabled")
+    func newOverride() throws {
+        let data = Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8)
+        let registry = try GameCaptureRegistry(data)
+        #expect(try registry.capture == .inherit)
+        #expect(try !registry.inheritedCapture)
+        let enabled = try GameCaptureRegistry(registry.setting(.enabled))
+        #expect(try enabled.capture == .enabled)
+        let restored = try GameCaptureRegistry(enabled.setting(.inherit))
+        #expect(try restored.capture == .inherit)
+    }
+
+    @Test("Ambiguous and unsupported registry values refuse edits", arguments: [
+        registryFixture.replacingOccurrences(of: "\"n\"", with: "dword:00000001"),
+        registryFixture + "[Software\\\\Wine\\\\AppDefaults\\\\helldivers2.exe\\\\Mac Driver]\n",
+        registryFixture.replacingOccurrences(of: "\"n\"", with: "\"n\"\n\"CaptureDisplaysForFullscreen\"=\"y\""),
+        "not a Wine registry"
+    ])
+    func malformedRegistry(text: String) {
+        #expect(throws: (any Error).self) { _ = try GameCaptureRegistry(Data(text.utf8)).setting(.enabled) }
+    }
+
+    @Test("Live or incomplete observations block changes without altering registry bytes", arguments: [true, false])
+    func processGuard(complete: Bool) async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        await #expect(throws: (any Error).self) { try await fixture.settings(complete: complete, running: complete).setCapture(.enabled, appID: 553850) }
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+    }
+
+    @Test("Unsupported games and saved sessions cannot be modified")
+    func selectionGuard() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        await #expect(throws: GameCompatibilityError.unsupportedGame) { try await fixture.settings().setCapture(.enabled, appID: 413150) }
+        let lifecycle = fixture.store.root.appendingPathComponent("Metadata/Lifecycle")
+        try FileManager.default.createDirectory(at: lifecycle, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: lifecycle.appendingPathComponent("steam.json"))
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setCapture(.enabled, appID: 553850) }
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+    }
+
+    @Test("Registry symlinks and an active execution lease cannot redirect settings writes")
+    func storageGuards() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let settings = fixture.settings()
+        do {
+            let lease = try await fixture.store.executionLease(for: SteamInstallationRecipe.environmentID)
+            defer { withExtendedLifetime(lease) {} }
+            await #expect(throws: EnvironmentStoreError.busy) { try await settings.setCapture(.enabled, appID: 553850) }
+        }
+        let registry = fixture.prefix.appendingPathComponent("user.reg")
+        let outside = fixture.parent.appendingPathComponent("external.reg")
+        try FileManager.default.moveItem(at: registry, to: outside)
+        try FileManager.default.createSymbolicLink(at: registry, withDestinationURL: outside)
+        await #expect(throws: (any Error).self) { try await settings.inspect(appID: 553850) }
+        await #expect(throws: (any Error).self) { try await settings.setCapture(.enabled, appID: 553850) }
+        #expect(try Data(contentsOf: outside) == Data(registryFixture.utf8))
+    }
+}
