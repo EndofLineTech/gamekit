@@ -10,6 +10,7 @@ struct GameDockAcceptanceTests {
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_SATISFACTORY_DOCK_ACCEPTANCE"] == "1"))
     func satisfactory() async throws {
         let helper = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["GAMEKIT_IDENTITY_X86_HELPER"]))
+        try #require(CGPreflightScreenCaptureAccess(), "Window inventory requires screen-capture permission")
         let store = try EnvironmentStore()
         let selected = try await RuntimeSettingsStore(store: store).layout()
         let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
@@ -55,6 +56,16 @@ struct GameDockAcceptanceTests {
                 try await Task.sleep(for: .milliseconds(500))
             }
             #expect(found, "The actual Satisfactory process must have the game identity")
+            let owned = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
+            try #require(owned.complete)
+            let ownedPIDs = Set(owned.processes.map(\.identity.pid))
+            let unexpectedSpaceHost = await MainActor.run {
+                (CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []).contains {
+                    guard let pid = $0[kCGWindowOwnerPID as String] as? Int32, ownedPIDs.contains(pid) else { return false }
+                    return $0[kCGWindowName as String] as? String == "Gamekit fullscreen Space"
+                }
+            }
+            #expect(!unexpectedSpaceHost, "Helldivers' presentation preference must not create a Space for Satisfactory or Steam")
             let dock = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
                 arguments: ["-e", "tell application \"System Events\" to tell process \"Dock\" to return count of (UI elements of list 1 whose name is \"Satisfactory\")"],
                 timeout: 5, outputLimit: 1024))

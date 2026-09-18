@@ -181,6 +181,7 @@ enum AppFailure {
         case SteamLifecycleError.notInstalled: "Steam is not fully installed. Complete setup or choose Retry."
         case SteamRecoveryError.unsupportedRecord: "This saved state is not supported by that recovery action. Review its status and use the appropriate setup or Stop control."
         case GameCompatibilityError.unsupportedGame: "No validated game-specific settings are available for this title."
+        case GameCompatibilityError.unsupportedPresentation: "Saved fullscreen Space settings are not supported. Review the saved configuration before retrying."
         case GameCompatibilityError.unsupportedRegistry: "Wine's saved registry has an unsupported or ambiguous setting. Gamekit cannot safely edit it. Review the local configuration before retrying."
         case SteamInstallationError.timedOut: "The stage timed out. Inspect progress and use Retry after the managed session has stopped."
         default: "The operation did not complete. Open local diagnostics for details; use Retry to inspect the saved stage."

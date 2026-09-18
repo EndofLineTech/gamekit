@@ -1,6 +1,6 @@
 import Foundation
 
-public enum GameCompatibilityError: Error, Equatable { case unsupportedGame, unsupportedRegistry }
+public enum GameCompatibilityError: Error, Equatable { case unsupportedGame, unsupportedRegistry, unsupportedPresentation }
 public enum GameCaptureOverride: String, CaseIterable, Sendable {
     case inherit, enabled, disabled
     public var title: String {
@@ -16,7 +16,20 @@ public struct GameCompatibilitySnapshot: Sendable {
     public let inheritedCapture: Bool
     public let graphicsBackend: D3DMetalBackend
     public let sessionLocked: Bool
+    public let fullscreenSpace: Bool
     public var effectiveCapture: Bool { capture == .enabled || (capture == .inherit && inheritedCapture) }
+}
+
+struct GamePresentationPreferences: Codable {
+    var schemaVersion = 1
+    var fullscreenSpaces: [String: Bool] = [:]
+    static func read(root: URL) throws -> Self {
+        guard let directory = try ManagedDirectory.openRoot(root, create: false)?.directory("Metadata"),
+              let data = try directory.read("GamePresentation.json") else { return .init() }
+        let value = try JSONDecoder().decode(Self.self, from: data)
+        guard value.schemaVersion == 1, value.fullscreenSpaces.keys.allSatisfy({ $0 == "553850" }) else { throw GameCompatibilityError.unsupportedPresentation }
+        return value
+    }
 }
 
 /// Narrow, lossless edit of the two known Wine registry sections. The existing
@@ -113,7 +126,8 @@ public actor GameCompatibilityStore {
     private func snapshot(_ data: Data, layout: RuntimeLayout, locked: Bool) throws -> GameCompatibilitySnapshot {
         let registry = try GameCaptureRegistry(data)
         return try .init(capture: registry.capture, inheritedCapture: registry.inheritedCapture,
-                         graphicsBackend: layout.graphicsBackend, sessionLocked: locked)
+                         graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
+                         fullscreenSpace: GamePresentationPreferences.read(root: store.root).fullscreenSpaces["553850"] ?? false)
     }
     public func inspect(appID: UInt32) async throws -> GameCompatibilitySnapshot {
         let installation = try await store.installationLease()
@@ -139,6 +153,7 @@ public actor GameCompatibilityStore {
         try execution.validate(); try Task.checkCancellation()
         let directory = try prefix(record)
         let original = try registry(directory)
+        _ = try snapshot(original, layout: selected, locked: false)
         let updated = try GameCaptureRegistry(original).setting(capture)
         try directory.withWriteLock {
             try directory.write(updated, to: "user.reg", createOnly: false, temporaryPrefix: ".game-compatibility-", beforeCommit: {
@@ -149,5 +164,31 @@ public actor GameCompatibilityStore {
         let result = try snapshot(registry(directory), layout: selected, locked: false)
         guard result.capture == capture else { throw GameCompatibilityError.unsupportedRegistry }
         return result
+    }
+
+    @discardableResult public func setFullscreenSpace(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await record(appID)
+        let settings = RuntimeSettingsStore(store: store)
+        guard !(try await settings.isSelectionLocked()) else { throw EnvironmentStoreError.busy }
+        let execution = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(execution) {} }
+        let selected = try await settings.layout()
+        for layout in [selected, RuntimeLayout(dataRoot: store.root), RuntimeLayout(dataRoot: store.root, profile: .sikarugirTextInput1)] {
+            let observed = await observe(record, execution.prefix, layout)
+            guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
+            guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
+        }
+        try execution.validate(); try Task.checkCancellation()
+        _ = try snapshot(registry(prefix(record)), layout: selected, locked: false)
+        var preferences = try GamePresentationPreferences.read(root: store.root)
+        if enabled { preferences.fullscreenSpaces[String(appID)] = true }
+        else { preferences.fullscreenSpaces.removeValue(forKey: String(appID)) }
+        guard let metadata = try ManagedDirectory.openRoot(store.root, create: false)?.directory("Metadata") else { throw EnvironmentStoreError.notFound }
+        try metadata.withWriteLock {
+            try metadata.write(JSONEncoder().encode(preferences), to: "GamePresentation.json", createOnly: false, beforeCommit: { try execution.validate() })
+        }
+        return try snapshot(registry(prefix(record)), layout: selected, locked: false)
     }
 }

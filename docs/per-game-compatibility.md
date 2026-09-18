@@ -16,8 +16,10 @@ before the global fallback. The control applies to the next game process.
 The graphics backend remains environment-wide because persistent Steam passes it
 to children. Every game panel labels that scope and directs the user to the
 existing stopped-session backend selector. This feature does not implement
-per-game backend overrides, native fullscreen Spaces, aspect-ratio changes or
-automatic warning handling. No unsupported cursor-handler preference is exposed.
+per-game backend overrides, aspect-ratio changes or automatic warning handling.
+The later `gamekit-deg` feature adds an independent opt-in Helldivers fullscreen
+Space; see [native fullscreen Spaces](native-fullscreen-spaces.md). No unsupported
+cursor-handler preference is exposed.
 
 ## Persistence and mutation boundary
 

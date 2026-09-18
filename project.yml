@@ -28,7 +28,7 @@ targets:
         CLANG_ENABLE_OBJC_ARC: YES
         CLANG_ENABLE_CODE_COVERAGE: NO
         GCC_TREAT_WARNINGS_AS_ERRORS: YES
-        OTHER_LDFLAGS: ["-framework", "Foundation"]
+        OTHER_LDFLAGS: ["-framework", "Foundation", "-framework", "AppKit"]
         SKIP_INSTALL: YES
   Gamekit:
     type: application

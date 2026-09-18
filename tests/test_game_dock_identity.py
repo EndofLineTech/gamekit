@@ -65,6 +65,20 @@ class GameDockIdentityTests(unittest.TestCase):
         self.assertEqual(self.run_reader("526870;bad"), "")
         self.assertEqual(self.run_reader("4294967296"), "")
 
+    def test_fullscreen_space_requires_boolean_opt_in_owned_session_and_main_image(self):
+        self.document["games"]["553850"] = "Helldivers"
+        self.document["fullscreenSpaces"] = {"553850": True, "526870": True}
+        self.write()
+        flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\games\helldivers2.exe")
+        self.assertEqual(self.run_reader("553850", **flags), "enabled")
+        self.assertEqual(self.run_reader("553850", **(flags | {"GAMEKIT_SESSION_ID": "foreign"})), "disabled")
+        self.assertEqual(self.run_reader("553850", **(flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\games\crs-handler.exe"})), "disabled")
+        self.assertEqual(self.run_reader("526870", **flags), "disabled")
+        for value in [False, 1, "true", None]:
+            self.document["fullscreenSpaces"]["553850"] = value
+            self.write()
+            self.assertEqual(self.run_reader("553850", **flags), "disabled")
+
     def test_matches_actual_windows_image_when_native_appid_is_absent(self):
         self.write()
         image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\FactoryGame\\Binaries\\Win64\\FactoryGameSteam-Win64-Shipping.exe"

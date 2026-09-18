@@ -14,6 +14,13 @@
     return [super respondsToSelector:selector] || [self.original respondsToSelector:selector];
 }
 - (id)forwardingTargetForSelector:(SEL)selector { return self.original; }
+- (NSSize)window:(NSWindow *)window willUseFullScreenContentSize:(NSSize)proposed {
+    NSSize original = proposed;
+    if ([self.original respondsToSelector:_cmd]) original = [self.original window:window willUseFullScreenContentSize:proposed];
+    NSSize requested = window.screen ? window.screen.frame.size : original;
+    os_log(OS_LOG_DEFAULT, "GamekitSpaceTrial size proposed=%{public}@ original=%{public}@ requested=%{public}@", NSStringFromSize(proposed), NSStringFromSize(original), NSStringFromSize(requested));
+    return requested;
+}
 - (NSApplicationPresentationOptions)window:(NSWindow *)window willUseFullScreenPresentationOptions:(NSApplicationPresentationOptions)options {
     if ([self.original respondsToSelector:_cmd])
         options = [self.original window:window willUseFullScreenPresentationOptions:options];
