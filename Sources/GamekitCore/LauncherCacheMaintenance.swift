@@ -27,13 +27,13 @@ public actor LauncherCacheMaintenance {
     private let idle: @Sendable () async -> Bool?
     public init(store: EnvironmentStore) {
         self.store = store
-        layouts = [RuntimeRevision.original, .textInput1].map { RuntimeLayout(dataRoot: store.root, profile: $0.profile) }
+        layouts = RuntimeRevision.allCases.map { RuntimeLayout(dataRoot: store.root, profile: $0.profile) }
         idle = {
             do {
                 let selected = try await RuntimeSettingsStore(store: store).layout()
                 let records = try await store.loadAll()
                 for record in records {
-                    for layout in [selected, RuntimeLayout(dataRoot: store.root), RuntimeLayout(dataRoot: store.root, profile: .sikarugirTextInput1)] {
+                    for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
                         let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: record.id), layout: layout)
                         guard snapshot.complete else { return nil }
                         if !snapshot.processes.isEmpty { return false }

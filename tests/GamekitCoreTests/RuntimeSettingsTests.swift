@@ -4,6 +4,26 @@ import Testing
 
 @Suite("Local runtime selection")
 struct RuntimeSettingsTests {
+    @Test("Driver revision is isolated, preserves graphics and rolls back without prefix edits")
+    func driverRevision() async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let settings = RuntimeSettingsStore(store: store)
+        try await settings.select(nil, revision: .textInput1, graphicsBackend: .metal3)
+        let before = try await settings.layout()
+        try await settings.select(nil, revision: .driverVersion1)
+        let selected = try await RuntimeSettingsStore(store: store).layout()
+        #expect(selected.profile.identity == before.profile.identity)
+        #expect(selected.graphicsBackend == .metal3)
+        #expect(selected.launchersRoot != before.launchersRoot)
+        #expect(selected.environment()["GAMEKIT_DXGI_ORIGINAL"]?.hasSuffix("dxgm.dll") == true)
+        try await settings.select(nil, revision: .textInput1)
+        let rollback = try await settings.layout()
+        #expect(rollback.environment()["GAMEKIT_DXGI_ORIGINAL"] == nil)
+        #expect(rollback.bundle == before.bundle && rollback.graphicsBackend == .metal3)
+    }
     @Test("Backend selection survives reopen and runtime changes without changing prefix or caches")
     func graphicsPersistence() async throws {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

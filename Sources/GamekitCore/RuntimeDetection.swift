@@ -4,18 +4,24 @@ import Foundation
 
 /// Component revisions share the Wine/prefix ABI; selecting one never rewrites
 /// an environment's base-engine identity or its saved installation state.
-public enum RuntimeRevision: String, Codable, Sendable {
+public enum RuntimeRevision: String, Codable, Sendable, CaseIterable {
     case original
     case textInput1 = "text-input-1"
+    case driverVersion1 = "driver-version-1"
 
     public var title: String {
         switch self {
         case .original: "Sikarugir 10.0 revision 6 (original)"
         case .textInput1: "Sikarugir 10.0 revision 6 + Gamekit text-input 1"
+        case .driverVersion1: "Sikarugir 10.0 revision 6 + text-input 1 + Helldivers driver compatibility"
         }
     }
     public var profile: RuntimeProfile {
-        self == .original ? .sikarugir : .sikarugirTextInput1
+        switch self {
+        case .original: .sikarugir
+        case .textInput1: .sikarugirTextInput1
+        case .driverVersion1: .sikarugirDriverVersion1
+        }
     }
 }
 
@@ -39,6 +45,17 @@ public struct RuntimeProfile: Sendable {
         return RuntimeProfile(identity: sikarugir.identity,
             bundlePath: "Runtimes/sikarugir10.0_6-d3dmetal4.0b2-text-input1/Template-1.0.11.app",
             wineVersionOutput: sikarugir.wineVersionOutput, hashes: hashes, revision: .textInput1)
+    }
+
+    static let driverShimRelative = "Contents/SharedSupport/wine/lib/gamekit/helldivers-dxgi.dll"
+    static let driverOriginalRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgm.dll"
+    public static var sikarugirDriverVersion1: RuntimeProfile {
+        var hashes = sikarugirTextInput1.hashes
+        hashes[driverShimRelative] = "5ccd55cf94faaab72dcdef651aaccc7907c3eef46d0ecb1cb0f5de204940d2b2"
+        hashes[driverOriginalRelative] = "5e80d3584e304ae1258aa13a1cf12830641dc2694988e670b7c7b5749f215c5c"
+        return RuntimeProfile(identity: sikarugir.identity,
+            bundlePath: "Runtimes/sikarugir10.0_6-d3dmetal4.0b2-driver-version1/Template-1.0.11.app",
+            wineVersionOutput: sikarugir.wineVersionOutput, hashes: hashes, revision: .driverVersion1)
     }
 
     public static let sikarugir = RuntimeProfile(
@@ -108,6 +125,9 @@ public struct RuntimeLayout: Sendable {
         // GPTK documents this opt-in on macOS 15+. The validated macOS 27
         // translator executes AVX/AVX2; publish those capabilities to games.
         result["ROSETTA_ADVERTISE_AVX"] = "1"
+        if profile.revision == .driverVersion1 {
+            result["GAMEKIT_DXGI_ORIGINAL"] = "Z:" + bundle.appendingPathComponent(RuntimeProfile.driverOriginalRelative).path.replacingOccurrences(of: "/", with: "\\")
+        }
         // Apple documents this per-process fallback inside the same D3DMetal
         // payload. An explicit saved/session choice selects the fallback;
         // automatic mode leaves Apple's default in control.

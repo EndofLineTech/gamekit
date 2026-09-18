@@ -35,6 +35,42 @@ private struct ApplicationBundleFixture {
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("Only the Helldivers driver revision gets a private DXGI; other PE images remain shared")
+    func scopedDriverShim() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let basePath = "Contents/SharedSupport/wine/"
+        let dxgi = basePath + "lib/wine/x86_64-windows/dxgi.dll"
+        let shim = basePath + "lib/gamekit/helldivers-dxgi.dll"
+        let original = Data("original DXGI".utf8), replacement = Data("game scoped shim".utf8)
+        try original.write(to: fixture.layout.bundle.appendingPathComponent(dxgi))
+        try FileManager.default.createDirectory(at: fixture.layout.bundle.appendingPathComponent(shim).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try replacement.write(to: fixture.layout.bundle.appendingPathComponent(shim))
+        var hashes = fixture.layout.profile.hashes
+        for (name, data) in [(dxgi, original), (shim, replacement)] {
+            hashes[name] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
+        let profile = RuntimeProfile(identity: fixture.layout.profile.identity, bundlePath: "unused", wineVersionOutput: "fixture", hashes: hashes, revision: .driverVersion1)
+        let layout = RuntimeLayout(dataRoot: fixture.layout.dataRoot, profile: profile, bundle: fixture.layout.bundle)
+        let steam = try await SteamApplicationBundle(layout: layout).prepare()
+        let builder = SteamApplicationBundle(layout: layout, game: .init(appID: 553850, name: "Helldivers"))
+        let game = try await builder.prepare()
+        let other = try await SteamApplicationBundle(layout: layout, game: .init(appID: 526870, name: "Satisfactory")).prepare()
+        let relative = "Contents/lib/wine/x86_64-windows/"
+        #expect(try Data(contentsOf: steam.appendingPathComponent(relative + "dxgi.dll")) == original)
+        #expect(try Data(contentsOf: other.appendingPathComponent(relative + "dxgi.dll")) == original)
+        #expect(try Data(contentsOf: game.appendingPathComponent(relative + "dxgi.dll")) == replacement)
+        #expect(try Data(contentsOf: fixture.layout.bundle.appendingPathComponent(dxgi)) == original)
+        func inode(_ root: URL, _ file: String) throws -> NSNumber? {
+            try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent(relative + file).path)[.systemFileNumber] as? NSNumber
+        }
+        #expect(try inode(steam, "ntdll.dll") == inode(game, "ntdll.dll"))
+        #expect(try inode(steam, "dxgi.dll") == inode(other, "dxgi.dll"))
+        #expect(try inode(steam, "dxgi.dll") != inode(game, "dxgi.dll"))
+        #expect(try await builder.prepare() == game)
+        try Data("tampered".utf8).write(to: game.appendingPathComponent(relative + "dxgi.dll"))
+        await #expect(throws: SteamApplicationError.invalidBundle) { try await builder.prepare() }
+        #expect(try Data(contentsOf: steam.appendingPathComponent(relative + "dxgi.dll")) == original)
+    }
     @Test("Only validated legacy caches are removable; current PE caches and source bytes survive")
     func obsoleteCacheCleanup() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }

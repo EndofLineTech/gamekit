@@ -4,6 +4,48 @@ import Testing
 
 @Suite("Opt-in managed runtime revision acceptance")
 struct RuntimeRevisionAcceptanceTests {
+    @Test("Validate driver revision, rollback, and select it on the real stopped prefix",
+          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_REVISION_ACCEPTANCE"] == "1"))
+    func driverSwitchAndRollback() async throws {
+        let probe = try #require(ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_PROBE_PATH"])
+        try #require(URL(fileURLWithPath: probe).lastPathComponent == "helldivers2.exe")
+        let store = try EnvironmentStore()
+        let settings = RuntimeSettingsStore(store: store)
+        let old = try await settings.layout()
+        try #require(old.profile.revision == .textInput1 && old.graphicsBackend == .metal3)
+        let prefix = store.prefixURL(for: SteamInstallationRecipe.environmentID)
+        let dll = prefix.appendingPathComponent("drive_c/windows/system32/dxgi.dll")
+        let originalDLL = try Data(contentsOf: dll)
+
+        func select(_ revision: RuntimeRevision, bundle: URL? = nil) async throws -> RuntimeLayout {
+            let registry = try Data(contentsOf: prefix.appendingPathComponent("user.reg"))
+            try await settings.select(bundle, revision: revision)
+            #expect(try Data(contentsOf: dll) == originalDLL)
+            #expect(try Data(contentsOf: prefix.appendingPathComponent("user.reg")) == registry)
+            return try await settings.layout()
+        }
+        func inspect(_ layout: RuntimeLayout, appID: UInt32, expected: String) async throws {
+            let session = try await RuntimeSession.startGameProbe(store: store, id: SteamInstallationRecipe.environmentID,
+                layout: layout, game: .init(appID: appID, name: appID == 553850 ? "HELLDIVERS™ 2" : "Driver control"), arguments: [probe, expected])
+            let result = await session.command.result()
+            print("Driver acceptance \(layout.profile.revision.rawValue) AppID=\(appID): \(result.stdoutText)")
+            _ = try await session.stop()
+            #expect(try await session.snapshot().processes.isEmpty)
+            try #require(result.termination == .exited(0), "\(result.stderrText)")
+        }
+        do {
+            let driver = try await select(.driverVersion1)
+            try await inspect(driver, appID: 553850, expected: "substituted")
+            try await inspect(driver, appID: 999998, expected: "baseline")
+            let rollback = try await select(.textInput1, bundle: old.bundle)
+            try await inspect(rollback, appID: 553850, expected: "baseline")
+            _ = try await select(.driverVersion1)
+            print("Driver revision selected; real query, other-loader control, rollback, and unchanged prefix DLL/registry at selection verified")
+        } catch {
+            try await settings.select(old.bundle, revision: old.profile.revision, graphicsBackend: old.graphicsBackend)
+            throw error
+        }
+    }
     @Test("Switch and roll back the real stopped prefix without replacing its DLLs",
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_RUNTIME_REVISION_ACCEPTANCE"] == "1"))
     func switchAndRollback() async throws {

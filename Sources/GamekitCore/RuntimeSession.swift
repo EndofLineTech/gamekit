@@ -40,9 +40,24 @@ public actor RuntimeSession {
                          workingDirectory: nil, timeout: timeout, onOutput: nil)
     }
 
+    /// Acceptance probes must run from the real derived loader: Wine resolves
+    /// builtin modules relative to that loader, even for explicit DLL paths.
+    /// Unlike startFixture this performs normal prerequisite and bundle checks.
+    static func startGameProbe(store: EnvironmentStore, id: EnvironmentID, layout: RuntimeLayout,
+                               game: GameApplicationIdentity, arguments: [String]) async throws -> RuntimeSession {
+        let lease = try await store.executionLease(for: id)
+        let report = try await RuntimeDetector().detect(layout, selection: lease.record.runtime)
+        guard report.prerequisites == .ready else { throw RuntimeSessionError.prerequisitesNotReady }
+        let builder = SteamApplicationBundle(layout: layout, game: game)
+        _ = try await builder.prepare()
+        try builder.validate(builder.bundleURL)
+        return try await launch(lease: lease, layout: layout, arguments: arguments,
+            workingDirectory: nil, timeout: 60, onOutput: nil, executable: builder.executable)
+    }
+
     private static func launch(lease: EnvironmentExecutionLease, layout: RuntimeLayout, arguments: [String],
                                workingDirectory: URL?, timeout: TimeInterval,
-                               onOutput: (@Sendable (CommandOutput) -> Void)?) async throws -> RuntimeSession {
+                                onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil) async throws -> RuntimeSession {
         try Task.checkCancellation()
         try lease.validate()
         let snapshot = RuntimeProcessObserver().snapshot(record: lease.record, prefix: lease.prefix, layout: layout)
@@ -50,7 +65,7 @@ public actor RuntimeSession {
         guard snapshot.processes.isEmpty else { throw RuntimeSessionError.prefixBusy }
         let token = UUID().uuidString
         let command = try await ProcessExecutor().start(CommandRequest(
-            executable: layout.wine, arguments: arguments, environment: layout.environment(prefix: lease.prefix, session: token),
+            executable: executable ?? layout.wine, arguments: arguments, environment: layout.environment(prefix: lease.prefix, session: token),
             workingDirectory: workingDirectory ?? lease.prefix, timeout: nil
         ), onOutput: onOutput)
         let session = RuntimeSession(lease: lease, layout: layout, command: command, token: token)

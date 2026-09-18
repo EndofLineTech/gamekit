@@ -8,6 +8,7 @@
   "graphicsBackendSelection": "Persistent environment-wide automatic or metal3; Metal3 supplies D3DM_MTL4=0 on fresh managed Steam launches; per-game overrides are separate backlog",
   "gstreamer": "1.28.1",
   "textInputRevision": "Selectable text-input-1; msctf.dll SHA256 bb8db266526cff89c2bc6a436482b24c632c13596c1864adb4cb2e42e58fca8b; packaged-app acceptance recorded separately",
+  "driverCompatibilityRevision": "Selectable driver-version-1, includes text-input-1; Helldivers-only DXGI sentinel substitution to compatibility version35.0.15.6094; shim SHA2565ccd55cf94faaab72dcdef651aaccc7907c3eef46d0ecb1cb0f5de204940d2b2; no prefix DLL or registry edits; real query/control/rollback passed",
   "cpuAdvertisement": "ROSETTA_ADVERTISE_AVX=1; native x86_64 and Windows CPUID/AVX/AVX2 execution probes passed on macOS27.0(26A428)",
   "visualCppDLLPreference": "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b",
   "observedVisualCppRedistributable": "14.51.36247 x64 installed by Steam; native DLL version/load probe passed; game acceptance recorded separately",

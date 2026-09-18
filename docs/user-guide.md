@@ -39,10 +39,13 @@ manifest does not assert that release acceptance or reboot testing has passed.
 ## First setup
 
 1. Review **Setup and prerequisites**. Each failed check explains its next step.
-2. Choose **Use updated runtime** for the prepared text-input revision, or
-   **Use original runtime** for the original recipe. **Choose runtime…** locates
-   the currently displayed revision elsewhere. See the
-   [revision preparation and rollback guide](runtime-text-input-delivery.md).
+2. Choose **Use driver compatibility runtime** for the prepared Helldivers
+   driver-warning fix (includes text-input 1). **Use text-input runtime
+   (rollback)** selects the previous text-input revision, and **Use original
+   runtime** selects the original recipe. **Choose runtime…** locates the
+   currently displayed revision elsewhere. See the
+   [driver revision guide](helldivers-driver-runtime.md) and
+   [text-input revision guide](runtime-text-input-delivery.md).
    Prefix storage stays fixed; Stop Steam before changing revisions.
 3. Click **Refresh checks** (Command-Shift-R) after fixing prerequisites.
 4. Click **Install Steam**. Gamekit downloads and validates Valve's installer,
@@ -58,6 +61,17 @@ your account or guarantee every Library feature or game works. A persistent stat
 bar shows the current stage, with no invented progress percentages.
 
 ## Everyday use
+
+### Helldivers driver alert
+
+The driver compatibility revision replaces D3DMetal's invalid all-65535 driver
+version response with **35.0.15.6094**, only inside Helldivers. This is a
+compatibility value, not an installed Windows or Apple driver update. It does
+not automatically click dialogs. Steam and other games keep the original DXGI.
+Stop managed Steam before selecting or rolling back the revision. The switch
+does not edit prefix DLLs, registry overrides, saves or graphics preferences.
+The game's **Try Again** button and ignore-warning preference did not prevent
+recurrence in this setup; they are not the delivered fix.
 
 ### Graphics backend
 

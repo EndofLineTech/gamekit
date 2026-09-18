@@ -145,7 +145,7 @@ public actor GameCompatibilityStore {
         let execution = try await store.executionLease(for: record.id)
         defer { withExtendedLifetime(execution) {} }
         let selected = try await settings.layout()
-        for layout in [selected, RuntimeLayout(dataRoot: store.root), RuntimeLayout(dataRoot: store.root, profile: .sikarugirTextInput1)] {
+        for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
             let observed = await observe(record, execution.prefix, layout)
             guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
             guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
@@ -175,7 +175,7 @@ public actor GameCompatibilityStore {
         let execution = try await store.executionLease(for: record.id)
         defer { withExtendedLifetime(execution) {} }
         let selected = try await settings.layout()
-        for layout in [selected, RuntimeLayout(dataRoot: store.root), RuntimeLayout(dataRoot: store.root, profile: .sikarugirTextInput1)] {
+        for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
             let observed = await observe(record, execution.prefix, layout)
             guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
             guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
