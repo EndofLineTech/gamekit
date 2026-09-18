@@ -3,6 +3,46 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testPerGameCaptureSettingsPersistAndRestoreDefaults() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Compatibility fixture", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
+        let prefix = store.prefixURL(for: id)
+        let steam = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Helldivers"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "553850" "name" "Helldivers" "installdir" "Helldivers" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_553850.acf"))
+        try Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8).write(to: prefix.appendingPathComponent("user.reg"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        func openSettings() {
+            let open = app.buttons["game-compatibility-553850"]
+            XCTAssertTrue(open.waitForExistence(timeout: 20))
+            revealRecoveryButton(open, in: app); open.click()
+            XCTAssertTrue(app.staticTexts["game-capture-setting"].waitForExistence(timeout: 15))
+        }
+        func change(_ button: String, expected: String) {
+            let control = app.buttons[button]
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: control)
+            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+            control.click()
+            let value = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value BEGINSWITH %@", expected), object: app.staticTexts["game-capture-setting"])
+            XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
+        }
+        openSettings()
+        XCTAssertTrue(app.staticTexts["game-shared-backend"].exists)
+        change("enable-game-capture", expected: "Enabled for this game")
+        change("disable-game-capture", expected: "Disabled for this game")
+        change("restore-game-defaults", expected: "Inherit Wine default")
+        change("enable-game-capture", expected: "Enabled for this game")
+        app.terminate(); app.launch()
+        openSettings()
+        XCTAssertTrue((app.staticTexts["game-capture-setting"].value as? String ?? "").hasPrefix("Enabled for this game"))
+    }
+
     func testEmptyLauncherCacheCleanup() async throws {
         let root = try temporaryRoot()
         _ = try EnvironmentStore(root: root)

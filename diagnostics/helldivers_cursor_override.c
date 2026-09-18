@@ -25,8 +25,9 @@ int main(int argc, char **argv)
         return 1;
     }
     BOOL configured = !absent && type == REG_SZ && size == 2 * sizeof(WCHAR) && value[0] == requested[0] && value[1] == 0;
+    BOOL disabled_display = display && !absent && type == REG_SZ && size == 2 * sizeof(WCHAR) && value[0] == L'n' && value[1] == 0;
     if (!strcmp(argv[1], "query") || !strcmp(argv[1], "query-display")) {
-        printf("%s=%s\n", label, absent ? "absent" : configured ? configured_name : "existing-other");
+        printf("%s=%s\n", label, absent ? "absent" : configured ? configured_name : disabled_display ? "disabled" : "existing-other");
         return 0;
     }
     BOOL restore = !strcmp(argv[1], "restore-default") || !strcmp(argv[1], "restore-display");
