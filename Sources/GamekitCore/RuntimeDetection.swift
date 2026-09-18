@@ -57,8 +57,15 @@ public struct RuntimeProfile: Sendable {
     )
 }
 
-public enum D3DMetalBackend: Sendable {
+public enum D3DMetalBackend: String, Codable, Sendable {
     case automatic, metal3
+
+    public var title: String {
+        switch self {
+        case .automatic: "Automatic (Apple default)"
+        case .metal3: "Metal 3 compatibility"
+        }
+    }
 }
 
 public struct RuntimeLayout: Sendable {
@@ -102,7 +109,8 @@ public struct RuntimeLayout: Sendable {
         // translator executes AVX/AVX2; publish those capabilities to games.
         result["ROSETTA_ADVERTISE_AVX"] = "1"
         // Apple documents this per-process fallback inside the same D3DMetal
-        // payload. Normal launches keep Apple's default; diagnostics opt in.
+        // payload. An explicit saved/session choice selects the fallback;
+        // automatic mode leaves Apple's default in control.
         if graphicsBackend == .metal3 { result["D3DM_MTL4"] = "0" }
         // Steam installs the genuine VC++ redistributables. Prefer that coherent
         // DLL family when present: builtin version resources can make Unreal's

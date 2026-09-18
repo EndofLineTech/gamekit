@@ -46,7 +46,8 @@ struct GameEvaluationLaunchTests {
         if let experiment { layout = HelldiversTextInputExperiment.layout(root: experiment, helper: helper) }
         else {
             let selected = try await RuntimeSettingsStore(store: store).layout()
-            layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle, identityHelper: helper)
+            layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
+                identityHelper: helper, graphicsBackend: selected.graphicsBackend)
         }
         try #require(layout.hasGameIdentityHelper)
         let lifecycle = SteamLifecycle(store: store, layout: layout)

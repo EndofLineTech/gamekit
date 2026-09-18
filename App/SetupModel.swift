@@ -54,7 +54,8 @@ final class SetupModel: ObservableObject {
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
                 let settings = RuntimeSettingsStore(store: store)
                 let selected = try await settings.layout()
-                if layout.bundle != selected.bundle || layout.profile.revision != selected.profile.revision {
+                if layout.bundle != selected.bundle || layout.profile.revision != selected.profile.revision
+                    || layout.graphicsBackend != selected.graphicsBackend {
                     layout = selected; selectionRevision = UUID()
                 }
                 selectionLocked = try await settings.isSelectionLocked()
@@ -114,6 +115,20 @@ final class SetupModel: ObservableObject {
             do {
                 let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
                 try await settings.select(selected, revision: revision)
+                layout = try await settings.layout(); selectionRevision = UUID()
+                end(token); refresh(diagnostics: diagnostics)
+            } catch { problem = AppFailure.message(error); end(token) }
+        }
+    }
+
+    func chooseGraphicsBackend(_ backend: D3DMetalBackend, diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, !selectionLocked, backend != layout.graphicsBackend,
+              let token = begin("Saving graphics backend") else { return }
+        report = nil; problem = nil
+        Task { [self] in
+            do {
+                let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
+                try await settings.selectGraphicsBackend(backend)
                 layout = try await settings.layout(); selectionRevision = UUID()
                 end(token); refresh(diagnostics: diagnostics)
             } catch { problem = AppFailure.message(error); end(token) }

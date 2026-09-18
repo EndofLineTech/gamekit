@@ -33,7 +33,8 @@ struct AVXCapabilityTests {
             let parent = try ManagedDirectory.canonicalRoot(FileManager.default.temporaryDirectory.appendingPathComponent("Gamekit AVX " + UUID().uuidString))
             try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
-            let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle)
+            let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
+                graphicsBackend: selected.graphicsBackend)
             let id = try EnvironmentID("avx-probe")
             let record = try await store.create(EnvironmentRecord(id: id, name: "Disposable AVX probe", runtime: layout.profile.identity,
                 installation: .installing(.creatingPrefix)))
