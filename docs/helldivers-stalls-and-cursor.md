@@ -1,5 +1,10 @@
 # Helldivers recurring stalls and host cursor
 
+**Later shader assessment:** [vertex stage-in failures and measured startup
+hitches](helldivers-shader-assessment.md) narrows the error boundary and separates
+failed-call latency from long presentation gaps. The historical settings and
+pending outcomes below describe their original test stages, not current defaults.
+
 **Delivery update:** [persistent graphics-backend selection](persistent-graphics-backend.md)
 now makes the accepted Metal 3 choice available to normal app launches and fresh
 Steam sessions. The diagnostic sessions described below retain their historical

@@ -21,15 +21,19 @@ struct GameEvaluationLaunchTests {
         try #require((15...maximumSeconds).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
         let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1"
+        let passiveAfterWarning = env["GAMEKIT_E6_PASSIVE_AFTER_WARNING"] == "1"
+        try #require(!passiveAfterWarning || (appID == 553850 && continueDriverWarning))
         let confirmEnglish = env["GAMEKIT_E6_CONFIRM_ENGLISH"] == "1"
         let advanceTitle = env["GAMEKIT_E6_ADVANCE_TITLE"] == "1"
         let declineOptionalData = env["GAMEKIT_E6_DECLINE_OPTIONAL_DATA"] == "1"
         let advanceSetupDefaults = env["GAMEKIT_E6_ADVANCE_SETUP_DEFAULTS"] == "1"
         let spaceRoundTrip = env["GAMEKIT_E6_SPACE_ROUND_TRIP"] == "1"
+        try #require(!passiveAfterWarning || !(confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults || spaceRoundTrip))
         let spaceHost = env["GAMEKIT_E6_SPACE_HOST"] == "1"
         let quitWithSpace = env["GAMEKIT_E6_QUIT_WITH_SPACE"] == "1"
         try #require(!quitWithSpace || spaceHost)
         let expectNoSpaceHost = env["GAMEKIT_E6_EXPECT_NO_SPACE_HOST"] == "1"
+        try #require(!(passiveAfterWarning && expectNoSpaceHost))
         try #require(!expectNoSpaceHost || !spaceRoundTrip)
         try #require(!spaceHost || spaceRoundTrip)
         try #require(!spaceRoundTrip || (appID == 553850 && seconds >= 90 && CGPreflightPostEventAccess()))
@@ -117,7 +121,7 @@ struct GameEvaluationLaunchTests {
                         gamePIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular && $0.localizedName == game.name
                     })?.processIdentifier
                 }
-                if let foregroundPID {
+                if let foregroundPID, !(passiveAfterWarning && continuedDriverWarning) {
                     _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
                         arguments: ["-e", "tell application \"System Events\" to set frontmost of (first application process whose unix id is \(foregroundPID)) to true"],
                         timeout: 5, outputLimit: 1024))
@@ -152,6 +156,11 @@ struct GameEvaluationLaunchTests {
                         print("E6 selected Continue on the exact Helldivers GPU-driver warning")
                         try await Task.sleep(for: .seconds(1))
                     }
+                }
+                if passiveAfterWarning && continuedDriverWarning {
+                    print("E6 passive sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count); no capture or focus action")
+                    sample += 1
+                    continue
                 }
                 let pids = Set(snapshot.processes.filter { $0.role == .other || $0.role == .steamUI }.map(\.identity.pid))
                 if expectNoSpaceHost {
@@ -294,6 +303,7 @@ struct GameEvaluationLaunchTests {
                 print("E6 sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count), captured windows=\(captured)")
                 sample += 1
             } while ContinuousClock.now < deadline
+            try #require(!passiveAfterWarning || continuedDriverWarning, "Passive measurement must have reached the post-warning phase")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
         } catch {
             try await cleanup()
