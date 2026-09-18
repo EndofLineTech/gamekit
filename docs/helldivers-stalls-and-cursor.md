@@ -160,3 +160,59 @@ workaround is narrowly scoped automatic Continue on this exact owned dialog;
 that would acknowledge the warning, not prevent the game from creating it or
 repair graphics compatibility. No such product behavior has been added.
 No driver version, game executable or anti-cheat component was modified.
+
+The user deferred warning automation to backlog `gamekit-p92`. Active work
+continues on cursor behavior.
+
+## Game-specific cursor-confinement comparison
+
+[Wine 10's cursor-clipping source](https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winemac.drv/cocoa_cursorclipping.m)
+documents two implementations: the default macOS window-confinement rectangle
+and an older event-tap/mouse-disassociation implementation. Setting
+`UseConfinementCursorClipping` to string `n` selects the latter. Its comments
+explicitly note that the event-tap path requires macOS Accessibility permission.
+Consequently, a failed capture without that permission would not establish
+whether the alternate implementation fixes the cursor problem.
+
+The [option loader](https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winemac.drv/macdrv_main.c)
+checks app-specific settings before global Mac Driver settings. The experiment
+uses only:
+
+```text
+HKCU\Software\Wine\AppDefaults\helldivers2.exe\Mac Driver
+UseConfinementCursorClipping = REG_SZ "n"
+```
+
+The installed Unix driver contains both implementation class names and the
+corresponding option-name fragments. This supports trying the documented
+option; registry readback alone is not proof that event-tap capture succeeded.
+
+`diagnostics/helldivers_cursor_override.c` is a narrow configuration helper,
+not a general registry editor. It refuses to overwrite an existing value and
+refuses rollback if the stored value has changed unexpectedly. Rollback deletes
+only this value, preserving sibling preferences and keys. Its Swift operator
+uses the standard exclusive, scoped runtime session and verifies cleanup.
+
+```bash
+x86_64-w64-mingw32-gcc -O0 -Wall -Wextra -Werror -static \
+  diagnostics/helldivers_cursor_override.c \
+  -o .build/helldivers-cursor-override.exe -ladvapi32
+
+GAMEKIT_CURSOR_OVERRIDE=query \
+GAMEKIT_CURSOR_PROBE_PATH="$PWD/.build/helldivers-cursor-override.exe" \
+GAMEKIT_CURSOR_EXPECT=absent swift test --filter HelldiversCursorTests
+
+GAMEKIT_CURSOR_OVERRIDE=event-tap \
+GAMEKIT_CURSOR_PROBE_PATH="$PWD/.build/helldivers-cursor-override.exe" \
+GAMEKIT_CURSOR_EXPECT=event-tap swift test --filter HelldiversCursorTests
+```
+
+Games and the managed Steam session must be stopped before using this helper.
+Use `GAMEKIT_CURSOR_OVERRIDE=restore-default` and expected result `absent` to
+remove the override after an unsuccessful comparison.
+
+Actual registry checks passed: initially absent; apply; readback; rollback;
+readback absent; reapply; duplicate application correctly refused; final
+readback `event-tap`. Each probe session stopped. The game comparison retains
+fullscreen and explicitly restarts the Metal 3 session to match the better
+graphics baseline. Gameplay and Command-Tab recovery results are pending.
