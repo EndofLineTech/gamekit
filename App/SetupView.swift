@@ -27,7 +27,7 @@ struct SetupView: View {
                 }
                 HStack {
                     Button("Choose runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
-                    Button("Use driver compatibility runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .driverVersion1) }
+                    Button("Use updated runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .driverVersion1) }
                         .accessibilityIdentifier("use-driver-compatibility-runtime")
                 }.disabled(setup.isBusy || setup.selectionLocked)
                 HStack {
@@ -40,7 +40,7 @@ struct SetupView: View {
                 Text("Selected runtime: \(setup.layout.bundle.path)").font(.caption).textSelection(.enabled)
                 Text("Revision: \(setup.layout.profile.revision.title)").font(.caption)
                 if setup.layout.profile.revision == .driverVersion1 {
-                    Text("Helldivers alone reports compatibility driver version 35.0.15.6094. Other games and Windows Steam use the original DXGI.")
+                    Text("Game-specific compatibility options are controlled from the gear beside each game's Play button.")
                         .font(.caption).accessibilityIdentifier("driver-compatibility-scope")
                 }
                 Text("Saved graphics backend: \(setup.layout.graphicsBackend.title)")

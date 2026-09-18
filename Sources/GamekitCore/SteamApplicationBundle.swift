@@ -21,15 +21,26 @@ struct GameApplicationIdentity: Sendable {
 struct SteamApplicationBundle: Sendable {
     let layout: RuntimeLayout
     let game: GameApplicationIdentity?
-    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil) { self.layout = layout; self.game = game }
+    private let driverCompatibilityEnabled: Bool
+    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool = true) {
+        self.layout = layout; self.game = game; self.driverCompatibilityEnabled = driverCompatibilityEnabled
+    }
+    static func configured(layout: RuntimeLayout, game: GameApplicationIdentity) throws -> Self {
+        let preferences = try GameCompatibilityPreferences.read(root: layout.dataRoot)
+        return Self(layout: layout, game: game, driverCompatibilityEnabled: preferences.driverEnabled(appID: game.appID, revision: layout.profile.revision))
+    }
     static let identifier = "tech.endofline.gamekit.windows-steam"
     static let displayName = "Windows Steam"
     private var executableName: String { game?.filename ?? Self.displayName }
-    private var driverCompatibility: Bool { layout.profile.revision == .driverVersion1 && game?.appID == 553850 }
+    private var driverCompatibility: Bool { layout.profile.revision == .driverVersion1 && game?.appID == 553850 && driverCompatibilityEnabled }
+    private var gameCacheFormat: String {
+        layout.profile.revision == .driverVersion1 && game?.appID == 553850 && !driverCompatibilityEnabled
+            ? "shared-pe-v2-driver-off" : "shared-pe-v2"
+    }
     private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
     private var bundleName: String { executableName + ".app" }
     private var parentURL: URL {
-        if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/shared-pe-v2") }
+        if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/\(gameCacheFormat)") }
         else { layout.launchersRoot }
     }
     var bundleURL: URL { parentURL.appendingPathComponent(bundleName) }
@@ -99,7 +110,7 @@ struct SteamApplicationBundle: Sendable {
         }
         if let game {
             guard game.appID > 0, !game.name.isEmpty, game.name.rangeOfCharacter(from: .controlCharacters) == nil,
-                  let directory = try launchers.directory("Games", create: true)?.directory(String(game.appID), create: true)?.directory("shared-pe-v2", create: true)
+                  let directory = try launchers.directory("Games", create: true)?.directory(String(game.appID), create: true)?.directory(gameCacheFormat, create: true)
             else { throw SteamApplicationError.invalidBundle }
             launchers = directory
         }

@@ -7,8 +7,14 @@ This is an explicit compatibility value, not an actual Apple driver version.
 
 ## Selection and rollback
 
-Stop managed Steam and games, then choose **Use driver compatibility runtime**
-in Setup. To roll back, Stop again and choose **Use text-input runtime
+The workaround is controlled **per game**: stop managed Steam, open the gear
+beside Helldivers' Play button, and toggle **Avoid the virtual-GPU driver warning**.
+It requires the updated runtime; **Use updated runtime** in Setup selects that
+capability if necessary. Toggling the per-game preference does not change the
+runtime selection or shared graphics backend. An existing driver-version-1
+installation with no preference file keeps its accepted enabled behavior.
+
+To roll back the entire runtime, Stop again and choose **Use text-input runtime
 (rollback)**. Original-runtime rollback is also retained. Selection preserves
 the graphics backend, game settings, display capture and fullscreen-Space
 preference. The runtime must first be staged at its managed revision path.
@@ -16,6 +22,14 @@ preference. The runtime must first be staged at its managed revision path.
 Selection is an atomic metadata change. No prefix DLL, registry value, game
 binary or anti-cheat component is installed or edited by this revision.
 Each revision has its own validated launcher namespace.
+
+The per-game choice is saved in `Metadata/GameCompatibility.json`, schema 1,
+with a boolean `driverVersions["553850"]`. Malformed values, unsupported game
+IDs and changes during active/uncertain sessions are refused. The disabled
+Helldivers loader uses `shared-pe-v2-driver-off`; the enabled loader retains
+`shared-pe-v2`. Both caches are retained, so toggling never overwrites an
+existing shared module. Session-bound loader routing selects the saved choice
+for launches from Gamekit or from managed Steam.
 
 ## Game scope
 
@@ -66,6 +80,25 @@ The destination parent must exist and the final bundle must not exist. See
 [research and experimental evidence](helldivers-driver-warning-research.md)
 for the failed preference/button approaches and the isolated native-shim trial.
 ## Local acceptance, 2026-09-18
+
+### Per-game controls follow-up (`gamekit-ri5`)
+
+The real per-game store was toggled off and on without changing the selected
+runtime or prefix DXGI bytes. The actual derived-loader probe returned the
+original all-65535 response when off and 35.0.15.6094 when on; D3D12 device
+creation passed in both cases. The prior enabled choice was restored.
+
+In the app, Helldivers' gear opened the driver toggle, disabling it saved the
+per-game preference, and closing/reopening Gamekit retained the disabled state.
+Re-enabling it persisted successfully. Satisfactory's adjacent gear opened its
+own panel without launching it or offering Helldivers-only overrides. Gear
+actions retain game-specific accessibility labels and identifiers. The shared
+Automatic/Metal3 backend remains explicitly labeled as shared in these panels.
+
+Full follow-up checks: 232 Swift tests, 30 Python tests (one skipped), and the
+native app build passed. Private evidence includes `.build/ri5-live-driver.log`.
+
+### Original runtime delivery
 
 - The real-prefix probe, launched through the actual derived game loader,
   returned `00230000000f17ce` for Helldivers in driver-version-1. Another

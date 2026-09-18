@@ -39,8 +39,8 @@ manifest does not assert that release acceptance or reboot testing has passed.
 ## First setup
 
 1. Review **Setup and prerequisites**. Each failed check explains its next step.
-2. Choose **Use driver compatibility runtime** for the prepared Helldivers
-   driver-warning fix (includes text-input 1). **Use text-input runtime
+2. Choose **Use updated runtime** for the prepared runtime with per-game
+   driver-compatibility support (includes text-input 1). **Use text-input runtime
    (rollback)** selects the previous text-input revision, and **Use original
    runtime** selects the original recipe. **Choose runtime…** locates the
    currently displayed revision elsewhere. See the
@@ -64,12 +64,18 @@ bar shows the current stage, with no invented progress percentages.
 
 ### Helldivers driver alert
 
-The driver compatibility revision replaces D3DMetal's invalid all-65535 driver
+Open the **gear beside Helldivers' Play button** and use **Avoid the virtual-GPU
+driver warning** to enable or disable the workaround for that game. It requires
+the updated runtime and a stopped Steam session. Your existing enabled choice
+is preserved when upgrading from the earlier driver-runtime release.
+
+When enabled, the driver compatibility revision replaces D3DMetal's invalid all-65535 driver
 version response with **35.0.15.6094**, only inside Helldivers. This is a
 compatibility value, not an installed Windows or Apple driver update. It does
 not automatically click dialogs. Steam and other games keep the original DXGI.
-Stop managed Steam before selecting or rolling back the revision. The switch
-does not edit prefix DLLs, registry overrides, saves or graphics preferences.
+The toggle saves a per-game preference without changing the selected runtime,
+prefix DLLs, registry overrides, saves or graphics preferences. Disabled and
+enabled launchers are cached separately; a fresh launch applies the choice.
 The game's **Try Again** button and ignore-warning preference did not prevent
 recurrence in this setup; they are not the delivered fix.
 
@@ -148,7 +154,7 @@ for scope and validation.
 
 ## Per-game compatibility
 
-Choose **Compatibility settings…** below an installed game's launcher. Every game
+Choose the **gear icon beside Play** in an installed game's row. Every game
 shows the saved graphics backend and explains that it is shared by the managed
 Steam environment. Change Automatic/Metal 3 under **Setup and prerequisites**;
 it is not a per-game switch.
@@ -176,8 +182,9 @@ current presentation.
 
 Stop Windows Steam and all its games before making changes; launch a fresh session
 after saving. The existing accepted override is displayed as-is on first use.
-Gamekit reads the saved registry, changes only the supported app-specific value,
-and verifies it after saving. Other registry settings, saves, runtime binaries and
+For capture, Gamekit reads the saved registry, changes only the supported
+app-specific value, and verifies it after saving. Driver and Space preferences
+are stored separately in Gamekit metadata. Other registry settings, saves, runtime binaries and
 launcher caches are preserved. Unsupported or ambiguous registry values are
 refused. Other titles show that validated per-game overrides are not yet available.
 

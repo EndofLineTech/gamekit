@@ -48,7 +48,7 @@ public actor RuntimeSession {
         let lease = try await store.executionLease(for: id)
         let report = try await RuntimeDetector().detect(layout, selection: lease.record.runtime)
         guard report.prerequisites == .ready else { throw RuntimeSessionError.prerequisitesNotReady }
-        let builder = SteamApplicationBundle(layout: layout, game: game)
+        let builder = try SteamApplicationBundle.configured(layout: layout, game: game)
         _ = try await builder.prepare()
         try builder.validate(builder.bundleURL)
         return try await launch(lease: lease, layout: layout, arguments: arguments,
