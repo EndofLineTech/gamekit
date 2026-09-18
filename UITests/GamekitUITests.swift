@@ -3,6 +3,37 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testEmptyLauncherCacheCleanup() async throws {
+        let root = try temporaryRoot()
+        _ = try EnvironmentStore(root: root)
+        let probe = root.appendingPathComponent("Launchers/Games/1234")
+        try FileManager.default.createDirectory(at: probe, withIntermediateDirectories: true)
+        let current = root.appendingPathComponent("Launchers/Games/526870/shared-pe-v2")
+        try FileManager.default.createDirectory(at: current, withIntermediateDirectories: true)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
+        showResetOptions(in: app)
+        let inspect = app.buttons["inspect-launcher-caches"]
+        revealRecoveryButton(inspect, in: app); inspect.click()
+        let remove = app.buttons["clean-launcher-cache-original/1234"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 10))
+        revealRecoveryButton(remove, in: app); remove.click()
+        let sheet = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        sheet.buttons["Cancel"].click()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: probe.path))
+        remove.click()
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        sheet.buttons["Remove obsolete cache"].click()
+        let done = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Obsolete launcher cache removed."), object: app.staticTexts["launcher-caches-status"])
+        XCTAssertEqual(XCTWaiter.wait(for: [done], timeout: 15), .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: probe.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: current.path))
+    }
+
     func testRecoveryArchiveInspectionCancelAndCleanup() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

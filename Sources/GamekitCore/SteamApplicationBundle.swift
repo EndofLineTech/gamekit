@@ -53,11 +53,12 @@ struct SteamApplicationBundle: Sendable {
         if suffix.hasPrefix("bin/") { return "Contents/MacOS/" + suffix.dropFirst(4) }
         return "Contents/" + suffix
     }
-    func validate(_ bundle: URL) throws {
+    func validate(_ bundle: URL, legacyGameCache: Bool = false) throws {
+        let manifest = legacyGameCache ? Manifest(format: 1, runtime: layout.profile.identity, hashes: layout.profile.hashes) : expectedManifest
         guard let root = try ManagedDirectory.openRoot(bundle, create: false),
               let contents = try root.directory("Contents"),
               let manifestData = try contents.read("Gamekit-runtime.json"),
-              try JSONDecoder().decode(Manifest.self, from: manifestData) == expectedManifest,
+               try JSONDecoder().decode(Manifest.self, from: manifestData) == manifest,
               let plistData = try contents.read("Info.plist"),
               let plist = try PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
               NSDictionary(dictionary: plist).isEqual(to: info),
@@ -67,7 +68,7 @@ struct SteamApplicationBundle: Sendable {
             guard let copy = copiedPath(path) else { continue }
             guard RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: hash) else { throw SteamApplicationError.invalidBundle }
         }
-        if game != nil {
+        if game != nil && !legacyGameCache {
             guard let steam = try ManagedDirectory.openRoot(layout.steamApplicationBundle, create: false) else { throw SteamApplicationError.invalidBundle }
             for arch in ["x86_64-windows", "i386-windows"] {
                 if let source = try steam.directory("Contents")?.directory("lib")?.directory("wine")?.directory(arch) {

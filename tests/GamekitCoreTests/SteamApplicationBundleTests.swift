@@ -21,10 +21,111 @@ private struct ApplicationBundleFixture {
         try Data("shared PE image".utf8).write(to: pe.appendingPathComponent("ntdll.dll"))
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
+    func legacyGame() async throws -> URL {
+        let current = try await SteamApplicationBundle(layout: layout, game: .init(appID: 526870, name: "Satisfactory")).prepare()
+        let legacy = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Satisfactory.app")
+        try FileManager.default.copyItem(at: current, to: legacy)
+        let manifest = legacy.appendingPathComponent("Contents/Gamekit-runtime.json")
+        var value = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
+        value["format"] = 1
+        try JSONSerialization.data(withJSONObject: value).write(to: manifest)
+        return legacy
+    }
 }
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("Only validated legacy caches are removable; current PE caches and source bytes survive")
+    func obsoleteCacheCleanup() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let legacy = try await fixture.legacyGame()
+        let store = try EnvironmentStore(root: fixture.layout.dataRoot)
+        let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { true })
+        let entries = try await maintenance.inspect()
+        let old = try #require(entries.first(where: { $0.status == .obsolete }))
+        #expect(entries.contains { $0.status == .retained && !$0.canClean })
+        await #expect(throws: SteamRecoveryError.confirmationRequired) { try await maintenance.clean(old, confirmed: false) }
+        #expect(FileManager.default.fileExists(atPath: legacy.path))
+        try await maintenance.clean(old, confirmed: true)
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+        let current = SteamApplicationBundle(layout: fixture.layout, game: .init(appID: 526870, name: "Satisfactory"))
+        try current.validate(current.bundleURL)
+        #expect(try Data(contentsOf: fixture.layout.wine) == Data("wine fixture".utf8))
+        #expect(try await maintenance.inspect().allSatisfy { !$0.canClean })
+    }
+
+    @Test("Stale selection and unrecognized cache contents cannot authorize cleanup")
+    func changedLegacyCache() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let legacy = try await fixture.legacyGame()
+        let store = try EnvironmentStore(root: fixture.layout.dataRoot)
+        let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { true })
+        let old = try #require(try await maintenance.inspect().first(where: { $0.status == .obsolete }))
+        try Data("changed".utf8).write(to: legacy.appendingPathComponent("Contents/MacOS/Satisfactory"))
+        await #expect(throws: SteamApplicationError.invalidBundle) { try await maintenance.clean(old, confirmed: true) }
+        #expect(try await maintenance.inspect().contains { $0.status == .protected })
+        #expect(FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    @Test("Empty probe parents can be removed; running or uncertain launchers prevent deletion", arguments: [true, false, nil] as [Bool?])
+    func emptyCacheParent(stopped: Bool?) async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let probe = fixture.layout.gameApplicationsRoot.appendingPathComponent("1234")
+        try FileManager.default.createDirectory(at: probe, withIntermediateDirectories: true)
+        let store = try EnvironmentStore(root: fixture.layout.dataRoot)
+        let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { stopped })
+        let entry = try #require(try await maintenance.inspect().first)
+        #expect(entry.status == .empty)
+        if stopped == true {
+            try await maintenance.clean(entry, confirmed: true)
+            #expect(!FileManager.default.fileExists(atPath: probe.path))
+        } else {
+            await #expect(throws: (any Error).self) { try await maintenance.clean(entry, confirmed: true) }
+            #expect(FileManager.default.fileExists(atPath: probe.path))
+        }
+    }
+
+    @Test("Persistent session receipts block cache maintenance")
+    func cacheReceiptLock() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        _ = try await fixture.legacyGame()
+        let store = try EnvironmentStore(root: fixture.layout.dataRoot)
+        let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { true })
+        let entry = try #require(try await maintenance.inspect().first(where: { $0.canClean }))
+        let lifecycle = store.root.appendingPathComponent("Metadata/Lifecycle")
+        try FileManager.default.createDirectory(at: lifecycle, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: lifecycle.appendingPathComponent("steam.json"))
+        await #expect(throws: EnvironmentStoreError.busy) { try await maintenance.clean(entry, confirmed: true) }
+    }
+
+    @Test("A journaled partial cache deletion is retryable without following external links")
+    func resumeCacheCleanup() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let legacy = try await fixture.legacyGame()
+        let outside = fixture.parent.appendingPathComponent("outside-save")
+        try Data("keep".utf8).write(to: outside)
+        try FileManager.default.createSymbolicLink(at: legacy.appendingPathComponent("external-link"), withDestinationURL: outside)
+        let store = try EnvironmentStore(root: fixture.layout.dataRoot)
+        let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { true })
+        let entry = try #require(try await maintenance.inspect().first(where: { $0.status == .obsolete }))
+        let ticket = legacy.deletingLastPathComponent().appendingPathComponent(".cleanup-Satisfactory.app.json")
+        try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "name": "Satisfactory.app", "device": entry.device, "inode": entry.inode]).write(to: ticket)
+        try FileManager.default.removeItem(at: legacy.appendingPathComponent("Contents/MacOS/Satisfactory"))
+        let pending = try #require(try await maintenance.inspect().first(where: { $0.status == .cleanupPending }))
+        try await maintenance.clean(pending, confirmed: true)
+        #expect(try Data(contentsOf: outside) == Data("keep".utf8))
+        #expect(!FileManager.default.fileExists(atPath: ticket.path))
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    @Test("Inspect real launcher caches without deleting anything", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_INSPECT_CACHES"] == "1"))
+    func inspectLiveCaches() async throws {
+        let maintenance = LauncherCacheMaintenance(store: try EnvironmentStore())
+        let entries = try await maintenance.inspect()
+        for entry in entries { print("Launcher cache: \(entry.id), \(entry.status.rawValue), logical bytes=\(entry.bytes ?? -1)") }
+        #expect(entries.filter { $0.id.hasSuffix("shared-pe-v2") }.allSatisfy { !$0.canClean })
+    }
+
     @Test("A component revision creates coherent new Steam/game PE caches and preserves rollback caches")
     func componentCaches() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
