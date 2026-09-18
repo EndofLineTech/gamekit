@@ -274,6 +274,18 @@ and the display-capture value was read back as enabled. A fresh Metal 3 session
 was launched for a final comparison using **only** the display-capture override
 and the default cursor-confinement implementation. This avoids retaining an
 unproven extra setting whose Accessibility permission was never confirmed.
-The minimal-configuration edge/Command-Tab result is pending. Private evidence
-is in `.build/helldivers-display-capture-focus-1.jsonl` and
+The user subsequently confirmed **"Working great the way it is now"** following
+the requested edge/Command-Tab recheck. The minimal cursor configuration is
+accepted for this Mac: fullscreen plus the game-specific display-capture value,
+with the default cursor handler and the Dock restored to bottom. Metal 3 remains
+the better-performing tested session backend; pipeline errors and full mission
+performance are separate unresolved findings.
+
+Private evidence is in `.build/helldivers-display-capture-focus-1.jsonl` and
 `.build/helldivers-display-capture-only-focus-1.jsonl`.
+
+The user also requested notch-safe **16:9** presentation because the camera notch
+covers part of the current fullscreen image. Backlog `gamekit-6q8` tracks true
+aspect ratio, letterboxing/scaling, Retina versus logical dimensions and mouse
+alignment while preserving the successful cursor behavior. No display-mode
+change was made as part of filing that backlog item.
