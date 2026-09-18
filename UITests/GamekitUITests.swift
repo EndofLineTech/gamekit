@@ -14,22 +14,24 @@ final class GamekitUITests: XCTestCase {
         revealRecoveryButton(metal, in: app)
         metal.click()
         let selected = app.staticTexts["selected-graphics-backend"]
-        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Metal 3 compatibility"), object: selected)
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
         let store = try EnvironmentStore(root: root)
         let layout = try await RuntimeSettingsStore(store: store).layout()
         XCTAssertEqual(layout.graphicsBackend, .metal3)
-        XCTAssertTrue(app.staticTexts["graphics-backend-scope"].label.contains("all games"))
+        XCTAssertTrue((app.staticTexts["graphics-backend-scope"].value as? String ?? "").contains("all games"))
         app.terminate()
         app.launch()
         XCTAssertTrue(selected.waitForExistence(timeout: 20))
-        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Metal 3 compatibility"), object: selected)
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 15), .completed)
         let automatic = app.buttons["use-automatic-graphics"]
         revealRecoveryButton(automatic, in: app)
         automatic.click()
-        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Automatic"), object: selected)
+        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Automatic"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
+        let automaticLayout = try await RuntimeSettingsStore(store: store).layout()
+        XCTAssertEqual(automaticLayout.graphicsBackend, .automatic)
     }
 
     func testGraphicsBackendControlsAreLockedByRecordedSession() async throws {
