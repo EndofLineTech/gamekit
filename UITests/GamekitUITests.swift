@@ -3,6 +3,51 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testGraphicsBackendPersistsThroughAppRestartAndCanRevert() async throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        let metal = app.buttons["use-metal3-graphics"]
+        XCTAssertTrue(metal.waitForExistence(timeout: 20))
+        revealRecoveryButton(metal, in: app)
+        metal.click()
+        let selected = app.staticTexts["selected-graphics-backend"]
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
+        let store = try EnvironmentStore(root: root)
+        let layout = try await RuntimeSettingsStore(store: store).layout()
+        XCTAssertEqual(layout.graphicsBackend, .metal3)
+        XCTAssertTrue((app.staticTexts["graphics-backend-scope"].value as? String ?? "").contains("all games"))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(selected.waitForExistence(timeout: 20))
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 15), .completed)
+        let automatic = app.buttons["use-automatic-graphics"]
+        revealRecoveryButton(automatic, in: app)
+        automatic.click()
+        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Automatic"), object: selected)
+        XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
+        let automaticLayout = try await RuntimeSettingsStore(store: store).layout()
+        XCTAssertEqual(automaticLayout.graphicsBackend, .automatic)
+    }
+
+    func testGraphicsBackendControlsAreLockedByRecordedSession() async throws {
+        let root = try temporaryRoot()
+        let directory = root.appendingPathComponent("Metadata/Lifecycle")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: directory.appendingPathComponent("steam.json"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["use-metal3-graphics"].isEnabled)
+        XCTAssertFalse(app.buttons["use-automatic-graphics"].isEnabled)
+    }
+
     func testInstalledGamesRefreshAndUnavailableLaunch() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

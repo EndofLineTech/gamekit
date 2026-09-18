@@ -4,6 +4,88 @@ import Testing
 
 @Suite("Local runtime selection")
 struct RuntimeSettingsTests {
+    @Test("Backend selection survives reopen and runtime changes without changing prefix or caches")
+    func graphicsPersistence() async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let settings = RuntimeSettingsStore(store: store)
+        let bundle = parent.appendingPathComponent("Custom.app")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let record = try await store.create(EnvironmentRecord(id: EnvironmentID("steam"), name: "Preserved Steam",
+            runtime: RuntimeProfile.sikarugir.identity))
+        let prefix = store.prefixURL(for: record.id)
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        let marker = prefix.appendingPathComponent("game-settings")
+        try Data("preserve cursor settings".utf8).write(to: marker)
+        try await settings.select(bundle, revision: .textInput1)
+        let before = try await settings.layout()
+        try await settings.selectGraphicsBackend(.metal3)
+        let reopened = RuntimeSettingsStore(store: store)
+        let saved = try await reopened.layout()
+        #expect(saved.graphicsBackend == .metal3)
+        #expect(saved.environment()["D3DM_MTL4"] == "0")
+        #expect(saved.bundle == before.bundle && saved.profile.revision == .textInput1)
+        #expect(saved.dataRoot == before.dataRoot && saved.steamApplicationBundle == before.steamApplicationBundle)
+        try await reopened.select(nil, revision: .original)
+        #expect(try await reopened.layout().graphicsBackend == .metal3)
+        try await reopened.selectGraphicsBackend(.automatic)
+        #expect(try await reopened.layout().environment()["D3DM_MTL4"] == nil)
+        #expect(try await reopened.layout().bundle == RuntimeLayout(dataRoot: store.root).bundle)
+        #expect(try await store.load(record.id) == record)
+        #expect(try Data(contentsOf: marker) == Data("preserve cursor settings".utf8))
+    }
+
+    @Test("An execution lease rejects backend changes and preserves the saved selection")
+    func backendExecutionLock() async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let record = try await store.create(EnvironmentRecord(id: EnvironmentID("steam"), name: "Steam"))
+        try FileManager.default.createDirectory(at: store.prefixURL(for: record.id), withIntermediateDirectories: true)
+        let settings = RuntimeSettingsStore(store: store)
+        try await settings.selectGraphicsBackend(.automatic)
+        let path = store.root.appendingPathComponent("Metadata/RuntimeSelection.json")
+        let before = try Data(contentsOf: path)
+        let lease = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(lease) {} }
+        await #expect(throws: EnvironmentStoreError.busy) { try await settings.selectGraphicsBackend(.metal3) }
+        #expect(try Data(contentsOf: path) == before)
+    }
+
+    @Test("Legacy selections default to automatic graphics", arguments: [
+        #"{"schemaVersion":1}"#,
+        #"{"schemaVersion":2,"revision":"text-input-1"}"#
+    ])
+    func legacyGraphics(document: String) async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let metadata = store.root.appendingPathComponent("Metadata")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try Data(document.utf8).write(to: metadata.appendingPathComponent("RuntimeSelection.json"))
+        #expect(try await RuntimeSettingsStore(store: store).layout().graphicsBackend == .automatic)
+    }
+
+    @Test("Unknown or incomplete backend selections are rejected", arguments: [
+        #"{"schemaVersion":3,"revision":"text-input-1","graphicsBackend":"future"}"#,
+        #"{"schemaVersion":3,"revision":"text-input-1"}"#,
+        #"{"schemaVersion":2,"revision":"text-input-1","graphicsBackend":"metal3"}"#
+    ])
+    func invalidGraphics(document: String) async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let metadata = store.root.appendingPathComponent("Metadata")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try Data(document.utf8).write(to: metadata.appendingPathComponent("RuntimeSelection.json"))
+        await #expect(throws: (any Error).self) { try await RuntimeSettingsStore(store: store).layout() }
+    }
+
     @Test("Component revision selection persists and rolls back without migrating the prefix")
     func componentRevision() async throws {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -76,6 +158,7 @@ struct RuntimeSettingsTests {
         let settings = RuntimeSettingsStore(store: store)
         await #expect(throws: EnvironmentStoreError.busy) { try await settings.select(nil) }
         await #expect(throws: EnvironmentStoreError.busy) { try await settings.select(nil, revision: .textInput1) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await settings.selectGraphicsBackend(.metal3) }
     }
 
     @Test("A runtime selection symlink is refused without changing saved settings")
@@ -103,5 +186,6 @@ struct RuntimeSettingsTests {
         let settings = RuntimeSettingsStore(store: store)
         #expect(try await settings.isSelectionLocked())
         await #expect(throws: EnvironmentStoreError.busy) { try await settings.select(nil) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await settings.selectGraphicsBackend(.metal3) }
     }
 }

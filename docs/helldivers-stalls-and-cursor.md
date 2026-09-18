@@ -1,5 +1,10 @@
 # Helldivers recurring stalls and host cursor
 
+**Delivery update:** [persistent graphics-backend selection](persistent-graphics-backend.md)
+now makes the accepted Metal 3 choice available to normal app launches and fresh
+Steam sessions. The diagnostic sessions described below retain their historical
+scope.
+
 Investigation `gamekit-5pq`, September 17, 2026, on the managed text-input-1
 runtime and Helldivers build 24826606. Startup success is established; playable
 performance remains unresolved.

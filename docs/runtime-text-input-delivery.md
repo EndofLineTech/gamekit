@@ -1,5 +1,9 @@
 # Managed text-input runtime revision
 
+The [persistent graphics-backend control](persistent-graphics-backend.md) adds
+schema-3 backend selection alongside this component revision. Existing schema-1
+and schema-2 selections keep automatic graphics until explicitly changed.
+
 `gamekit-64o` delivers the [tested Helldivers backport](helldivers-text-input-backport.md)
 as the selectable **Gamekit text-input 1** component revision of the existing
 Sikarugir 10.0 revision 6 / D3DMetal 4.0b2 recipe.

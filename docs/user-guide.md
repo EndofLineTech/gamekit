@@ -56,6 +56,17 @@ bar shows the current stage, with no invented progress percentages.
 
 ## Everyday use
 
+### Graphics backend
+
+To retain the tested Helldivers Metal 3 configuration, save/exit games and
+**Stop Windows Steam**, then choose **Use Metal 3** under Setup and prerequisites.
+The saved choice applies to **all games in this managed Steam environment** and
+survives app and Steam restarts. **Automatic graphics** restores Apple's default
+backend using the same stopped-session flow. See
+[persistent graphics settings](persistent-graphics-backend.md) for scope and verification.
+
+### Steam controls
+
 - **Launch Windows Steam** (Command-L) starts one managed session. Repeated requests
   do not create a second session.
 - Quitting Gamekit leaves Steam open. Reopen Gamekit to recover status/control.

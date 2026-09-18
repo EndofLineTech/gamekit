@@ -8,12 +8,17 @@ private final class SteamLifecycleModel: ObservableObject {
     @Published var message: String?
     private var lifecycle: SteamLifecycle?
     private var selectedBundle: URL?
+    private var selectedRevision: RuntimeRevision?
+    private var selectedBackend: D3DMetalBackend?
     private func controller(layout: RuntimeLayout) throws -> SteamLifecycle {
-        if let lifecycle, selectedBundle == layout.bundle { return lifecycle }
+        if let lifecycle, selectedBundle == layout.bundle,
+           selectedRevision == layout.profile.revision, selectedBackend == layout.graphicsBackend { return lifecycle }
         let store = try EnvironmentStore(root: AppStorageLocations.metadata)
         let created = SteamLifecycle(store: store, layout: layout)
         lifecycle = created
         selectedBundle = layout.bundle
+        selectedRevision = layout.profile.revision
+        selectedBackend = layout.graphicsBackend
         return created
     }
     func refresh(setup: SetupModel) async {

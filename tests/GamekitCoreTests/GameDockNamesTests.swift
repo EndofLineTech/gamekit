@@ -13,7 +13,8 @@ struct GameDockNamesTests {
         let executable = URL(fileURLWithPath: try #require(env["GAMEKIT_WINE_DOCK_PROBE_PATH"]))
         let store = try EnvironmentStore()
         let selected = try await RuntimeSettingsStore(store: store).layout()
-        let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle, identityHelper: helper)
+        let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
+            identityHelper: helper, graphicsBackend: selected.graphicsBackend)
         let installation = try await store.installationLease()
         defer { withExtendedLifetime(installation) {} }
         let id = SteamInstallationRecipe.environmentID
@@ -44,7 +45,8 @@ struct GameDockNamesTests {
             if let (parent, name, identity) = probeBundle { try? parent.removeStagingDirectory(name, identity: identity) }
         }
         if env["GAMEKIT_DOCK_NAMED_LOADER_PROBE"] == "1" {
-            let probeLayout = RuntimeLayout(dataRoot: temporary, profile: selected.profile, bundle: selected.bundle)
+            let probeLayout = RuntimeLayout(dataRoot: temporary, profile: selected.profile, bundle: selected.bundle,
+                graphicsBackend: selected.graphicsBackend)
             let original = try await SteamApplicationBundle(layout: probeLayout).prepare()
             let bundle = original.deletingLastPathComponent().appendingPathComponent(name + ".app")
             try FileManager.default.moveItem(at: original, to: bundle)
