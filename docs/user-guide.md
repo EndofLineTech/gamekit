@@ -189,6 +189,24 @@ referenced by an unfinished recovery journal.
 
 ## Removal
 
+### Obsolete generated launchers
+
+Use **Show reset options… → Inspect launcher caches** to review game launcher
+caches. Verified pre-`shared-pe-v2` bundles are **obsolete**; numeric probe folders
+containing only their lock file are **empty**. Both have an explicit confirmed
+cleanup action. **retained** marks the current `shared-pe-v2` layout, while
+**protected** means provenance or content could not be verified. Steam launchers,
+source runtimes, installed games and external symlink targets are preserved.
+
+Stop managed Steam first. A saved session receipt, live launcher (including one
+using another prefix), incomplete process inspection, or concurrent setup blocks
+cleanup. Removal rechecks the selected directory's identity and the old format's
+manifest, application identity and pinned runtime hashes. A small cleanup ticket
+allows an interrupted deletion to appear as **cleanupPending** for explicit retry.
+Logical sizes do not predict freed disk space when files share storage.
+
+### Remove Gamekit
+
 Stop managed Steam, then quit Gamekit before removing its `.app` copy. Removing
 the app alone retains your runtime and Steam data. To remove the current prefix,
 use the confirmed clean reset before deleting the app. Older archives and logs

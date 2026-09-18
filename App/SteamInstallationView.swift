@@ -154,6 +154,8 @@ struct SteamInstallationView: View {
                     }
                     Divider()
                     RecoveryArchivesView()
+                    Divider()
+                    LauncherCachesView()
                 }
                 Text("Recipe 1 · Sikarugir 10.0 revision 6 · D3DMetal 4.0b2")
                     .font(.caption).foregroundStyle(.secondary)

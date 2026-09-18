@@ -146,4 +146,25 @@ public struct RuntimeProcessObserver: Sendable {
         }
         return .init(processes: processes, complete: complete)
     }
+
+    /// Cache retirement must also notice launchers running with an unfamiliar
+    /// prefix. Inspect executable identity only; do not collect arguments.
+    static func hasProcesses(in root: URL) -> Bool? {
+        let initial = gk_user_pids(nil, 0)
+        guard initial > 0 else { return nil }
+        var ids = [pid_t](repeating: 0, count: Int(initial) / MemoryLayout<pid_t>.stride + 128)
+        let capacity = ids.count * MemoryLayout<pid_t>.stride
+        let used = gk_user_pids(&ids, Int32(capacity))
+        guard used > 0 && used < capacity else { return nil }
+        for pid in ids.prefix(Int(used) / MemoryLayout<pid_t>.stride) where pid > 0 {
+            var identity = GKProcessIdentity()
+            let code = gk_identity(pid, &identity)
+            if code == ESRCH || code == ENOENT { continue }
+            guard code == 0 else { return nil }
+            if identity.zombie != 0 || identity.uid != getuid() { continue }
+            let path = withUnsafeBytes(of: identity.path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+            if Self.isWithin(path, root: root) { return true }
+        }
+        return false
+    }
 }
