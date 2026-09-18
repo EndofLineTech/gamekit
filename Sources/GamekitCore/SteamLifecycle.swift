@@ -125,6 +125,13 @@ public actor SteamLifecycle {
         guard rechecked == .stopped else {
             throw rechecked == .foreignActivity ? SteamLifecycleError.foreignActivity : .observationUnavailable
         }
+        if layout.profile.revision == .driverVersion1 && layout.hasGameIdentityHelper,
+           let game = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games.first(where: { $0.id == 553850 && $0.state == .ready }) {
+            // Prepare routing even when the user opens Steam first and starts
+            // Helldivers from its library rather than from Gamekit's tile.
+            _ = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
+            try Task.checkCancellation(); try lease.validate()
+        }
         let receipt = SteamLaunchReceipt(schemaVersion: 1, id: id, token: UUID(), device: lease.prefixIdentity.device,
             inode: lease.prefixIdentity.inode, runtime: layout.profile.identity)
         guard let directory = try receipts(create: true) else { throw EnvironmentStoreError.notFound }

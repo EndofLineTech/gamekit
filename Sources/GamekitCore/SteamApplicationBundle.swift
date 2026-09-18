@@ -25,6 +25,8 @@ struct SteamApplicationBundle: Sendable {
     static let identifier = "tech.endofline.gamekit.windows-steam"
     static let displayName = "Windows Steam"
     private var executableName: String { game?.filename ?? Self.displayName }
+    private var driverCompatibility: Bool { layout.profile.revision == .driverVersion1 && game?.appID == 553850 }
+    private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
     private var bundleName: String { executableName + ".app" }
     private var parentURL: URL {
         if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/shared-pe-v2") }
@@ -66,14 +68,15 @@ struct SteamApplicationBundle: Sendable {
         else { throw SteamApplicationError.invalidBundle }
         for (path, hash) in layout.profile.hashes {
             guard let copy = copiedPath(path) else { continue }
-            guard RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: hash) else { throw SteamApplicationError.invalidBundle }
+            let expected = driverCompatibility && path == dxgiRelative ? layout.profile.hashes[RuntimeProfile.driverShimRelative] : hash
+            guard let expected, RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: expected) else { throw SteamApplicationError.invalidBundle }
         }
         if game != nil && !legacyGameCache {
             guard let steam = try ManagedDirectory.openRoot(layout.steamApplicationBundle, create: false) else { throw SteamApplicationError.invalidBundle }
             for arch in ["x86_64-windows", "i386-windows"] {
                 if let source = try steam.directory("Contents")?.directory("lib")?.directory("wine")?.directory(arch) {
                     guard let target = try contents.directory("lib")?.directory("wine")?.directory(arch) else { throw SteamApplicationError.invalidBundle }
-                    try target.validateSharedFiles(from: source)
+                    try target.validateSharedFiles(from: source, privateRegularFiles: driverCompatibility && arch == "x86_64-windows" ? ["dxgi.dll"] : [])
                 }
             }
         }
@@ -129,6 +132,16 @@ struct SteamApplicationBundle: Sendable {
                     try shared.copyContents(from: images, shareRegularFiles: true)
                 }
             }
+        }
+        if driverCompatibility {
+            guard let shimHash = layout.profile.hashes[RuntimeProfile.driverShimRelative],
+                  RuntimeDetector.matches(layout.bundle.appendingPathComponent(RuntimeProfile.driverShimRelative), root: layout.bundle, hash: shimHash),
+                  let payload = try contents.directory("lib")?.directory("gamekit")?.read("helldivers-dxgi.dll"),
+                  let modules = try contents.directory("lib")?.directory("wine")?.directory("x86_64-windows")
+            else { throw SteamApplicationError.invalidRuntime }
+            // Remove only the newly staged hard link, never overwrite its inode.
+            try modules.removeRegularFile("dxgi.dll")
+            try modules.write(payload, to: "dxgi.dll", createOnly: true, beforeCommit: {})
         }
         try contents.moveDirectory("bin", to: contents, as: "MacOS")
         guard let executables = try contents.directory("MacOS") else { throw SteamApplicationError.invalidBundle }

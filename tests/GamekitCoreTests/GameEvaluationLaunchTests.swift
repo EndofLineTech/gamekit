@@ -20,7 +20,9 @@ struct GameEvaluationLaunchTests {
         let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil && !observeExisting ? 90 : 180
         try #require((15...maximumSeconds).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
-        let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1"
+        let tryAgainDriverWarning = env["GAMEKIT_E6_TRY_AGAIN_GPU_WARNING"] == "1"
+        try #require(!tryAgainDriverWarning || env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] != "1")
+        let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1" || tryAgainDriverWarning
         let passiveAfterWarning = env["GAMEKIT_E6_PASSIVE_AFTER_WARNING"] == "1"
         try #require(!passiveAfterWarning || (appID == 553850 && continueDriverWarning))
         let confirmEnglish = env["GAMEKIT_E6_CONFIRM_ENGLISH"] == "1"
@@ -51,11 +53,16 @@ struct GameEvaluationLaunchTests {
         try #require(!FileManager.default.fileExists(atPath: destination.path))
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         let experiment = try HelldiversTextInputExperiment.root()
+        let driverExperiment = try DriverVersionExperiment.root()
+        let verifyDriverWarning = driverExperiment != nil || env["GAMEKIT_E6_VERIFY_DRIVER_WARNING_ABSENT"] == "1"
+        try #require(!verifyDriverWarning || (appID == 553850 && !continueDriverWarning))
+        try #require(driverExperiment == nil || (experiment == nil && appID == 553850 && !continueDriverWarning))
         try #require(experiment == nil || appID == 553850)
-        let store = try EnvironmentStore(root: experiment?.appendingPathComponent("Gamekit") ?? EnvironmentStore.applicationSupportRoot)
+        let store = try EnvironmentStore(root: (driverExperiment ?? experiment)?.appendingPathComponent("Gamekit") ?? EnvironmentStore.applicationSupportRoot)
         let helper = package.appendingPathComponent("Contents/Frameworks/WineGameIdentity.dylib")
         let layout: RuntimeLayout
-        if let experiment { layout = HelldiversTextInputExperiment.layout(root: experiment, helper: helper) }
+        if let driverExperiment { layout = try DriverVersionExperiment.layout(root: driverExperiment, helper: helper) }
+        else if let experiment { layout = HelldiversTextInputExperiment.layout(root: experiment, helper: helper) }
         else {
             let selected = try await RuntimeSettingsStore(store: store).layout()
             layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
@@ -70,6 +77,10 @@ struct GameEvaluationLaunchTests {
         try #require(game.state == .ready)
         let initial = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
         try #require(initial.complete && (observeExisting || !initial.processes.contains { $0.role == .other }), "Close other managed games before the observation")
+        let warningSettings = env["GAMEKIT_E6_WARNING_SETTINGS"].map { URL(fileURLWithPath: $0) }
+        if let warningSettings {
+            try Data(contentsOf: warningSettings).write(to: destination.appendingPathComponent("settings-before.config"), options: .atomic)
+        }
         if observeExisting {
             try #require(try await lifecycle.status() == .running)
             let owned = Set(initial.processes.filter { $0.role == .other }.map(\.identity.pid))
@@ -80,8 +91,16 @@ struct GameEvaluationLaunchTests {
             try #require(names.contains(game.name) && Set(names).isDisjoint(with: otherNames), "Observe only the game just launched from Gamekit")
         }
         var activeSession: String?
+        var warningWatch: Task<[String], Never>?
 
         func cleanup() async throws {
+            warningWatch?.cancel()
+            if let warningWatch {
+                let observations = await warningWatch.value
+                try JSONEncoder().encode(observations).write(to: destination.appendingPathComponent("driver-warning-observations.json"), options: .atomic)
+                print("E6 driver trial warning observations at 100ms polling: \(observations.count)")
+                #expect(observations.isEmpty, "Driver warning appeared; trial did not suppress it")
+            }
             let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
             if snapshot.complete, let token = activeSession {
                 let pids = Set(snapshot.processes.filter { $0.role == .other && $0.sessionID == token }.map(\.identity.pid))
@@ -96,11 +115,40 @@ struct GameEvaluationLaunchTests {
             #expect(try await lifecycle.status() == .stopped)
             if quitWithSpace { #expect(result != .forced, "Normal game quit with a Space host must not need forced cleanup") }
             print("E6 cleanup: \(result); managed session stopped")
+            if let warningSettings {
+                try Data(contentsOf: warningSettings).write(to: destination.appendingPathComponent("settings-after.config"), options: .atomic)
+            }
         }
 
         do {
+            if verifyDriverWarning {
+                warningWatch = Task { @MainActor in
+                    var observations: [String] = []
+                    let limit = ContinuousClock.now.advanced(by: .seconds(seconds + 40))
+                    while !Task.isCancelled && ContinuousClock.now < limit {
+                        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+                        for window in windows {
+                            guard window[kCGWindowName as String] as? String == "GPU drivers are out of date",
+                                  let pid = window[kCGWindowOwnerPID as String] as? Int32,
+                                  NSRunningApplication(processIdentifier: pid)?.localizedName == game.name else { continue }
+                            if observations.count < 1200 { observations.append("\(Date().timeIntervalSince1970) pid=\(pid)") }
+                        }
+                        do { try await Task.sleep(for: .milliseconds(100)) } catch { break }
+                    }
+                    return observations
+                }
+            }
             print("E6 AppID=\(appID), build=\(game.buildID ?? "unknown"), observation=\(Int(seconds))s")
-            if !observeExisting { try await lifecycle.launchGame(appID: appID) }
+            if !observeExisting {
+                if let script = env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] {
+                    try #require(driverExperiment == nil && appID == 553850 && script.hasPrefix("/"))
+                    let pressed = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+                        arguments: [script, "launch-game-553850"], timeout: 40, outputLimit: 4096))
+                    print(pressed.stdoutText)
+                    try #require(pressed.termination == .exited(0))
+                    try await Task.sleep(for: .seconds(8))
+                } else { try await lifecycle.launchGame(appID: appID) }
+            }
             struct Receipt: Decodable { let token: UUID }
             let root = try #require(try ManagedDirectory.openRoot(store.root, create: false))
             let receiptData = try #require(try root.directory("Metadata")?.directory("Lifecycle")?.read("steam.json"))
@@ -121,7 +169,7 @@ struct GameEvaluationLaunchTests {
                         gamePIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular && $0.localizedName == game.name
                     })?.processIdentifier
                 }
-                if let foregroundPID, !(passiveAfterWarning && continuedDriverWarning) {
+                if let foregroundPID, !verifyDriverWarning, !(passiveAfterWarning && continuedDriverWarning) {
                     _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
                         arguments: ["-e", "tell application \"System Events\" to set frontmost of (first application process whose unix id is \(foregroundPID)) to true"],
                         timeout: 5, outputLimit: 1024))
@@ -146,14 +194,14 @@ struct GameEvaluationLaunchTests {
                             timeout: 5, outputLimit: 1024))
                         // Coordinates are relative to the exact observed Windows
                         // warning, excluding the screenshot's shadow padding.
-                        let point = CGPoint(x: bounds.minX + bounds.width * 0.806, y: bounds.minY + bounds.height * 0.866)
+                        let point = CGPoint(x: bounds.minX + bounds.width * (tryAgainDriverWarning ? 0.507 : 0.806), y: bounds.minY + bounds.height * 0.866)
                         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                         try await Task.sleep(for: .milliseconds(300))
                         CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                         try await Task.sleep(for: .milliseconds(150))
                         CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                         continuedDriverWarning = true
-                        print("E6 selected Continue on the exact Helldivers GPU-driver warning")
+                        print("E6 selected \(tryAgainDriverWarning ? "Try Again" : "Continue") once on the exact Helldivers GPU-driver warning")
                         try await Task.sleep(for: .seconds(1))
                     }
                 }
@@ -303,7 +351,7 @@ struct GameEvaluationLaunchTests {
                 print("E6 sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count), captured windows=\(captured)")
                 sample += 1
             } while ContinuousClock.now < deadline
-            try #require(!passiveAfterWarning || continuedDriverWarning, "Passive measurement must have reached the post-warning phase")
+            try #require(!(passiveAfterWarning || tryAgainDriverWarning) || continuedDriverWarning, "Requested warning action must have executed")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
         } catch {
             try await cleanup()
