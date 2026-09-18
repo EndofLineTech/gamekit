@@ -216,3 +216,49 @@ readback absent; reapply; duplicate application correctly refused; final
 readback `event-tap`. Each probe session stopped. The game comparison retains
 fullscreen and explicitly restarts the Metal 3 session to match the better
 graphics baseline. Gameplay and Command-Tab recovery results are pending.
+
+## Dock-edge reproduction and fullscreen display-capture comparison
+
+The user found that sustained downward mouse movement revealed the host cursor,
+and pause/resume hid it again. Effective Dock settings were bottom placement,
+autohide disabled. With explicit user permission, the Dock was temporarily moved
+to the left, leaving the other test settings intact. The user then reported
+that down/up/right were fine and **leftward** movement revealed the cursor.
+The trigger followed the Dock edge. The Dock was restored to bottom and verified
+with autohide still disabled.
+
+The previous native log shows an Accessibility authorization UI appearing;
+the user was unsure whether access had been granted. Therefore event-tap
+capture success is still unconfirmed, despite the registry setting being read
+back correctly. The Dock comparison identifies the edge interaction without
+establishing the exact capture/hide-state failure underneath it.
+
+[Wine's fullscreen handler](https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winemac.drv/cocoa_app.m)
+supports `CaptureDisplaysForFullscreen`: while active with a fullscreen window,
+it requests `CGCaptureAllDisplays()`. The next comparison sets only the
+following additional app-specific value, preserving the existing cursor option,
+Metal 3 request and fullscreen mode:
+
+```text
+HKCU\Software\Wine\AppDefaults\helldivers2.exe\Mac Driver
+CaptureDisplaysForFullscreen = REG_SZ "y"
+```
+
+The narrow registry helper now also supports `query-display`, `capture-display`
+and `restore-display`. It retains the same no-overwrite and guarded rollback
+rules. Actual checks passed: original display override absent; apply/readback;
+duplicate application refused; restore to absent; sibling cursor override still
+`event-tap`; reapply display capture. This establishes setting control, not the
+result of the macOS display-capture request.
+
+```bash
+GAMEKIT_CURSOR_OVERRIDE=capture-display \
+GAMEKIT_CURSOR_PROBE_PATH="$PWD/.build/helldivers-cursor-override.exe" \
+GAMEKIT_CURSOR_EXPECT=enabled swift test --filter HelldiversCursorTests
+```
+
+Use `restore-display` with expected result `absent` to undo just this value while
+the prefix is stopped. The private focus observer records the public display
+shield-window ID alongside foreground-game pointer coordinates. The older
+`CGDisplayIsCaptured` query is unsupported by this SDK and is not used.
+Gameplay/Dock-edge and Command-Tab behavior with display capture remain pending.
