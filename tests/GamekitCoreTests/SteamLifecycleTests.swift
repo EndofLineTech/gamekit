@@ -11,12 +11,19 @@ private actor LifecycleFixtureRuntime {
     var orphan = false
     var signalled = false
     var commands: [[String]] = []
+    var observationScript: [Bool] = []
+    var shutdownScript: [Bool] = []
+    var observations = 0
+    func observeCompleteness(_ values: [Bool]) { observationScript = values; observations = 0 }
+    func afterShutdownCompleteness(_ values: [Bool]) { shutdownScript = values }
     func foreign() { token = "foreign" }
     func refuseGraceful() { graceful = false }
     func leaveOrphan() { graceful = false; orphan = true }
     func handoffGap() { token = nil }
     func snapshot() -> RuntimeProcessSnapshot {
-        .init(processes: token.map { [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: $0)] } ?? [], complete: true)
+        observations += 1
+        let complete = observationScript.isEmpty ? true : observationScript.removeFirst()
+        return .init(processes: token.map { [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: $0)] } ?? [], complete: complete)
     }
     func spawn(_ request: CommandRequest) {
         launches += 1; token = request.environment["GAMEKIT_SESSION_ID"]
@@ -29,7 +36,7 @@ private actor LifecycleFixtureRuntime {
         #expect(prefix != nil && request.environment["WINEPREFIX"] == prefix)
         #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
         if request.arguments == ["-k"] { forced = true; if !orphan { token = nil } }
-        else if request.arguments.last == "-shutdown", graceful { token = nil }
+        else if request.arguments.last == "-shutdown", graceful { token = nil; observationScript = shutdownScript }
         return try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/true")))
     }
     var driver: SteamLifecycleDriver {
@@ -59,6 +66,129 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Stop retries a transient incomplete inventory before control and after graceful exit", arguments: [false, true])
+    func transientShutdownObservation(afterShutdown: Bool) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        if afterShutdown { await runtime.afterShutdownCompleteness([false, true]) }
+        else { await runtime.observeCompleteness([false, true]) }
+        #expect(try await lifecycle.stop() == .graceful)
+        #expect(await runtime.commands.count == 1)
+        #expect(!(await runtime.forced))
+        #expect(!(await runtime.signalled))
+        #expect(!(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked()))
+    }
+
+    @Test("Persistent incomplete shutdown observations retain ownership and never escalate", arguments: [false, true])
+    func unavailableShutdownObservation(afterShutdown: Bool) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        if afterShutdown { await runtime.afterShutdownCompleteness(Array(repeating: false, count: 10)) }
+        else { await runtime.observeCompleteness(Array(repeating: false, count: 10)) }
+        await #expect(throws: SteamLifecycleError.observationUnavailable) { try await lifecycle.stop() }
+        #expect(await runtime.commands.count == (afterShutdown ? 1 : 0))
+        #expect(!(await runtime.forced))
+        #expect(!(await runtime.signalled))
+        #expect(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked())
+        if !afterShutdown { #expect(await runtime.observations == 4) }
+    }
+
+    @Test("An incomplete snapshot with a foreign process is refused immediately")
+    func incompleteForeignShutdown() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        await runtime.foreign()
+        await runtime.observeCompleteness([false, true])
+        await #expect(throws: SteamLifecycleError.foreignActivity) { try await lifecycle.stop() }
+        #expect(await runtime.observations == 1)
+        #expect(await runtime.commands.isEmpty)
+        #expect(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked())
+    }
+
+    @Test("One observation retry budget covers the entire Stop operation")
+    func shutdownRetryBudget() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        await runtime.observeCompleteness([false, true, false, true])
+        await runtime.afterShutdownCompleteness([false, false, true])
+        await #expect(throws: SteamLifecycleError.observationUnavailable) { try await lifecycle.stop() }
+        #expect(await runtime.commands.count == 1)
+        #expect(await runtime.observations == 6)
+        #expect(!(await runtime.forced))
+        #expect(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked())
+    }
+
+    @Test("A gap restarts idle confirmation rather than counting unobserved time as quiet")
+    func idleObservationGap() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver, gracefulTimeout: 0.05)
+        _ = try await lifecycle.launch()
+        await runtime.handoffGap()
+        await runtime.observeCompleteness([true, false, true, true])
+        #expect(try await lifecycle.stop() == .alreadyStopped)
+        #expect(await runtime.observations == 4)
+        #expect(await runtime.commands.isEmpty)
+    }
+
+    @Test("Receiptless Stop retries inspection but never adopts a process")
+    func receiptlessObservationGap() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        await runtime.observeCompleteness([false, true])
+        #expect(try await lifecycle.stop() == .alreadyStopped)
+        #expect(await runtime.observations == 2)
+        await runtime.foreign()
+        await runtime.observeCompleteness([false, true])
+        await #expect(throws: SteamLifecycleError.foreignActivity) { try await lifecycle.stop() }
+        #expect(await runtime.observations == 1)
+        #expect(await runtime.commands.isEmpty)
+    }
+
+    @Test("Cancelling a Stop retry keeps its receipt and sends no shutdown command")
+    func cancelledObservationRetry() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        await runtime.observeCompleteness(Array(repeating: false, count: 10))
+        let operation = Task { try await lifecycle.stop() }
+        while await runtime.observations == 0 { try await Task.sleep(for: .milliseconds(1)) }
+        operation.cancel()
+        await #expect(throws: CancellationError.self) { try await operation.value }
+        #expect(await runtime.commands.isEmpty)
+        #expect(try await RuntimeSettingsStore(store: fixture.store).isSelectionLocked())
+    }
+
+    @Test("A prefix replaced during an incomplete inventory cannot be retried or controlled")
+    func changedScopeDuringObservation() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let original = await runtime.driver
+        _ = try await SteamLifecycle(store: fixture.store, driver: original).launch()
+        let savedPrefix = fixture.parent.appendingPathComponent("old-prefix")
+        let driver = SteamLifecycleDriver(preflight: original.preflight, observe: { _, prefix in
+            do {
+                try FileManager.default.moveItem(at: prefix, to: savedPrefix)
+                try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false)
+            } catch { Issue.record(error) }
+            return .init(processes: [], complete: false)
+        }, spawn: original.spawn, execute: original.execute)
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        await #expect(throws: EnvironmentStoreError.unsafePath) { try await lifecycle.stop() }
+        #expect(await runtime.commands.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: fixture.store.root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     @Test("Game launch starts scoped Steam once and revalidates installation before every request")
     func launchInstalledGame() async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }
@@ -233,21 +363,30 @@ struct SteamLifecycleTests {
     @Test("Real managed Steam survives controller replacement and repeats launch/stop", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_LIFECYCLE_SMOKE"] == "1"))
     func liveSteamLifecycle() async throws {
         let store = try EnvironmentStore()
-        try #require(await store.load(SteamInstallationRecipe.environmentID)?.installation == .installed)
+        let record = try #require(await store.load(SteamInstallationRecipe.environmentID))
+        try #require(record.installation == .installed)
+        let layout = try await RuntimeSettingsStore(store: store).layout()
+        let initial = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: record.id), layout: layout)
+        try #require(initial.complete && initial.processes.isEmpty, "Close managed Steam and games before this live smoke test")
         for cycle in 1...3 {
-            let lifecycle = SteamLifecycle(store: store, layout: RuntimeLayout(dataRoot: store.root))
-            _ = try await lifecycle.launch()
-            var state = try await lifecycle.status()
-            for _ in 0..<120 where state != .running {
-                try await Task.sleep(for: .milliseconds(250)); state = try await lifecycle.status()
+            let lifecycle = SteamLifecycle(store: store, layout: layout)
+            do {
+                _ = try await lifecycle.launch()
+                var state = try await lifecycle.status()
+                for _ in 0..<120 where state != .running {
+                    try await Task.sleep(for: .milliseconds(250)); state = try await lifecycle.status()
+                }
+                #expect(state == .running)
+                try await Task.sleep(for: .seconds(5))
+                let reopened = SteamLifecycle(store: store, layout: layout)
+                #expect(try await reopened.status() == .running)
+                let stopped = try await reopened.stop()
+                #expect(try await reopened.status() == .stopped)
+                print("Live lifecycle cycle \(cycle): \(stopped), stopped")
+            } catch {
+                _ = try await lifecycle.stop()
+                throw error
             }
-            #expect(state == .running)
-            try await Task.sleep(for: .seconds(5))
-            let reopened = SteamLifecycle(store: store, layout: RuntimeLayout(dataRoot: store.root))
-            #expect(try await reopened.status() == .running)
-            let stopped = try await reopened.stop()
-            #expect(try await reopened.status() == .stopped)
-            print("Live lifecycle cycle \(cycle): \(stopped), stopped")
         }
     }
 }
