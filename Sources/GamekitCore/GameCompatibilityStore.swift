@@ -1,6 +1,6 @@
 import Foundation
 
-public enum GameCompatibilityError: Error, Equatable { case unsupportedGame, unsupportedRegistry, unsupportedPresentation }
+public enum GameCompatibilityError: Error, Equatable { case unsupportedGame, unsupportedRegistry, unsupportedPresentation, driverRuntimeRequired }
 public enum GameCaptureOverride: String, CaseIterable, Sendable {
     case inherit, enabled, disabled
     public var title: String {
@@ -17,7 +17,29 @@ public struct GameCompatibilitySnapshot: Sendable {
     public let graphicsBackend: D3DMetalBackend
     public let sessionLocked: Bool
     public let fullscreenSpace: Bool
+    public let driverCompatibility: Bool
+    public let driverCompatibilityAvailable: Bool
     public var effectiveCapture: Bool { capture == .enabled || (capture == .inherit && inheritedCapture) }
+}
+
+struct GameCompatibilityPreferences: Codable {
+    var schemaVersion = 1
+    var driverVersions: [String: Bool] = [:]
+
+    static func read(root: URL) throws -> Self {
+        guard let metadata = try ManagedDirectory.openRoot(root, create: false)?.directory("Metadata"),
+              let data = try metadata.read("GameCompatibility.json") else { return .init() }
+        let preferences = try JSONDecoder().decode(Self.self, from: data)
+        guard preferences.schemaVersion == 1, preferences.driverVersions.keys.allSatisfy({ $0 == "553850" })
+        else { throw GameCompatibilityError.unsupportedPresentation }
+        return preferences
+    }
+
+    func driverEnabled(appID: UInt32, revision: RuntimeRevision) -> Bool {
+        // Preserve the already accepted behavior when upgrading driver-version-1
+        // from the release that had no per-game preference file.
+        appID == 553850 && revision == .driverVersion1 && (driverVersions[String(appID)] ?? true)
+    }
 }
 
 struct GamePresentationPreferences: Codable {
@@ -127,7 +149,9 @@ public actor GameCompatibilityStore {
         let registry = try GameCaptureRegistry(data)
         return try .init(capture: registry.capture, inheritedCapture: registry.inheritedCapture,
                          graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
-                         fullscreenSpace: GamePresentationPreferences.read(root: store.root).fullscreenSpaces["553850"] ?? false)
+                         fullscreenSpace: GamePresentationPreferences.read(root: store.root).fullscreenSpaces["553850"] ?? false,
+                         driverCompatibility: GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: 553850, revision: layout.profile.revision),
+                         driverCompatibilityAvailable: layout.profile.revision == .driverVersion1)
     }
     public func inspect(appID: UInt32) async throws -> GameCompatibilitySnapshot {
         let installation = try await store.installationLease()
@@ -135,6 +159,32 @@ public actor GameCompatibilityStore {
         let record = try await record(appID)
         let settings = RuntimeSettingsStore(store: store)
         return try await snapshot(registry(prefix(record)), layout: settings.layout(), locked: settings.isSelectionLocked())
+    }
+
+    @discardableResult public func setDriverCompatibility(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await record(appID)
+        let settings = RuntimeSettingsStore(store: store)
+        guard !(try await settings.isSelectionLocked()) else { throw EnvironmentStoreError.busy }
+        let execution = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(execution) {} }
+        let selected = try await settings.layout()
+        guard !enabled || selected.profile.revision == .driverVersion1 else { throw GameCompatibilityError.driverRuntimeRequired }
+        for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
+            let observed = await observe(record, execution.prefix, layout)
+            guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
+            guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
+        }
+        try execution.validate(); try Task.checkCancellation()
+        _ = try snapshot(registry(prefix(record)), layout: selected, locked: false)
+        var preferences = try GameCompatibilityPreferences.read(root: store.root)
+        preferences.driverVersions[String(appID)] = enabled
+        guard let metadata = try ManagedDirectory.openRoot(store.root, create: false)?.directory("Metadata") else { throw EnvironmentStoreError.notFound }
+        try metadata.withWriteLock {
+            try metadata.write(JSONEncoder().encode(preferences), to: "GameCompatibility.json", createOnly: false, beforeCommit: { try execution.validate() })
+        }
+        return try snapshot(registry(prefix(record)), layout: selected, locked: false)
     }
     @discardableResult public func setCapture(_ capture: GameCaptureOverride, appID: UInt32) async throws -> GameCompatibilitySnapshot {
         let installation = try await store.installationLease()

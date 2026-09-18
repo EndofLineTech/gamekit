@@ -46,6 +46,73 @@ private struct CompatibilityFixture {
 
 @Suite("Per-game compatibility settings")
 struct GameCompatibilityTests {
+    @Test("Per-game driver toggle changes the real query and restores the user's choice",
+          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_GAME_DRIVER_ACCEPTANCE"] == "1"))
+    func liveDriverPreference() async throws {
+        let probe = try #require(ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_PROBE_PATH"])
+        let store = try EnvironmentStore()
+        let layout = try await RuntimeSettingsStore(store: store).layout()
+        try #require(layout.profile.revision == .driverVersion1)
+        let settings = GameCompatibilityStore(store: store)
+        let initial = try await settings.inspect(appID: 553850)
+        let selection = try Data(contentsOf: store.root.appendingPathComponent("Metadata/RuntimeSelection.json"))
+        let prefixDLL = store.prefixURL(for: SteamInstallationRecipe.environmentID).appendingPathComponent("drive_c/windows/system32/dxgi.dll")
+        let dll = try Data(contentsOf: prefixDLL)
+        do {
+            for enabled in [false, true] {
+                let saved = try await settings.setDriverCompatibility(enabled, appID: 553850)
+                #expect(saved.driverCompatibility == enabled)
+                let session = try await RuntimeSession.startGameProbe(store: store, id: SteamInstallationRecipe.environmentID,
+                    layout: layout, game: .init(appID: 553850, name: "HELLDIVERS™ 2"), arguments: [probe, enabled ? "substituted" : "baseline"])
+                let result = await session.command.result()
+                print("Per-game driver enabled=\(enabled): \(result.stdoutText)")
+                _ = try await session.stop()
+                try #require(result.termination == .exited(0), "\(result.stderrText)")
+                #expect(try Data(contentsOf: prefixDLL) == dll)
+                #expect(try Data(contentsOf: store.root.appendingPathComponent("Metadata/RuntimeSelection.json")) == selection)
+            }
+        } catch {
+            _ = try await settings.setDriverCompatibility(initial.driverCompatibility, appID: 553850)
+            throw error
+        }
+        _ = try await settings.setDriverCompatibility(initial.driverCompatibility, appID: 553850)
+    }
+    @Test("Driver compatibility is a saved per-game choice independent of runtime selection")
+    func driverPreference() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let runtime = RuntimeSettingsStore(store: fixture.store)
+        try await runtime.select(nil, revision: .driverVersion1, graphicsBackend: .metal3)
+        let selection = try Data(contentsOf: fixture.store.root.appendingPathComponent("Metadata/RuntimeSelection.json"))
+        let settings = fixture.settings()
+        let initial = try await settings.inspect(appID: 553850)
+        #expect(initial.driverCompatibilityAvailable && initial.driverCompatibility)
+        let disabled = try await settings.setDriverCompatibility(false, appID: 553850)
+        #expect(!disabled.driverCompatibility)
+        #expect(try await fixture.settings().inspect(appID: 553850).driverCompatibility == false)
+        #expect(try Data(contentsOf: fixture.store.root.appendingPathComponent("Metadata/RuntimeSelection.json")) == selection)
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+        _ = try await settings.setFullscreenSpace(true, appID: 553850)
+        let enabled = try await settings.setDriverCompatibility(true, appID: 553850)
+        #expect(enabled.driverCompatibility && enabled.fullscreenSpace && enabled.capture == .disabled)
+    }
+
+    @Test("Driver preference refuses active sessions, unsupported games and unsupported runtimes")
+    func driverPreferenceGuards() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        await #expect(throws: GameCompatibilityError.driverRuntimeRequired) {
+            try await fixture.settings().setDriverCompatibility(true, appID: 553850)
+        }
+        try await RuntimeSettingsStore(store: fixture.store).select(nil, revision: .driverVersion1)
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setDriverCompatibility(false, appID: 553850) }
+        await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setDriverCompatibility(false, appID: 553850) }
+        await #expect(throws: GameCompatibilityError.unsupportedGame) { try await fixture.settings().setDriverCompatibility(true, appID: 413150) }
+        let preferences = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
+        for invalid in [#"{"schemaVersion":9,"driverVersions":{}}"#, #"{"schemaVersion":1,"driverVersions":{"553850":1}}"#, #"{"schemaVersion":1,"driverVersions":{"413150":true}}"#] {
+            try Data(invalid.utf8).write(to: preferences)
+            await #expect(throws: (any Error).self) { try await fixture.settings().setDriverCompatibility(false, appID: 553850) }
+            #expect(try String(contentsOf: preferences, encoding: .utf8) == invalid)
+        }
+    }
     @Test("Explicit live fullscreen Space selection through the product store", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_SPACE_SETTING"] != nil))
     func liveSpaceSetting() async throws {
         let requested = try #require(ProcessInfo.processInfo.environment["GAMEKIT_SPACE_SETTING"])
@@ -166,6 +233,7 @@ struct GameCompatibilityTests {
         try Data("{}".utf8).write(to: lifecycle.appendingPathComponent("steam.json"))
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setCapture(.enabled, appID: 553850) }
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setFullscreenSpace(true, appID: 553850) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setDriverCompatibility(false, appID: 553850) }
         #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
     }
 

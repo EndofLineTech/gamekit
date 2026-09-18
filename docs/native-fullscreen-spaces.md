@@ -6,7 +6,7 @@ retains the full 1800×1169 game area, including the notch-height region.
 
 ## Using the feature
 
-Stop Windows Steam, open Helldivers' **Compatibility settings…**, and choose
+Stop Windows Steam, open the **gear beside Helldivers' Play button**, and choose
 **Use fullscreen Space**. Keep **Fullscreen** selected inside the game. A fresh
 launch creates the Space without changing the game resolution or capture override.
 Choose **Use desktop fullscreen** while stopped to restore the original path.

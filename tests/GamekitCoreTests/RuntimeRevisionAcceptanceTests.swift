@@ -35,7 +35,8 @@ struct RuntimeRevisionAcceptanceTests {
         }
         do {
             let driver = try await select(.driverVersion1)
-            try await inspect(driver, appID: 553850, expected: "substituted")
+            let enabled = try GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: 553850, revision: driver.profile.revision)
+            try await inspect(driver, appID: 553850, expected: enabled ? "substituted" : "baseline")
             try await inspect(driver, appID: 999998, expected: "baseline")
             let rollback = try await select(.textInput1, bundle: old.bundle)
             try await inspect(rollback, appID: 553850, expected: "baseline")

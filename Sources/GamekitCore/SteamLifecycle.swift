@@ -129,7 +129,7 @@ public actor SteamLifecycle {
            let game = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games.first(where: { $0.id == 553850 && $0.state == .ready }) {
             // Prepare routing even when the user opens Steam first and starts
             // Helldivers from its library rather than from Gamekit's tile.
-            _ = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
+            _ = try await SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
             try Task.checkCancellation(); try lease.validate()
         }
         let receipt = SteamLaunchReceipt(schemaVersion: 1, id: id, token: UUID(), device: lease.prefixIdentity.device,
@@ -183,7 +183,7 @@ public actor SteamLifecycle {
         guard let game = try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
             .games.first(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
         if layout.hasGameIdentityHelper {
-            _ = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
+            _ = try await SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
         }
         _ = try await launch()
         guard !busy else { throw EnvironmentStoreError.busy }
@@ -219,7 +219,7 @@ public actor SteamLifecycle {
         let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games
         var loaders: [String: String] = [:]
         for game in games {
-            let bundle = SteamApplicationBundle(layout: layout, game: .init(appID: game.id, name: game.name))
+            let bundle = try SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name))
             if FileManager.default.fileExists(atPath: bundle.bundleURL.path) {
                 try bundle.validate(bundle.bundleURL)
                 loaders[String(game.id)] = bundle.executable.path

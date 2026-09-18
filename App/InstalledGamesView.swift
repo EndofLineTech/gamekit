@@ -92,28 +92,38 @@ struct InstalledGamesView: View {
                         .foregroundStyle(.secondary).accessibilityIdentifier("games-empty")
                 }
                 ForEach(model.games) { game in
-                    Button { model.launch(game, setup: setup, diagnostics: diagnostics) } label: {
-                        HStack(spacing: 12) {
-                            GameArtwork(game: game)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(game.name).font(.headline).lineLimit(2)
-                                Text(status(game)).font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Button { model.launch(game, setup: setup, diagnostics: diagnostics) } label: {
+                            HStack(spacing: 12) {
+                                GameArtwork(game: game)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(game.name).font(.headline).lineLimit(2)
+                                    Text(status(game)).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "play.circle.fill").font(.title)
                             }
-                            Spacer()
-                            Image(systemName: "play.circle.fill").font(.title)
+                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-                        .contentShape(RoundedRectangle(cornerRadius: 10))
+                        .buttonStyle(.plain)
+                        .disabled(game.state != .ready || !(setup.actions.launch || setup.actions.show))
+                        .accessibilityLabel("Launch \(game.name)")
+                        .accessibilityValue(status(game))
+                        .accessibilityIdentifier("launch-game-\(game.id)")
+                        .help(game.state == .ready ? "Launch through managed Windows Steam" : "Finish installation or updates in Windows Steam")
+                        Button { compatibilityGame = game } label: {
+                            Image(systemName: "gearshape").font(.title2).frame(width: 40, height: 40)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(setup.isBusy)
+                        .accessibilityLabel("Compatibility settings for \(game.name)")
+                        .accessibilityIdentifier("game-compatibility-\(game.id)")
+                        .help("Compatibility settings for \(game.name)")
+                        .padding(.trailing, 10)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(game.state != .ready || !(setup.actions.launch || setup.actions.show))
-                    .accessibilityLabel("Launch \(game.name)")
-                    .accessibilityValue(status(game))
-                    .accessibilityIdentifier("launch-game-\(game.id)")
-                    .help(game.state == .ready ? "Launch through managed Windows Steam" : "Finish installation or updates in Windows Steam")
-                    Button("Compatibility settings…") { compatibilityGame = game }
-                        .disabled(setup.isBusy).accessibilityIdentifier("game-compatibility-\(game.id)")
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 }
                 if let warning = model.warning { Text(warning).font(.callout).foregroundStyle(.orange) }
                 if let message = model.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }

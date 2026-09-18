@@ -18,10 +18,21 @@ struct GameCompatibilityView: View {
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             if GameCompatibilityStore.supports(game.id) {
-                Text("Fullscreen display capture — this game only").font(.headline)
-                Text("Validated for Helldivers 2 to prevent Dock-edge cursor exposure. Select Fullscreen inside the game; this option does not change the game's resolution or create a macOS Space.")
-                    .font(.caption)
                 if let snapshot {
+                    Text("Driver version compatibility — this game only").font(.headline)
+                    Toggle("Avoid the virtual-GPU driver warning", isOn: Binding(
+                        get: { snapshot.driverCompatibility },
+                        set: { run(driver: $0) }))
+                        .accessibilityIdentifier("game-driver-compatibility")
+                        .disabled(setup.isBusy || snapshot.sessionLocked || !snapshot.driverCompatibilityAvailable || !setup.actions.reset)
+                    Text(snapshot.driverCompatibilityAvailable
+                         ? "Reports compatibility version 35.0.15.6094 to Helldivers instead of the invalid all-65535 value. This is not an actual driver update. Steam and other games are unaffected."
+                         : "Requires the updated runtime. Choose Use updated runtime under Setup and prerequisites, then return to this game's settings.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Divider()
+                    Text("Fullscreen display capture — this game only").font(.headline)
+                    Text("Validated for Helldivers 2 to prevent Dock-edge cursor exposure. Select Fullscreen inside the game; this option does not change the game's resolution or create a macOS Space.")
+                        .font(.caption)
                     Text("\(snapshot.capture.title) · Effective: \(snapshot.effectiveCapture ? "enabled" : "disabled")")
                         .accessibilityIdentifier("game-capture-setting")
                     Text("Inherited Wine setting: \(snapshot.inheritedCapture ? "enabled" : "disabled"). These are saved settings; changes apply at the next launch.").font(.caption)
@@ -61,13 +72,16 @@ struct GameCompatibilityView: View {
         }
     }
 
-    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil) {
-        guard let token = setup.begin(capture == nil && space == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
+    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil) {
+        guard let token = setup.begin(capture == nil && space == nil && driver == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
             do {
                 let settings = GameCompatibilityStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
-                if let space {
+                if let driver {
+                    snapshot = try await settings.setDriverCompatibility(driver, appID: game.id)
+                    status = "Saved and verified. Applies when the game next launches."
+                } else if let space {
                     snapshot = try await settings.setFullscreenSpace(space, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else if let capture {
