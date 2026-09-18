@@ -239,6 +239,29 @@ public actor SteamLifecycle {
         try publishGameNames(record: record, lease: lease, receipt: receipt)
     }
 
+    /// Shutdown can race an exiting process between the observer's identity
+    /// reads. Retry observation only, never act on a partial inventory. The
+    /// budget is shared by the whole Stop operation, including escalation.
+    private func shutdownSnapshot(_ record: EnvironmentRecord, lease: EnvironmentExecutionLease,
+                                  receipt: SteamLaunchReceipt?, retries: inout Int) async throws -> (snapshot: RuntimeProcessSnapshot, hadGap: Bool) {
+        var hadGap = false
+        while true {
+            try Task.checkCancellation()
+            try lease.validate()
+            let snapshot = await driver.observe(record, lease.prefix)
+            try lease.validate()
+            try Task.checkCancellation()
+            guard snapshot.processes.allSatisfy({ receipt != nil && $0.sessionID == receipt?.token.uuidString }) else {
+                throw SteamLifecycleError.foreignActivity
+            }
+            if snapshot.complete { return (snapshot, hadGap) }
+            guard retries > 0 else { throw SteamLifecycleError.observationUnavailable }
+            retries -= 1
+            hadGap = true
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
     public func stop() async throws -> SteamStopResult {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
@@ -247,26 +270,27 @@ public actor SteamLifecycle {
         let record = try await installed()
         let lease = try await store.executionLease(for: id)
         defer { withExtendedLifetime(lease) {} }
+        var observationRetries = 3
         guard let receipt = try receipt() else {
-            let snapshot = await driver.observe(record, lease.prefix)
-            guard snapshot.complete else { throw SteamLifecycleError.observationUnavailable }
-            guard snapshot.processes.isEmpty else { throw SteamLifecycleError.foreignActivity }
+            _ = try await shutdownSnapshot(record, lease: lease, receipt: nil, retries: &observationRetries)
             return .alreadyStopped
         }
-        let before = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+        let before = try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot
         if before.processes.isEmpty {
-            let quietUntil = ContinuousClock.now.advanced(by: .seconds(min(2, gracefulTimeout)))
+            var quietUntil = ContinuousClock.now.advanced(by: .seconds(min(2, gracefulTimeout)))
             var quiet = true
             while ContinuousClock.now < quietUntil {
                 try await Task.sleep(for: .milliseconds(100))
-                if try await !ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty { quiet = false; break }
+                let observed = try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries)
+                if !observed.snapshot.processes.isEmpty { quiet = false; break }
+                if observed.hadGap { quietUntil = .now.advanced(by: .seconds(min(2, gracefulTimeout))) }
             }
             if quiet { try clearReceipt(); return .alreadyStopped }
         }
         // Even an empty instant may be a handoff. Keep checking through the normal
         // graceful interval instead of deleting ownership and racing a late child.
         try await driver.preflight()
-        _ = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+        _ = try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries)
         let deadline = ContinuousClock.now.advanced(by: .seconds(gracefulTimeout))
         if !before.processes.isEmpty {
             let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
@@ -276,7 +300,9 @@ public actor SteamLifecycle {
         }
         var emptyAt: ContinuousClock.Instant?
         while ContinuousClock.now < deadline {
-            let snapshot = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+            let observed = try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries)
+            let snapshot = observed.snapshot
+            if observed.hadGap { emptyAt = nil }
             if snapshot.processes.isEmpty {
                 if emptyAt == nil { emptyAt = .now }
                 if emptyAt!.duration(to: .now) >= .seconds(min(2, gracefulTimeout / 2)) {
@@ -285,25 +311,25 @@ public actor SteamLifecycle {
             } else { emptyAt = nil }
             try await Task.sleep(for: .milliseconds(100))
         }
-        let remaining = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+        let remaining = try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot
         if remaining.processes.isEmpty { try clearReceipt(); return .graceful }
         let result = try await driver.execute(.init(executable: layout.wineserver, arguments: ["-k"],
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: lease.prefix, timeout: 10, outputLimit: 8192))
         guard [.exited(0), .exited(1)].contains(result.termination), result.stderr.isEmpty else { throw SteamLifecycleError.cleanupFailed }
         for _ in 0..<30 {
-            if try await ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty {
+            if try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot.processes.isEmpty {
                 try clearReceipt(); return .forced
             }
             try await Task.sleep(for: .milliseconds(100))
         }
         // Wine device services can outlive the server. Escalate only against fresh
         // token-owned identities, using kernel PID-version checked audit tokens.
-        try await driver.signalRemaining(try await ownedSnapshot(record, lease: lease, receipt: receipt).processes, SIGTERM)
+        try await driver.signalRemaining(try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot.processes, SIGTERM)
         try await Task.sleep(for: .milliseconds(500))
-        try await driver.signalRemaining(try await ownedSnapshot(record, lease: lease, receipt: receipt).processes, SIGKILL)
+        try await driver.signalRemaining(try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot.processes, SIGKILL)
         for _ in 0..<30 {
-            if try await ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty {
+            if try await shutdownSnapshot(record, lease: lease, receipt: receipt, retries: &observationRetries).snapshot.processes.isEmpty {
                 try clearReceipt(); return .forced
             }
             try await Task.sleep(for: .milliseconds(100))

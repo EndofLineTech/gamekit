@@ -75,6 +75,9 @@ backend using the same stopped-session flow. See
   survives, the final fallback uses kernel audit-token/PID-generation checked
   signalling. Uncertain or foreign ownership is refused.
 - Stop affects games in the same managed environment; save your work first.
+  Stop briefly retries incomplete process observations during exit. If inspection
+  remains unavailable, it retains ownership and reports the error rather than
+  assuming shutdown succeeded or escalating without verified ownership.
 - Settings/runtime changes and conflicting operations are disabled while busy.
 
 Steam should appear as **Windows Steam** in the Dock. The hidden launcher does not
