@@ -2,11 +2,26 @@
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <cstdio>
+#include <set>
+#include <utility>
+#include <vector>
 
 int main()
 {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::printf("process_id=%lu\n", static_cast<unsigned long>(GetCurrentProcessId()));
+    DEVMODEW mode = {};
+    mode.dmSize = sizeof(mode);
+    if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &mode))
+        std::printf("Windows current mode: %lux%lu @ %lu Hz\n", mode.dmPelsWidth, mode.dmPelsHeight, mode.dmDisplayFrequency);
+    std::set<std::pair<DWORD, DWORD>> windowModes;
+    for (DWORD index = 0; index < 1024; ++index) {
+        mode = {}; mode.dmSize = sizeof(mode);
+        if (!EnumDisplaySettingsW(nullptr, index, &mode)) break;
+        windowModes.emplace(mode.dmPelsWidth, mode.dmPelsHeight);
+    }
+    for (const auto &size : windowModes)
+        std::printf("Windows mode: %lux%lu\n", size.first, size.second);
     IDXGIFactory4 *factory = nullptr;
     HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory4), reinterpret_cast<void **>(&factory));
     if (FAILED(hr)) {
@@ -31,6 +46,19 @@ int main()
                                   reinterpret_cast<void **>(&device));
             if (SUCCEEDED(hr)) {
                 std::printf("hardware_vendor=0x%04x device=0x%04x\n", desc.VendorId, desc.DeviceId);
+                IDXGIOutput *output = nullptr;
+                if (SUCCEEDED(adapter->EnumOutputs(0, &output))) {
+                    UINT count = 0;
+                    if (SUCCEEDED(output->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &count, nullptr)) && count > 0 && count <= 1024) {
+                        std::vector<DXGI_MODE_DESC> modes(count);
+                        if (SUCCEEDED(output->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, 0, &count, modes.data()))) {
+                            std::set<std::pair<UINT, UINT>> sizes;
+                            for (UINT i = 0; i < count; ++i) sizes.emplace(modes[i].Width, modes[i].Height);
+                            for (const auto &size : sizes) std::printf("DXGI mode: %ux%u\n", size.first, size.second);
+                        }
+                    }
+                    output->Release();
+                }
                 adapter->Release();
                 adapter = nullptr;
                 break;
