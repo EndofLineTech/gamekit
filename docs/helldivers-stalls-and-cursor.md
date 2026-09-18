@@ -261,4 +261,19 @@ Use `restore-display` with expected result `absent` to undo just this value whil
 the prefix is stopped. The private focus observer records the public display
 shield-window ID alongside foreground-game pointer coordinates. The older
 `CGDisplayIsCaptured` query is unsupported by this SDK and is not used.
-Gameplay/Dock-edge and Command-Tab behavior with display capture remain pending.
+The user reported **"Whatever you just changed, that fixed it"** after this
+comparison. The Dock was at its original bottom position. The trace shows the
+game's fullscreen window at layer `2147483630` (with an additional window at
+`2147483628`), rather than the earlier layer 27. This is consistent with Wine's
+display-capture presentation path placing the game above the Dock. The external
+shield-window query stayed zero and is not used as an independent capture-success
+assertion; the layer change and user-observed behavior are the relevant evidence.
+
+After confirming the game had exited, the earlier event-tap override was removed
+and the display-capture value was read back as enabled. A fresh Metal 3 session
+was launched for a final comparison using **only** the display-capture override
+and the default cursor-confinement implementation. This avoids retaining an
+unproven extra setting whose Accessibility permission was never confirmed.
+The minimal-configuration edge/Command-Tab result is pending. Private evidence
+is in `.build/helldivers-display-capture-focus-1.jsonl` and
+`.build/helldivers-display-capture-only-focus-1.jsonl`.
