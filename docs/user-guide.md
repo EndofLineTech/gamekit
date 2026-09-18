@@ -6,6 +6,9 @@ This prototype targets **Apple silicon on macOS 27**. It uses Rosetta and the
 validated Sikarugir Wine 10.0 revision 6 / Template 1.0.11 runtime with Apple's
 unchanged D3DMetal 4.0b2 payload. Steam client readiness is not game compatibility.
 macOS 28 and public distribution are not validated.
+The [macOS 28 runtime assessment](https://github.com/EndofLineTech/gamekit/blob/dev/docs/macos28-runtime-viability.md) documents Apple's
+Rosetta policy, the native ARM64 Wine/FEX migration direction and the validation
+required before extending support.
 
 Gamekit does not bundle the third-party runtime or accept prerequisite licenses.
 Follow the [runtime setup guide](https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md)
