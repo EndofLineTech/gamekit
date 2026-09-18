@@ -226,11 +226,33 @@ final class ManagedDirectory {
         try removeOwnedTree("prefix", identity: identity, afterRemoval: afterRemoval)
     }
 
+    /// Descriptor-relative inventory; never follows Wine's links into host data.
+    func logicalBytes() throws -> Int64 {
+        var total: Int64 = 0
+        let device = try identity().device
+        for name in try names() {
+            try Task.checkCancellation()
+            var info = stat()
+            guard fstatat(descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect archive size") }
+            guard info.st_dev == device else { throw EnvironmentStoreError.unsafePath }
+            let size: Int64
+            if info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) {
+                guard let child = try directory(name), try child.identity() == (info.st_dev, info.st_ino) else { throw EnvironmentStoreError.identityMismatch }
+                size = try child.logicalBytes()
+            } else { size = max(0, info.st_size) }
+            let sum = total.addingReportingOverflow(size)
+            guard !sum.overflow else { throw EnvironmentStoreError.unsafePath }
+            total = sum.partialValue
+        }
+        return total
+    }
+
     private func removeOwnedTree(_ name: String, identity: (device: Int32, inode: UInt64), afterRemoval: () throws -> Void) throws {
         guard let directory = try directory(name), try directory.identity() == identity else { throw EnvironmentStoreError.identityMismatch }
         for child in try directory.names() {
             var info = stat()
             guard fstatat(directory.descriptor, child, &info, AT_SYMLINK_NOFOLLOW) == 0 else { throw ioError("inspect staging entry") }
+            guard info.st_dev == identity.device else { throw EnvironmentStoreError.unsafePath }
             if info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) {
                 guard let nested = try directory.directory(child) else { throw EnvironmentStoreError.notFound }
                 try directory.removeOwnedTree(child, identity: nested.identity(), afterRemoval: afterRemoval)

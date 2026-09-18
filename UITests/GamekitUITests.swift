@@ -1,8 +1,57 @@
-import GamekitCore
+@testable import GamekitCore
 import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testRecoveryArchiveInspectionCancelAndCleanup() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Archive cleanup fixture", runtime: RuntimeProfile.sikarugir.identity,
+            installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+        try Data("game".utf8).write(to: steam.appendingPathComponent("steamapps/game.bin"))
+        try Data("old client".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let recovery = SteamRecovery(store: store, driver: .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }))
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: steam, withIntermediateDirectories: true)
+        try SteamRecoveryArchive.restoreLibraries(root: root, id: id)
+        try Data("new client".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let savedRecord = try await store.load(id)
+        var record = try XCTUnwrap(savedRecord)
+        record.installation = .installed
+        _ = try await store.save(record)
+        let archives = try await recovery.archives()
+        let archive = try XCTUnwrap(archives.first)
+        let archivedPrefix = root.appendingPathComponent("Recovery/steam/\(archive.id)/prefix")
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Archive cleanup fixture"].waitForExistence(timeout: 20))
+        showResetOptions(in: app)
+        let inspect = app.buttons["inspect-recovery-archives"]
+        revealRecoveryButton(inspect, in: app)
+        inspect.click()
+        let cleanup = app.buttons["clean-recovery-archive-\(archive.id)"]
+        XCTAssertTrue(cleanup.waitForExistence(timeout: 15))
+        revealRecoveryButton(cleanup, in: app)
+        cleanup.click()
+        let confirmation = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Cancel"].click()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archivedPrefix.path))
+        cleanup.click()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Delete archived prefix"].click()
+        let status = app.staticTexts["recovery-archives-status"]
+        let completed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value BEGINSWITH %@", "Archived prefix cleaned."), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 20), .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archivedPrefix.path))
+        XCTAssertEqual(try Data(contentsOf: steam.appendingPathComponent("steamapps/game.bin")), Data("game".utf8))
+    }
+
     func testGraphicsBackendPersistsThroughAppRestartAndCanRevert() async throws {
         let root = try temporaryRoot()
         let app = XCUIApplication()

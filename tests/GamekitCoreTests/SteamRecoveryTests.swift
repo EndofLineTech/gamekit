@@ -23,6 +23,12 @@ private struct RecoveryFixture {
         }
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
+    func completeArchiveRecovery() async throws {
+        try SteamRecoveryArchive.restoreLibraries(root: store.root, id: id)
+        var record = try #require(try await store.load(id))
+        record.installation = .installed
+        _ = try await store.save(record)
+    }
     var driver: SteamRecoveryDriver { .init(observe: { _, _ in .init(processes: [], complete: true) }, stop: { _, _, _ in }) }
     func resetter(fault: @escaping @Sendable (SteamRecoveryCheckpoint) throws -> Void = { _ in }) -> SteamRecovery {
         SteamRecovery(store: store, driver: driver, quietInterval: 0, checkpoint: fault)
@@ -43,6 +49,133 @@ private actor InterruptedRuntime {
 
 @Suite("Download-preserving Steam recovery")
 struct SteamRecoveryTests {
+    @Test("Archive cleanup protects pending recovery and preserves restored games and external data")
+    func archiveCleanup() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let outside = fixture.parent.appendingPathComponent("external-save")
+        try Data("keep".utf8).write(to: outside)
+        try FileManager.default.createSymbolicLink(at: fixture.store.prefixURL(for: fixture.id).appendingPathComponent("external-save"), withDestinationURL: outside)
+        let recovery = fixture.resetter()
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        let pending = try #require(try await recovery.archives().first)
+        #expect(pending.status == .protected)
+        await #expect(throws: SteamRecoveryError.pendingReset) { try await recovery.cleanArchive(pending.id, confirmed: true) }
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let completed = try #require(try await recovery.archives().first)
+        #expect(completed.status == .completed)
+        #expect((completed.bytes ?? 0) > 0)
+        await #expect(throws: SteamRecoveryError.confirmationRequired) { try await recovery.cleanArchive(completed.id, confirmed: false) }
+        try await recovery.cleanArchive(completed.id, confirmed: true)
+        #expect(try await recovery.archives().first?.status == .cleaned)
+        let game = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/game/content.bin")
+        #expect(try Data(contentsOf: game) == Data("GAME_BYTES".utf8))
+        #expect(try Data(contentsOf: outside) == Data("keep".utf8))
+        try await recovery.cleanArchive(completed.id, confirmed: true)
+    }
+
+    @Test("Completed archives remain inspectable after another reset; uncertain process ownership refuses cleanup")
+    func olderArchiveCleanup() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let recovery = fixture.resetter()
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let completed = try #require(try await recovery.archives().first)
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        #expect(try await recovery.archives().first(where: { $0.id == completed.id })?.status == .completed)
+        let uncertain = SteamRecovery(store: fixture.store, driver: .init(observe: { _, _ in .init(processes: [], complete: false) }, stop: { _, _, _ in }))
+        await #expect(throws: SteamRecoveryError.observationUnavailable) { try await uncertain.cleanArchive(completed.id, confirmed: true) }
+        try await recovery.cleanArchive(completed.id, confirmed: true)
+        #expect(try await recovery.archives().filter { $0.status == .protected }.count == 1)
+    }
+
+    @Test("Archive cleanup refuses replacement prefixes, returned libraries, symlinks and malformed journals", arguments: ["replacement", "library", "symlink", "journal"])
+    func archiveBoundaries(mutation: String) async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let recovery = fixture.resetter()
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let completed = try #require(try await recovery.archives().first)
+        let archive = fixture.store.root.appendingPathComponent("Recovery/steam/\(completed.id)")
+        let prefix = archive.appendingPathComponent("prefix")
+        if mutation == "replacement" || mutation == "symlink" {
+            try FileManager.default.moveItem(at: prefix, to: fixture.parent.appendingPathComponent("saved-prefix"))
+            if mutation == "replacement" { try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false) }
+            else { try FileManager.default.createSymbolicLink(at: prefix, withDestinationURL: fixture.store.prefixURL(for: fixture.id)) }
+        } else if mutation == "library" {
+            try FileManager.default.createDirectory(at: prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps"), withIntermediateDirectories: true)
+        } else {
+            try Data("invalid".utf8).write(to: fixture.store.root.appendingPathComponent("Metadata/Recovery/steam.json"))
+        }
+        await #expect(throws: (any Error).self) { try await recovery.cleanArchive(completed.id, confirmed: true) }
+        #expect(FileManager.default.fileExists(atPath: prefix.path))
+        let game = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/game/content.bin")
+        #expect(try Data(contentsOf: game) == Data("GAME_BYTES".utf8))
+    }
+
+    @Test("Partially cleaned archive can be retried without affecting the active prefix")
+    func interruptedArchiveCleanup() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        _ = try await fixture.resetter().resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let item = try #require(try await fixture.resetter().archives().first)
+        let interrupted = fixture.resetter { if $0 == .removingEntry { throw RecoveryFault.interrupted } }
+        await #expect(throws: RecoveryFault.interrupted) { try await interrupted.cleanArchive(item.id, confirmed: true) }
+        try await fixture.resetter().cleanArchive(item.id, confirmed: true)
+        #expect(try await fixture.resetter().archives().first?.status == .cleaned)
+        #expect(FileManager.default.fileExists(atPath: fixture.store.prefixURL(for: fixture.id).path))
+    }
+
+    @Test("Legacy completed current journal is eligible; unknown historical archive stays protected")
+    func legacyArchives() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let recovery = fixture.resetter()
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let item = try #require(try await recovery.archives().first)
+        try FileManager.default.removeItem(at: fixture.store.root.appendingPathComponent("Recovery/steam/\(item.id)/completed-journal.json"))
+        let unknown = UUID().uuidString.lowercased()
+        try FileManager.default.createDirectory(at: fixture.store.root.appendingPathComponent("Recovery/steam/\(unknown)/prefix"), withIntermediateDirectories: true)
+        #expect(try await recovery.archives().first(where: { $0.id == unknown })?.status == .protected)
+        await #expect(throws: SteamRecoveryError.invalidJournal) { try await recovery.cleanArchive(unknown, confirmed: true) }
+        try await recovery.cleanArchive(item.id, confirmed: true)
+        #expect(try await recovery.archives().first(where: { $0.id == item.id })?.status == .cleaned)
+    }
+
+    @Test("Processes using the archive and an installation lease both block archive cleanup")
+    func archiveActivity() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        _ = try await fixture.resetter().resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try await fixture.completeArchiveRecovery()
+        let item = try #require(try await fixture.resetter().archives().first)
+        let recovery = SteamRecovery(store: fixture.store, driver: .init(observe: { _, prefix in
+            .init(processes: prefix.path.contains("/Recovery/") ? [.init(identity: .init(pid: 12, startSeconds: 1, startMicroseconds: 0), role: .other, sessionID: nil)] : [], complete: true)
+        }, stop: { _, _, _ in }))
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await recovery.cleanArchive(item.id, confirmed: true) }
+        let lease = try await fixture.store.installationLease()
+        defer { withExtendedLifetime(lease) {} }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.resetter().cleanArchive(item.id, confirmed: true) }
+    }
+
+    @Test("Restored libraries alone do not permit cleanup while installation can still need parking")
+    func unfinishedInstallationArchive() async throws {
+        let fixture = try await RecoveryFixture(); defer { fixture.remove() }
+        let recovery = fixture.resetter()
+        _ = try await recovery.resetPreservingDownloads(confirmed: true)
+        try FileManager.default.createDirectory(at: fixture.store.prefixURL(for: fixture.id), withIntermediateDirectories: true)
+        try SteamRecoveryArchive.restoreLibraries(root: fixture.store.root, id: fixture.id)
+        let item = try #require(try await recovery.archives().first)
+        #expect(item.status == .protected)
+        await #expect(throws: SteamRecoveryError.pendingReset) { try await recovery.cleanArchive(item.id, confirmed: true) }
+        try SteamRecoveryArchive.prepareInstallerDestination(root: fixture.store.root, id: fixture.id)
+        #expect(try await recovery.archives().first?.status == .protected)
+    }
+
     @Test("Confirmed clean reset removes a disposable real Wine prefix safely", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_CLEAN_RESET_SMOKE"] == "1"))
     func liveCleanReset() async throws {
         let fixture = try await RecoveryFixture(); defer { fixture.remove() }

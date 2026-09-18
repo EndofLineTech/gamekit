@@ -42,10 +42,10 @@ public actor SteamRecovery {
         else { throw SteamRecoveryError.unsupportedRecord }
         return record
     }
-    private func idle(_ record: EnvironmentRecord) async throws {
+    private func idle(_ record: EnvironmentRecord, prefix: URL? = nil) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(quietInterval))
         repeat {
-            let snapshot = await driver.observe(record, store.prefixURL(for: id))
+            let snapshot = await driver.observe(record, prefix ?? store.prefixURL(for: id))
             guard snapshot.complete else { throw SteamRecoveryError.observationUnavailable }
             guard snapshot.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
             if ContinuousClock.now >= deadline { return }
@@ -59,6 +59,31 @@ public actor SteamRecovery {
 
     public func resetPreservingDownloads(confirmed: Bool) async throws -> EnvironmentRecord {
         try await reset(confirmed: confirmed, discardDownloads: false)
+    }
+
+    public func archives() async throws -> [SteamRecoveryArchiveInfo] {
+        guard !busy else { throw EnvironmentStoreError.busy }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let complete = try await store.load(id)?.installation == .installed
+        return try SteamRecoveryArchive(root: store.root, id: id).inspect(installationComplete: complete)
+    }
+
+    public func cleanArchive(_ archiveID: String, confirmed: Bool) async throws {
+        guard confirmed else { throw SteamRecoveryError.confirmationRequired }
+        guard let token = UUID(uuidString: archiveID), token.uuidString.lowercased() == archiveID else { throw SteamRecoveryError.invalidJournal }
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await record()
+        let execution = try await executionLeaseIfPresent()
+        defer { withExtendedLifetime(execution) {} }
+        try await idle(record)
+        try await idle(record, prefix: store.root.appendingPathComponent("Recovery/\(id.rawValue)/\(archiveID)/prefix"))
+        try execution?.validate()
+        try Task.checkCancellation()
+        try SteamRecoveryArchive(root: store.root, id: id).clean(archiveID, installationComplete: record.installation == .installed, checkpoint: checkpoint)
     }
 
     public func resetRemovingDownloads(confirmed: Bool) async throws -> EnvironmentRecord {

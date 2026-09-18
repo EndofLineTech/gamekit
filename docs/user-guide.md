@@ -165,9 +165,24 @@ can show sensitive runtime text. **Export summary** emits a separate allowlisted
 summary without raw output, paths or session/account fields. Share the summary,
 not the whole prefix, archive or raw log directory.
 
-Recovery archives retain old settings/sign-in data and consume disk space. Archive
-inspection/cleanup UI is tracked separately. Never remove an archive referenced by
-an unfinished recovery journal.
+Under **Show reset options…**, choose **Inspect recovery archives** to list each
+archive's logical size and status:
+
+- **Completed**: recovery finished and the archived prefix is eligible for cleanup.
+- **Protected**: recovery is unfinished or completion/identity cannot be verified.
+  Older archives without a retained completion receipt remain protected.
+- **Cleaned**: the old prefix is gone; a small recovery receipt remains.
+
+Stop managed Steam, then choose **Clean up archive…** on a completed archive and
+review the confirmation. This permanently removes that archive's old settings,
+sign-in data and any local saves remaining inside it. Restored downloads, the
+current environment and external libraries are preserved. Cancel changes nothing.
+Sizes exclude symbolic-link targets and are logical file bytes, not a guarantee of
+reclaimed disk space (APFS clones, sparse files and hard links can differ).
+
+If cleanup is interrupted, inspect again and explicitly retry the same archive.
+Pending recovery sources are never eligible. Do not manually remove an archive
+referenced by an unfinished recovery journal.
 
 ## Removal
 
