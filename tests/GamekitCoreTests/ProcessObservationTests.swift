@@ -4,6 +4,17 @@ import Testing
 
 @Suite("Process observation boundaries")
 struct ProcessObservationTests {
+    @Test("An explicit Metal 3 comparison overrides inherited backend flags without changing the default")
+    func graphicsBackendEnvironment() {
+        let inherited = ["D3DM_MTL4": "1", "ROSETTA_ADVERTISE_AVX": "0"]
+        let automatic = RuntimeLayout().environment(inheriting: inherited)
+        #expect(automatic["D3DM_MTL4"] == nil)
+        let comparison = RuntimeLayout(graphicsBackend: .metal3).environment(inheriting: inherited)
+        #expect(comparison["D3DM_MTL4"] == "0")
+        #expect(comparison["ROSETTA_ADVERTISE_AVX"] == "1")
+        #expect(comparison["WINEDLLOVERRIDES"] == automatic["WINEDLLOVERRIDES"])
+    }
+
     @Test("Role detection uses the executable target, not an incidental later argument")
     func executableRole() throws {
         let record = try sampleEnvironment()
