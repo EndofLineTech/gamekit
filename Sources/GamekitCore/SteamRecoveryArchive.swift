@@ -1,5 +1,14 @@
 import Foundation
 
+public struct SteamRecoveryArchiveInfo: Identifiable, Sendable {
+    public enum Status: String, Sendable { case completed, protected, cleaned }
+    public let id: String
+    public let createdAt: Date?
+    /// Logical bytes, excluding symlink targets. Not a promise of reclaimed APFS space.
+    public let bytes: Int64?
+    public let status: Status
+}
+
 public enum SteamRecoveryError: Error, Equatable {
     case confirmationRequired, unsupportedRecord, activeProcesses, observationUnavailable, pendingReset, invalidJournal, cleanupFailed, nonEmptyInstallerDestination
 }
@@ -42,6 +51,9 @@ struct SteamRecoveryArchive {
     }
     private func read() throws -> SteamResetJournal? {
         guard let data = try journalDirectory(create: false)?.read(id.rawValue + ".json") else { return nil }
+        return try decode(data)
+    }
+    private func decode(_ data: Data) throws -> SteamResetJournal {
         let journal = try JSONDecoder().decode(SteamResetJournal.self, from: data)
         guard journal.schemaVersion == 1, journal.id == id, journal.original.id == id,
               journal.original.installationRecipeVersion == 1, journal.original.steamExecutable == .steamDefault,
@@ -56,6 +68,11 @@ struct SteamRecoveryArchive {
         try directory.withWriteLock {
             try directory.write(JSONEncoder().encode(journal), to: id.rawValue + ".json", createOnly: false, temporaryPrefix: ".recovery-", beforeCommit: {})
         }
+        if journal.phase == .restored { try retainCompletion(journal) }
+    }
+    private func retainCompletion(_ journal: SteamResetJournal) throws {
+        let archive = try archiveDirectory(journal, create: false)
+        try archive.write(JSONEncoder().encode(journal), to: "completed-journal.json", createOnly: false, beforeCommit: {})
     }
     private func archiveDirectory(_ journal: SteamResetJournal, create: Bool) throws -> ManagedDirectory {
         guard let recovery = try rootDirectory().directory("Recovery", create: create),
@@ -79,10 +96,68 @@ struct SteamRecoveryArchive {
         get throws { try read().map { [.prepared, .discarding, .discarded].contains($0.phase) } ?? false }
     }
 
+    /// Unknown/legacy archives without completion evidence are visible but protected.
+    func inspect(installationComplete: Bool) throws -> [SteamRecoveryArchiveInfo] {
+        let current = try read()
+        guard let environment = try rootDirectory().directory("Recovery")?.directory(id.rawValue) else { return [] }
+        return try environment.names().map { name in
+            var bytes: Int64?
+            var date: Date?
+            var status: SteamRecoveryArchiveInfo.Status = .protected
+            do {
+                guard let archive = try environment.directory(name) else { throw EnvironmentStoreError.notFound }
+                bytes = try archive.logicalBytes()
+                if let token = UUID(uuidString: name), name == token.uuidString.lowercased() {
+                    let journal = try completedJournal(token: token, archive: archive, current: current, installationComplete: installationComplete)
+                    date = journal.createdAt
+                    status = try archive.directory("prefix") == nil ? .cleaned : .completed
+                }
+            } catch { /* A failed inspection never authorizes cleanup. */ }
+            return .init(id: name, createdAt: date, bytes: bytes, status: status)
+        }
+    }
+
+    private func completedJournal(token: UUID, archive: ManagedDirectory, current: SteamResetJournal?, installationComplete: Bool) throws -> SteamResetJournal {
+        let journal: SteamResetJournal
+        if let current, current.token == token {
+            guard current.phase == .restored, installationComplete || current.discardDownloads == true else { throw SteamRecoveryError.pendingReset }
+            journal = current
+        } else {
+            guard let data = try archive.read("completed-journal.json") else { throw SteamRecoveryError.invalidJournal }
+            journal = try decode(data)
+        }
+        guard journal.token == token, journal.phase == .restored,
+              try archive.names().allSatisfy({ ["prefix", "original-record.json", "completed-journal.json"].contains($0) }) else { throw SteamRecoveryError.invalidJournal }
+        if let prefix = try archive.directory("prefix") {
+            guard journal.prefixIdentity == (try RecoveryDirectoryIdentity(prefix)) else { throw EnvironmentStoreError.identityMismatch }
+            let steam = try Self.steamDirectory(prefix, create: false)
+            // Even a completed receipt cannot authorize deletion of games that
+            // have subsequently been placed back in the old Steam directory.
+            for name in ["steamapps", "depotcache"] {
+                guard try steam?.directory(name) == nil else { throw SteamRecoveryError.pendingReset }
+            }
+        }
+        return journal
+    }
+
+    func clean(_ name: String, installationComplete: Bool, checkpoint: @Sendable (SteamRecoveryCheckpoint) throws -> Void) throws {
+        guard let token = UUID(uuidString: name), name == token.uuidString.lowercased(),
+              let archive = try rootDirectory().directory("Recovery")?.directory(id.rawValue)?.directory(name)
+        else { throw SteamRecoveryError.invalidJournal }
+        let journal = try completedJournal(token: token, archive: archive, current: read(), installationComplete: installationComplete)
+        try retainCompletion(journal)
+        if let prefix = try archive.directory("prefix") {
+            try archive.removeQuarantinedPrefix(identity: prefix.identity()) { try checkpoint(.removingEntry) }
+        }
+        // Keep the small receipt so interrupted deletion can be retried and the
+        // UI can distinguish cleaned archives from unrecognized directories.
+    }
+
     func reset(store: EnvironmentStore, discardDownloads: Bool? = nil,
                checkpoint: @Sendable (SteamRecoveryCheckpoint) throws -> Void) async throws -> EnvironmentRecord {
         var journal: SteamResetJournal
         var resumed: SteamResetJournal?
+        if let saved = try read(), saved.phase == .restored { try retainCompletion(saved) }
         if let saved = try read(), saved.phase != .restored {
             if let discardDownloads, discardDownloads != (saved.discardDownloads ?? false) {
                 guard discardDownloads, [.ready, .restoring, .parking].contains(saved.phase) else { throw SteamRecoveryError.pendingReset }
