@@ -8,6 +8,8 @@ private final class InstalledGamesModel: ObservableObject {
     @Published private(set) var refreshing = false
     @Published private(set) var warning: String?
     @Published private(set) var message: String?
+    @Published private(set) var pendingGame: UInt32?
+    private var launchObservation: Task<Void, Never>?
     private var namesNeedRefresh = true
 
     func refresh(setup: SetupModel) async {
@@ -44,16 +46,16 @@ private final class InstalledGamesModel: ObservableObject {
     }
 
     func launch(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
-        guard game.state == .ready, setup.actions.launch || setup.actions.show,
+        guard pendingGame == nil, game.state == .ready, setup.actions.launch || setup.actions.show,
               let token = setup.begin("Launching \(game.name)") else { return }
         message = "Requesting \(game.name)…"
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: .launch, context: .init(component: .steam))
             do {
                 let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
-                try await lifecycle.launchGame(appID: game.id)
+                let observation = try await lifecycle.launchGame(appID: game.id)
                 diagnostics.captureGameIfEnabled(game, layout: setup.layout)
-                message = "Launch requested for \(game.name). Steam handles first-run setup; check the game window."
+                watch(observation, game: game)
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
             } catch {
                 message = error as? SteamGameLibraryError == .notInstalled
@@ -65,6 +67,38 @@ private final class InstalledGamesModel: ObservableObject {
             await refresh(setup: setup)
             setup.refresh(diagnostics: diagnostics)
             diagnostics.refreshID = UUID()
+        }
+    }
+
+    private func watch(_ observation: SteamGameLaunchObservation, game: InstalledSteamGame) {
+        pendingGame = game.id
+        message = "\(game.name): \(SteamGameLaunchProgress.waitingForSteam.message)"
+        launchObservation = Task { [weak self] in
+            guard let self else { return }
+            defer { pendingGame = nil; launchObservation = nil }
+            var progress = SteamGameLaunchProgress.waitingForSteam
+            let deadline = ContinuousClock.now.advanced(by: .seconds(120))
+            while !Task.isCancelled && ContinuousClock.now < deadline {
+                progress = await observation.poll()
+                message = "\(game.name): \(progress.message)"
+                if progress.isTerminal { return }
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+            if [.cloudAttention, .otherSessionAttention, .userAttention].contains(progress) {
+                message = "\(game.name): \(progress.message) Tracking has ended; check Steam before another Play request."
+            } else {
+                message = "Steam has not confirmed a new process for \(game.name). It may still be starting or already running. Check Windows Steam before trying Play again."
+            }
+        }
+    }
+
+    func showSteam(setup: SetupModel, diagnostics: AppDiagnosticsModel) {
+        guard let token = setup.begin("Showing Windows Steam") else { return }
+        Task {
+            defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
+            do {
+                try await SteamLifecycle(store: EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout).show()
+            } catch { message = AppFailure.message(error) }
         }
     }
 }
@@ -108,7 +142,7 @@ struct InstalledGamesView: View {
                             .contentShape(RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
-                        .disabled(game.state != .ready || !(setup.actions.launch || setup.actions.show))
+                        .disabled(model.pendingGame != nil || game.state != .ready || !(setup.actions.launch || setup.actions.show))
                         .accessibilityLabel("Launch \(game.name)")
                         .accessibilityValue(status(game))
                         .accessibilityIdentifier("launch-game-\(game.id)")
@@ -127,7 +161,11 @@ struct InstalledGamesView: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                 }
                 if let warning = model.warning { Text(warning).font(.callout).foregroundStyle(.orange) }
-                if let message = model.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
+                if let message = model.message {
+                    Text(message).font(.callout).accessibilityIdentifier("game-launch-status")
+                    Button("Show Windows Steam") { model.showSteam(setup: setup, diagnostics: diagnostics) }
+                        .disabled(setup.isBusy || !setup.actions.show).accessibilityIdentifier("show-game-launch-steam")
+                }
                 Text("Games in Gamekit's managed Steam library. External libraries are not shown. Launch starts Windows Steam if needed; installation does not establish game compatibility.")
                     .font(.caption).foregroundStyle(.secondary)
                 if !model.games.isEmpty && !(setup.actions.launch || setup.actions.show) {

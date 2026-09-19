@@ -66,6 +66,32 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Cloud-blocked launch feedback observes without sending a second Play request")
+    func launchFeedbackDoesNotRetry() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let steam = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        let apps = steam.appendingPathComponent("steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
+        try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8).write(to: apps.appendingPathComponent("appmanifest_42.acf"))
+        let logs = steam.appendingPathComponent("logs")
+        try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        let log = logs.appendingPathComponent("console_log.txt")
+        try Data("[2026-09-18 01:00:00] Game process added : AppID 42 old\n".utf8).write(to: log)
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        let observation = try await lifecycle.launchGame(appID: 42)
+        #expect(await observation.poll() == .waitingForSteam)
+        let output = try FileHandle(forWritingTo: log)
+        try output.seekToEnd()
+        try output.write(contentsOf: Data("[2026-09-19 01:00:00] GameAction [AppID 42, ActionID 1] : LaunchApp waiting for user response to SynchronizingCloud \"syncfailed\"\n".utf8))
+        try output.close()
+        #expect(await observation.poll() == .cloudAttention)
+        #expect(await observation.poll() == .cloudAttention)
+        #expect(await runtime.commands.count == 1)
+        #expect(await runtime.commands.first?.suffix(2) == ["-applaunch", "42"])
+        _ = try await lifecycle.stop()
+        #expect(await observation.poll() == .unavailable)
+    }
     @Test("Stop retries a transient incomplete inventory before control and after graceful exit", arguments: [false, true])
     func transientShutdownObservation(afterShutdown: Bool) async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }

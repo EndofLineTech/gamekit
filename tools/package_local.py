@@ -132,7 +132,7 @@ def package(app, destination, root):
             raise ValueError("Copied process counter helper changed")
         (stage / "build-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
-        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md", "debug-performance-capture.md", "helldivers-startup-hitches.md", "per-game-graphics-backends.md"):
+        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md", "debug-performance-capture.md", "helldivers-startup-hitches.md", "per-game-graphics-backends.md", "cold-steam-game-launch.md"):
             command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
         # A no-clobber directory move; existing output is never removed or replaced.
         validate_destination(destination)

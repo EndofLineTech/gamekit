@@ -131,6 +131,14 @@ macOS/runtime combination and must be rechecked after upgrades.
 
 ## Installed games
 
+After Play, Gamekit tracks Steam's fresh launch events for up to two minutes.
+It distinguishes a queued request, preparation, Cloud synchronization, prompts
+needing attention, and reported process creation. **Show Windows Steam** helps
+you resolve Steam's own prompts. Gamekit never automatically retries Play,
+accepts a Cloud conflict, or disconnects another session. Play controls unlock
+after tracking ends; if startup is unconfirmed, check Steam before trying again.
+See [cold-start launch feedback](cold-steam-game-launch.md).
+
 Current builds explicitly advertise Rosetta's supported AVX/AVX2 capabilities.
 After this update, **Stop Windows Steam** and launch a fresh session so games
 inherit the setting. This resolves Helldivers 2's AVX startup message. The
