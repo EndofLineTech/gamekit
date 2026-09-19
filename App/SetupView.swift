@@ -45,12 +45,7 @@ struct SetupView: View {
                 }
                 Text("Saved graphics backend: \(setup.layout.graphicsBackend.title)")
                     .accessibilityIdentifier("selected-graphics-backend")
-                HStack {
-                    Button("Automatic graphics") { setup.chooseGraphicsBackend(.automatic, diagnostics: diagnostics) }
-                        .accessibilityIdentifier("use-automatic-graphics")
-                    Button("Use Metal 3") { setup.chooseGraphicsBackend(.metal3, diagnostics: diagnostics) }
-                        .accessibilityIdentifier("use-metal3-graphics")
-                }.disabled(setup.isBusy || setup.selectionLocked)
+                GraphicsBackendPicker()
                 Text("Applies to Windows Steam and all games in this managed environment. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
                     .font(.caption).accessibilityIdentifier("graphics-backend-scope")
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)

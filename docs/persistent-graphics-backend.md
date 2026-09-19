@@ -7,7 +7,9 @@ unchanged D3DMetal 4.0b2 payload.
 ## User controls and scope
 
 In **Setup and prerequisites**, Gamekit displays **Saved graphics backend** and
-offers **Automatic graphics** and **Use Metal 3**.
+offers a dropdown with **Automatic (Apple default)** and **Metal 3 compatibility**.
+The same shared setting is accessible from each game's gear panel. **DXVK (In Dev)**
+and **DXMT (In Dev)** are listed but disabled until implemented.
 
 - **Automatic (Apple default):** Gamekit leaves `D3DM_MTL4` unset. On the
   validated macOS 27 host, Apple's documented D3D12 default is Metal 4.
@@ -29,7 +31,7 @@ reopening Gamekit is not a backend change. The UI deliberately labels the
 preference **saved**, rather than claiming it is the mode of a pre-existing
 diagnostic or legacy session.
 
-Rollback uses the same stopped-session flow: choose **Automatic graphics**.
+Rollback uses the same stopped-session flow: choose **Automatic (Apple default)**.
 Selecting another runtime revision or custom runtime path preserves the saved
 backend unless the caller explicitly supplies a different one.
 
