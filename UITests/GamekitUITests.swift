@@ -3,6 +3,57 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testInstalledAlternativeBackendsAreSelectableAndIndependent() async throws {
+        guard let primary = ProcessInfo.processInfo.environment["GAMEKIT_UI_PRIMARY_ROOT"] else {
+            throw XCTSkip("Set TEST_RUNNER_GAMEKIT_UI_PRIMARY_ROOT for local pinned-payload acceptance")
+        }
+        let selected = try await RuntimeSettingsStore(store: EnvironmentStore(root: URL(fileURLWithPath: primary))).layout()
+        try XCTSkipUnless(selected.isGraphicsBackendAvailable(.dxmt) && selected.isGraphicsBackendAvailable(.dxvk), "Local pinned payload acceptance")
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        try await RuntimeSettingsStore(store: store).select(selected.bundle, revision: selected.profile.revision, graphicsBackend: .metal3)
+        _ = try await store.create(.init(id: id, name: "Backend UI fixture", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
+        let payloads = root.appendingPathComponent("GraphicsBackends")
+        try FileManager.default.createDirectory(at: payloads, withIntermediateDirectories: true)
+        for revision in ["dxmt-0.80-compat2", "dxvk-macos-1.10.3-compat2"] {
+            try FileManager.default.copyItem(at: selected.dataRoot.appendingPathComponent("GraphicsBackends/" + revision), to: payloads.appendingPathComponent(revision))
+        }
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "123456" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_123456.acf"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch(); defer { app.terminate() }
+        let shared = app.popUpButtons["graphics-backend-picker"]
+        XCTAssertTrue(shared.waitForExistence(timeout: 30))
+        revealRecoveryButton(shared, in: app)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: shared)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed)
+        shared.click()
+        XCTAssertTrue(app.menuItems["DXVK (Direct3D 10/11)"].isEnabled)
+        XCTAssertTrue(app.menuItems["DXMT (Direct3D 10/11)"].isEnabled)
+        app.menuItems["DXVK (Direct3D 10/11)"].click()
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXVK'"), object: app.staticTexts["selected-graphics-backend"])
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 30), .completed)
+        let gear = app.buttons["game-compatibility-123456"]
+        revealRecoveryButton(gear, in: app); gear.click()
+        let gamePicker = app.popUpButtons["game-graphics-backend-picker"]
+        XCTAssertTrue(gamePicker.waitForExistence(timeout: 20))
+        let gameReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: gamePicker)
+        XCTAssertEqual(XCTWaiter.wait(for: [gameReady], timeout: 20), .completed)
+        gamePicker.click(); app.menuItems["DXMT (Direct3D 10/11)"].click()
+        let effective = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXMT'"), object: app.staticTexts["game-effective-backend"])
+        XCTAssertEqual(XCTWaiter.wait(for: [effective], timeout: 20), .completed)
+        app.terminate(); app.launch()
+        XCTAssertTrue(gear.waitForExistence(timeout: 30)); revealRecoveryButton(gear, in: app); gear.click()
+        XCTAssertTrue(gamePicker.waitForExistence(timeout: 20))
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXMT'"), object: app.staticTexts["game-effective-backend"])], timeout: 20), .completed)
+        let snapshot = try await GameCompatibilityStore(store: store).inspectGraphics(appID: 123456)
+        XCTAssertEqual(snapshot.override, .dxmt)
+        XCTAssertEqual(snapshot.sharedBackend, .dxvk)
+    }
     func testPerGameBackendPersistsWithoutChangingSharedDefault() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
@@ -25,8 +76,8 @@ final class GamekitUITests: XCTestCase {
             let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: picker)
             XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
             picker.click()
-            XCTAssertFalse(app.menuItems["DXVK (In Dev)"].isEnabled)
-            XCTAssertFalse(app.menuItems["DXMT (In Dev)"].isEnabled)
+            XCTAssertFalse(app.menuItems["DXVK (Direct3D 10/11) — Not installed"].isEnabled)
+            XCTAssertFalse(app.menuItems["DXMT (Direct3D 10/11) — Not installed"].isEnabled)
             app.menuItems[title].click()
             let value = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", effective), object: app.staticTexts["game-effective-backend"])
             XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
@@ -202,10 +253,10 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(picker.waitForExistence(timeout: 20))
         revealRecoveryButton(picker, in: app)
         picker.click()
-        XCTAssertTrue(app.menuItems["DXVK (In Dev)"].exists)
-        XCTAssertTrue(app.menuItems["DXMT (In Dev)"].exists)
-        XCTAssertFalse(app.menuItems["DXVK (In Dev)"].isEnabled)
-        XCTAssertFalse(app.menuItems["DXMT (In Dev)"].isEnabled)
+        XCTAssertTrue(app.menuItems["DXVK (Direct3D 10/11) — Not installed"].exists)
+        XCTAssertTrue(app.menuItems["DXMT (Direct3D 10/11) — Not installed"].exists)
+        XCTAssertFalse(app.menuItems["DXVK (Direct3D 10/11) — Not installed"].isEnabled)
+        XCTAssertFalse(app.menuItems["DXMT (Direct3D 10/11) — Not installed"].isEnabled)
         app.menuItems["Metal 3 compatibility"].click()
         let selected = app.staticTexts["selected-graphics-backend"]
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
@@ -476,7 +527,7 @@ final class GamekitUITests: XCTestCase {
         // outside the scroll viewport. Avoid clicking during startup layout shifts.
         for _ in 0..<12 {
             if button.isHittable && scroll.frame.insetBy(dx: 0, dy: 16).contains(button.frame) { return }
-            scroll.scroll(byDeltaX: 0, deltaY: -160)
+            scroll.scroll(byDeltaX: 0, deltaY: button.frame.midY < scroll.frame.minY ? 160 : -160)
         }
         XCTAssertTrue(button.isHittable && scroll.frame.contains(button.frame), button.debugDescription)
     }

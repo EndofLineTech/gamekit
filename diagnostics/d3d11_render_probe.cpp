@@ -10,13 +10,34 @@
 static void check(HRESULT result, const char *step) {
     if (FAILED(result)) { std::printf("FAIL %s hr=%08lx\n", step, (unsigned long)result); std::exit(2); }
 }
-static void calibration(ID3D11Device *device, ID3D11DeviceContext *context) {
+static LONG CALLBACK reportProbeFault(EXCEPTION_POINTERS *exception) {
+    if (exception->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
+    HMODULE module{}; char name[4096] = {};
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCSTR)exception->ExceptionRecord->ExceptionAddress, &module);
+    if (module) GetModuleFileNameA(module, name, sizeof(name));
+    std::printf("PROBE_FAULT module=%s rva=%llx address=%p\n", name,
+        (unsigned long long)((uintptr_t)exception->ExceptionRecord->ExceptionAddress - (uintptr_t)module),
+        exception->ExceptionRecord->ExceptionAddress);
+    ExitProcess(6); // Only this standalone probe; avoid an unattended debugger.
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+static int calibration(ID3D11Device *device, ID3D11DeviceContext *context, int attempts) {
     ID3D11Query *disjoint{}, *timestamp{}, *event{};
     D3D11_QUERY_DESC desc{D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
     check(device->CreateQuery(&desc, &disjoint), "disjoint query");
     desc.Query = D3D11_QUERY_TIMESTAMP; check(device->CreateQuery(&desc, &timestamp), "timestamp query");
     desc.Query = D3D11_QUERY_EVENT; check(device->CreateQuery(&desc, &event), "event query");
-    for (int attempt = 0; attempt < 3; ++attempt) {
+    // An empty event must still complete; a CPU-readback gate must not wait on
+    // an unsubmitted chunk or make the first event deadlock.
+    context->End(event); context->Flush();
+    BOOL emptyComplete = FALSE;
+    const ULONGLONG emptyDeadline = GetTickCount64() + 5000;
+    while (!emptyComplete && GetTickCount64() < emptyDeadline)
+        check(context->GetData(event, &emptyComplete, sizeof(emptyComplete), D3D11_ASYNC_GETDATA_DONOTFLUSH), "empty event");
+    if (!emptyComplete) { std::puts("FAIL empty event timed out"); return attempts; }
+    int pending = 0;
+    for (int attempt = 0; attempt < attempts; ++attempt) {
         context->Begin(disjoint); context->End(timestamp); context->End(disjoint); context->End(event); context->Flush();
         BOOL complete = FALSE;
         const ULONGLONG deadline = GetTickCount64() + 5000;
@@ -27,14 +48,40 @@ static void calibration(ID3D11Device *device, ID3D11DeviceContext *context) {
         D3D11_QUERY_DATA_TIMESTAMP_DISJOINT timing{};
         HRESULT disjointHR = context->GetData(disjoint, &timing, sizeof(timing), 0);
         HRESULT timestampHR = context->GetData(timestamp, &ticks, sizeof(ticks), 0);
+        if (!complete || disjointHR != S_OK || timestampHR != S_OK || !timing.Frequency || timing.Disjoint || !ticks) ++pending;
         std::printf("calibration attempt=%d event=%d disjoint_hr=%08lx timestamp_hr=%08lx frequency=%llu disjoint=%d timestamp=%llu\n",
             attempt, complete, (unsigned long)disjointHR, (unsigned long)timestampHR,
             (unsigned long long)timing.Frequency, timing.Disjoint, (unsigned long long)ticks);
     }
     disjoint->Release(); timestamp->Release(); event->Release();
+    std::printf("calibration attempts=%d pending=%d\n", attempts, pending);
+    return pending;
 }
-int main() {
+static int foreignSharedHandle(const char *text) {
+    HANDLE foreign = (HANDLE)(uintptr_t)std::strtoull(text, nullptr, 10);
+    ID3D11Device *device{}; ID3D11DeviceContext *context{};
+    D3D_FEATURE_LEVEL requested = D3D_FEATURE_LEVEL_11_0;
+    check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, &requested, 1,
+                           D3D11_SDK_VERSION, &device, nullptr, &context), "foreign device");
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = desc.Height = 16; desc.MipLevels = desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R16_FLOAT; desc.SampleDesc.Count = 1;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+    ID3D11Texture2D *own{}, *invalid{}; IDXGIResource *resource{}; HANDLE handle{};
+    check(device->CreateTexture2D(&desc, nullptr, &own), "foreign own texture");
+    check(own->QueryInterface(__uuidof(IDXGIResource), (void **)&resource), "foreign own resource");
+    check(resource->GetSharedHandle(&handle), "foreign own handle");
+    resource->Release();
+    HRESULT result = device->OpenSharedResource(foreign, __uuidof(ID3D11Texture2D), (void **)&invalid);
+    bool valid = handle != foreign && FAILED(result) && !invalid;
+    own->Release(); context->Release(); device->Release();
+    return valid ? 0 : 5;
+}
+int main(int argc, char **argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
+    AddVectoredExceptionHandler(1, reportProbeFault);
+    if (argc == 3 && std::strcmp(argv[1], "--foreign-shared") == 0) return foreignSharedHandle(argv[2]);
     HWND window = CreateWindowA("STATIC", "Gamekit D3D11 qualification", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                 40, 40, 160, 160, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
     if (!window) return 2;
@@ -48,7 +95,77 @@ int main() {
     check(D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, &requested, 1,
         D3D11_SDK_VERSION, &swap, &chain, &device, &level, &context), "device/swapchain");
     std::printf("device feature_level=%x\n", level);
-    calibration(device, context);
+    const bool queryCompatibility = argc == 2 && std::strcmp(argv[1], "--query-compat") == 0;
+    const bool sharedCompatibility = argc == 2 && std::strcmp(argv[1], "--shared-compat") == 0;
+    int pending = calibration(device, context, queryCompatibility ? 100 : 3);
+    // Exact descriptor from Satisfactory's next startup failure after query
+    // calibration. Report separately from the ordinary render-control result.
+    D3D11_TEXTURE2D_DESC sharedDesc{};
+    sharedDesc.Width = sharedDesc.Height = 1024; sharedDesc.MipLevels = sharedDesc.ArraySize = 1;
+    sharedDesc.Format = DXGI_FORMAT_R16_FLOAT; sharedDesc.SampleDesc.Count = 1;
+    sharedDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    sharedDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+    ID3D11Texture2D *sharedTexture{};
+    HRESULT sharedResult = device->CreateTexture2D(&sharedDesc, nullptr, &sharedTexture);
+    std::printf("shared R16_FLOAT creation_hr=%08lx\n", (unsigned long)sharedResult);
+    if (sharedCompatibility) {
+        check(sharedResult, "shared texture creation");
+        IDXGIResource *resource{}; HANDLE handle{};
+        check(sharedTexture->QueryInterface(__uuidof(IDXGIResource), (void **)&resource), "shared resource interface");
+        check(resource->GetSharedHandle(&handle), "shared handle"); resource->Release();
+        char executable[4096], command[8300];
+        DWORD length = GetModuleFileNameA(nullptr, executable, sizeof(executable));
+        if (!length || length == sizeof(executable)) return 5;
+        std::snprintf(command, sizeof(command), "\"%s\" --foreign-shared %llu", executable, (unsigned long long)(uintptr_t)handle);
+        STARTUPINFOA startup{}; startup.cb = sizeof(startup); PROCESS_INFORMATION child{};
+        if (!CreateProcessA(executable, command, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &child)) return 5;
+        DWORD childExit = 5;
+        if (WaitForSingleObject(child.hProcess, 10000) == WAIT_OBJECT_0) GetExitCodeProcess(child.hProcess, &childExit);
+        CloseHandle(child.hThread); CloseHandle(child.hProcess);
+        std::printf("shared foreign_process_exit=%lu\n", (unsigned long)childExit);
+        if (childExit) return 5;
+        ID3D11Device *second{}; ID3D11DeviceContext *otherContext{};
+        check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, &requested, 1,
+                               D3D11_SDK_VERSION, &second, nullptr, &otherContext), "second device");
+        ID3D11Texture2D *alias{}, *staging{}; ID3D11RenderTargetView *sharedView{};
+        check(second->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void **)&alias), "same-process import");
+        check(device->CreateRenderTargetView(sharedTexture, nullptr, &sharedView), "shared RTV");
+        const float color[] = {0.5f, 0, 0, 1};
+        context->ClearRenderTargetView(sharedView, color);
+        D3D11_QUERY_DESC fenceDesc{D3D11_QUERY_EVENT, 0}; ID3D11Query *fence{};
+        check(device->CreateQuery(&fenceDesc, &fence), "shared write fence");
+        context->End(fence); context->Flush();
+        BOOL complete = FALSE; ULONGLONG until = GetTickCount64() + 5000;
+        while (!complete && GetTickCount64() < until) check(context->GetData(fence, &complete, sizeof(complete), 0), "shared fence wait");
+        if (!complete) return 5;
+        fence->Release(); sharedView->Release(); sharedTexture->Release(); sharedTexture = nullptr;
+        D3D11_TEXTURE2D_DESC readDesc{}; alias->GetDesc(&readDesc);
+        readDesc.Usage = D3D11_USAGE_STAGING; readDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        readDesc.BindFlags = 0; readDesc.MiscFlags = 0;
+        check(second->CreateTexture2D(&readDesc, nullptr, &staging), "shared staging");
+        otherContext->CopyResource(staging, alias);
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        check(otherContext->Map(staging, 0, D3D11_MAP_READ, 0, &mapped), "shared readback");
+        unsigned short value = *(unsigned short *)mapped.pData;
+        otherContext->Unmap(staging, 0);
+        std::printf("shared alias pixel=%04x expected=3800\n", value);
+        if (value != 0x3800) return 5;
+        otherContext->ClearState(); otherContext->Flush(); staging->Release(); alias->Release();
+        ID3D11Texture2D *invalid{};
+        HRESULT stale = second->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void **)&invalid);
+        std::printf("shared stale_hr=%08lx\n", (unsigned long)stale);
+        if (SUCCEEDED(stale) || invalid) return 5;
+        HRESULT bogus = second->OpenSharedResource((HANDLE)(uintptr_t)0x1233, __uuidof(ID3D11Texture2D), (void **)&invalid);
+        std::printf("shared bogus_hr=%08lx\n", (unsigned long)bogus);
+        if (SUCCEEDED(bogus) || invalid) return 5;
+        sharedDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+        HRESULT unsupported = device->CreateTexture2D(&sharedDesc, nullptr, &invalid);
+        std::printf("shared unsupported_hr=%08lx\n", (unsigned long)unsupported);
+        if (SUCCEEDED(unsupported) || invalid) return 5;
+        otherContext->Release(); second->Release();
+        std::puts("PASS legacy shared alias/lifetime/stale/bogus/unsupported handles");
+    }
+    if (sharedTexture) sharedTexture->Release();
     const char *shader = "float4 vs(uint id:SV_VertexID):SV_Position { return float4(id==1?3:-1,id==2?3:-1,0,1); }"
                          "float4 ps():SV_Target { return float4(0.25,0.5,0.75,1); }";
     ID3DBlob *vsCode{}, *psCode{}, *error{};
@@ -92,4 +209,5 @@ int main() {
     raster->Release(); vsCode->Release(); psCode->Release(); chain->Release(); context->Release(); device->Release();
     DestroyWindow(window);
     std::puts("PASS D3D11 shader draw/readback/present");
+    return queryCompatibility && pending ? 4 : 0;
 }

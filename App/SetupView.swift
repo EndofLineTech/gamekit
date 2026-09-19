@@ -46,7 +46,9 @@ struct SetupView: View {
                 Text("Saved graphics backend: \(setup.layout.graphicsBackend.title)")
                     .accessibilityIdentifier("selected-graphics-backend")
                 GraphicsBackendPicker()
-                Text("Applies to Windows Steam and all games using the shared default. Individual games can override it in their gear panel. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
+                Text(setup.layout.graphicsBackend == .dxmt || setup.layout.graphicsBackend == .dxvk
+                     ? "Default for all games without an override. Windows Steam retains Metal 3. Direct3D 12 games need an Apple backend in their gear panel. Stop Windows Steam before changing settings."
+                     : "Applies to Windows Steam and all games using the shared default. Individual games can override it in their gear panel. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
                     .font(.caption).accessibilityIdentifier("graphics-backend-scope")
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)

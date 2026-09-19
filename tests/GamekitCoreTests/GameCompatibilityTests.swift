@@ -50,7 +50,6 @@ struct GameCompatibilityTests {
     func missingGraphicsPayload() async throws {
         let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
         let settings = fixture.settings()
-        #expect(!GraphicsBackend.dxmt.qualifiedForGames && !GraphicsBackend.dxvk.qualifiedForGames)
         for choice in [GameGraphicsOverride.dxmt, .dxvk] {
             await #expect(throws: GraphicsPayloadError.unavailable) { try await settings.setGraphicsBackend(choice, appID: 553850) }
             #expect(try await settings.inspectGraphics(appID: 553850).override == .inherit)

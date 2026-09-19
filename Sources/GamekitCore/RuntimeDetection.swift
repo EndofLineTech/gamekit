@@ -77,9 +77,19 @@ public struct RuntimeProfile: Sendable {
 public enum GraphicsBackend: String, Codable, Sendable, CaseIterable {
     case automatic, metal3, dxvk, dxmt
 
-    /// Payload/probe availability is not game qualification. The alternative
-    /// renderers remain developer-only until the recorded game blockers clear.
-    public var qualifiedForGames: Bool { self == .automatic || self == .metal3 }
+    /// Qualification is limited to the documented D3D10/11 paths, not every
+    /// game's API/features. Payload integrity is checked independently.
+    public var qualifiedForGames: Bool {
+        switch self { case .automatic, .metal3, .dxvk, .dxmt: true }
+    }
+
+    /// Validated, one-request options for Gamekit Play. These never overwrite
+    /// the game's saved settings or Steam's user-authored launch options.
+    public func launchOptions(appID: UInt32) -> [String] {
+        guard appID == 526870, self == .dxmt || self == .dxvk else { return [] }
+        return ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] +
+            (self == .dxvk ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : [])
+    }
 
     public var title: String {
         switch self {

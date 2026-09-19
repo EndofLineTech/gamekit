@@ -107,8 +107,10 @@ backend using the same stopped-session flow. See
 See [per-game backend overrides](per-game-graphics-backends.md) for inheritance
 and migration details.
 
-The dropdown also lists **DXVK (In Dev)** and **DXMT (In Dev)** as disabled
-development placeholders. They cannot be selected yet.
+The dropdown also lists optional **DXVK** and **DXMT** Direct3D 10/11 backends.
+They are disabled when their qualified payloads are unavailable. See
+[graphics backends](graphics-backends.md) for installation, tested Satisfactory
+launch options and rollback. Keep an Apple backend for Direct3D 12 games.
 
 ### Steam controls
 

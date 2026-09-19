@@ -180,9 +180,16 @@ static BOOL ApplyGraphicsBackend(void) {
     else unsetenv("D3DM_MTL4");
     // Leave the VC++ family and feature-detection DLL loads intact. These
     // backends qualify D3D10/11 only; D3D12 rendering requires an Apple backend.
+#ifdef GAMEKIT_RENDERER_EXPERIMENT
+    GamekitRendererExperiment(backend, imageID);
+#endif
     NSString *base = document[@"defaultLibraryPath"], *cx = document[@"dxvkLibraryPath"];
     if (!ValidLibraryPath(base) || !ValidLibraryPath(cx)) return NO;
     NSString *desired = [backend isEqual:@"dxvk"] ? cx : base;
+#ifdef GAMEKIT_MVK_LIBRARY_DIRECTORY
+    if ([backend isEqual:@"dxvk"] && [imageID isEqual:@"526870"])
+        desired = [[NSString stringWithUTF8String:GAMEKIT_MVK_LIBRARY_DIRECTORY] stringByAppendingFormat:@":%@", base];
+#endif
     if ([EnvironmentString("DYLD_FALLBACK_LIBRARY_PATH") isEqual:desired]) return NO;
     // dyld captures its search paths at process startup. The constructor must
     // re-exec even when the correct game's loader is already selected.

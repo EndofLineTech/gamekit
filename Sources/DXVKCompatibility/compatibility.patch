@@ -1,0 +1,72 @@
+diff --git a/meson.build b/meson.build
+index ca7124d..c88a820 100644
+--- a/meson.build
++++ b/meson.build
+@@ -34,6 +34,7 @@ if platform == 'windows'
+ 
+   link_args += [
+     '-static',
++    '-Wl,--no-insert-timestamp',
+     '-static-libgcc',
+     '-static-libstdc++',
+     # We need to set the section alignment for debug symbols to
+diff --git a/src/dxvk/dxvk_context.cpp b/src/dxvk/dxvk_context.cpp
+index 1aaf615..140d8b3 100644
+--- a/src/dxvk/dxvk_context.cpp
++++ b/src/dxvk/dxvk_context.cpp
+@@ -2493,7 +2493,7 @@ namespace dxvk {
+       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+ 
+     m_cmd->trackGpuEvent(event->reset(handle));
+-    m_cmd->trackResource<DxvkAccess::None>(event);
++    m_cmd->trackResource<DxvkAccess::Write>(event);
+   }
+   
+ 
+diff --git a/src/dxvk/dxvk_gpu_event.cpp b/src/dxvk/dxvk_gpu_event.cpp
+index b54303f..939f6ac 100644
+--- a/src/dxvk/dxvk_gpu_event.cpp
++++ b/src/dxvk/dxvk_gpu_event.cpp
+@@ -16,6 +16,11 @@ namespace dxvk {
+   DxvkGpuEventStatus DxvkGpuEvent::test() const {
+     if (!m_handle.event)
+       return DxvkGpuEventStatus::Invalid;
++    // MoltenVK can signal the Metal event before command-buffer completion
++    // publishes prior timestamp results. Poll the tracked submission as well;
++    // do not block, sleep, or manufacture a timestamp to satisfy calibration.
++    if (isInUse(DxvkAccess::Write))
++      return DxvkGpuEventStatus::Pending;
+     
+     VkResult status = m_vkd->vkGetEventStatus(
+       m_vkd->device(), m_handle.event);
+@@ -101,4 +106,4 @@ namespace dxvk {
+     m_handles.clear();
+   }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/util/config/config.cpp b/src/util/config/config.cpp
+index 8ae703a..cfdc87a 100644
+--- a/src/util/config/config.cpp
++++ b/src/util/config/config.cpp
+@@ -1,4 +1,5 @@
+ #include <array>
++#include <algorithm>
+ #include <fstream>
+ #include <sstream>
+ #include <iostream>
+diff --git a/src/util/log/log.h b/src/util/log/log.h
+index 3589d70..46bc671 100644
+--- a/src/util/log/log.h
++++ b/src/util/log/log.h
+@@ -18,7 +18,8 @@ namespace dxvk {
+     None  = 5,
+   };
+   
+-  using PFN_wineLogOutput = int (STDMETHODCALLTYPE *)(const char *);
++  // ntdll.spec exports __wine_dbg_output as cdecl, including under WoW64.
++  using PFN_wineLogOutput = int (__cdecl *)(const char *);
+ 
+   /**
+    * \brief Logger

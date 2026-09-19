@@ -32,6 +32,8 @@ def member(archive, name):
 def stage(source, artifacts, wine_archive, destination):
     if destination.exists():
         raise ValueError("Refusing to overwrite candidate directory")
+    if digest(wine_archive) != "9da7ee0cbf386522f3a9906943726d9c3c125dbbd9ab120e3cde80e88d6091b2":
+        raise ValueError("Wine archive digest mismatch")
     for filename, expected, _ in ARCHIVES.values():
         if digest(artifacts / filename) != expected:
             raise ValueError("Backend archive digest mismatch")

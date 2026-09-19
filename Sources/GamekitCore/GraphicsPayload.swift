@@ -10,28 +10,28 @@ struct GraphicsPayload: Sendable {
         guard backend == .dxmt || backend == .dxvk else { return nil }
         self.backend = backend
     }
-    var revision: String { backend == .dxmt ? "dxmt-0.80-1" : "dxvk-macos-1.10.3-20230507-1" }
+    var revision: String { backend == .dxmt ? "dxmt-0.80-compat2" : "dxvk-macos-1.10.3-compat2" }
     func root(_ layout: RuntimeLayout) -> URL { layout.dataRoot.appendingPathComponent("GraphicsBackends/\(revision)") }
     var hashes: [String: String] {
         if backend == .dxmt {
             return [
-                "x86_64-windows/d3d11.dll": "7ca382af0eb32d8a432f6efb14d594fefb45673663be1f7e6682254bff885c47",
+                "x86_64-windows/d3d11.dll": "08f9d86cf985b2f0310140aa0c7179b303f73dd4f82d2b9c06d622ae88ef4276",
                 "x86_64-windows/d3d10core.dll": "833d26971abc8661efc8b5cc18548c70ce8e482e4ea4b1d3f69a367612264d26",
-                "x86_64-windows/dxgi.dll": "fc58aae0aba511a1ec4d2417e5bba6adb888bb14315d0f59cccdfd27f670d544",
+                "x86_64-windows/dxgi.dll": "140e9d59c09de2dfddc81bfa44ffea550c2fb7f7c234c52d7efb7ee138451487",
                 "x86_64-windows/winemetal.dll": "514245d533c750599614311a792c45ed600aef52948571d98c0fc70fd3df16e0",
-                "i386-windows/d3d11.dll": "9afc2b3419818618c4c87274435a28935b0df002caa4b9a8d3a88d3dc846b17d",
+                "i386-windows/d3d11.dll": "faae57658d3a3510ef5a2acf32f0d260a747133fe37262cc2d08ef7664688f6e",
                 "i386-windows/d3d10core.dll": "c5a26310d14a30c3e1700a4d0c9865be28a11351a5c4dc5b83ab1bd8fcf7662f",
-                "i386-windows/dxgi.dll": "7df8cdf66e12a108410002abc77b01f70aa59b8a36a70fa0bc6ae3b056841319",
+                "i386-windows/dxgi.dll": "24db0dc467490dcd0b85b3f33c1ce64ec4a0e974f9ca859cb2fbcd5ff7e8a24b",
                 "i386-windows/winemetal.dll": "20a6865facebdaac92b6c06fadf37d2efb5a242b22ca1c349bb57d7ad43df8e3",
                 "x86_64-unix/winemetal.so": "3d50d7f39c64778c71d0af2fce1cde818d09ffbce7c4f7b8ae24ae1df567c0ca",
             ]
         }
         return [
-            "x86_64-windows/d3d11.dll": "173980cb6c51fdd53dc37b9a17f0de7c5dfdebda18f52059aa7d5a6f1871299c",
-            "x86_64-windows/d3d10core.dll": "225562562050d9fae1d4d5d2ca0537020bac268c80dec9aa0633dc0d338a2840",
+            "x86_64-windows/d3d11.dll": "82ec183f211309cd0852898aa4ec377884abb8175021f3ba3118e0b0433724e3",
+            "x86_64-windows/d3d10core.dll": "57bda05c9ea6dcb167831b7d83b464a90b8645aeccbda39acc53c9ee59d61404",
             "x86_64-windows/dxgi.dll": "732e580910e3b935a030e97799409331b5d759b569afdfad2065ccea6de75186",
-            "i386-windows/d3d11.dll": "2173b081a8660dd70a089dac875a829da6cd1a6230b23fd1daa2a7d7baa1cb03",
-            "i386-windows/d3d10core.dll": "9e0202437af13a6d0acdb992954321f00a641b2eb98897908c41635ffddc1fc8",
+            "i386-windows/d3d11.dll": "363728dcf294d4e1a145ecee5c361ed3d7f6d0591d96036fb56f7b36d7636920",
+            "i386-windows/d3d10core.dll": "17bcdb55448bc0db4f830bdb34c21398a25ca4b75613c804ee9fcc82a8fc2a79",
             "i386-windows/dxgi.dll": "228cb38f21224d880217635bb3d59f94ce3f3c7b2de109821ac47d8b4391a792",
         ]
     }

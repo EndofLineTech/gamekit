@@ -19,8 +19,12 @@ struct GameEvaluationLaunchTests {
         try #require(!satisfactoryD3D11 || appID == 526870)
         let disableStreamline = env["GAMEKIT_E6_DISABLE_STREAMLINE"] == "1"
         try #require(!disableStreamline || satisfactoryD3D11)
+        let preferComputePost = env["GAMEKIT_E6_PREFER_COMPUTE_POST"] == "1"
+        try #require(!preferComputePost || satisfactoryD3D11)
         let expectMoltenVKPairing = env["GAMEKIT_E6_EXPECT_MOLTENVK_CX"] == "1"
         try #require(!expectMoltenVKPairing || satisfactoryD3D11)
+        let expectedMoltenVKLibrary = env["GAMEKIT_E6_EXPECT_MOLTENVK_LIBRARY"]
+        try #require(expectedMoltenVKLibrary == nil || (satisfactoryD3D11 && expectedMoltenVKLibrary!.hasPrefix("/")))
         let seconds = Double(env["GAMEKIT_E6_OBSERVE_SECONDS"] ?? "45") ?? 45
         let observeExisting = env["GAMEKIT_E6_OBSERVE_EXISTING"] == "1"
         let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil && !observeExisting && !satisfactoryD3D11 ? 90 : 180
@@ -92,6 +96,7 @@ struct GameEvaluationLaunchTests {
         let prefix = store.prefixURL(for: record.id)
         let library = try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable)
         let game = try #require(library.games.first { $0.id == appID })
+        let expectedGameBundle = try SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name)).bundleURL.path
         try #require(game.state == .ready)
         let initial = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
         try #require(initial.complete && (observeExisting || !initial.processes.contains { $0.role == .other }), "Close other managed games before the observation")
@@ -166,9 +171,9 @@ struct GameEvaluationLaunchTests {
             print("E6 AppID=\(appID), build=\(game.buildID ?? "unknown"), observation=\(Int(seconds))s")
             if !observeExisting {
                 if let script = env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] {
-                    try #require(driverExperiment == nil && appID == 553850 && script.hasPrefix("/"))
+                    try #require(driverExperiment == nil && [553850, 526870].contains(appID) && script.hasPrefix("/"))
                     let pressed = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
-                        arguments: [script, "launch-game-553850"], timeout: 40, outputLimit: 4096))
+                        arguments: [script, "launch-game-\(appID)"], timeout: 40, outputLimit: 4096))
                     print(pressed.stdoutText)
                     try #require(pressed.termination == .exited(0))
                     try await Task.sleep(for: .seconds(8))
@@ -181,7 +186,8 @@ struct GameEvaluationLaunchTests {
                     let steam = prefix.appendingPathComponent(record.steamExecutable.rawValue)
                     let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
                         arguments: satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
-                            (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) : [steam.path, "steam://rungameid/\(appID)"],
+                            (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) +
+                            (preferComputePost ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : []) : [steam.path, "steam://rungameid/\(appID)"],
                         environment: layout.environment(prefix: prefix, session: session),
                         workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
                     try #require(launched.termination == .exited(0))
@@ -215,10 +221,10 @@ struct GameEvaluationLaunchTests {
                         arguments: ["-w", String(foregroundPID)], timeout: 10, outputLimit: 4 * 1024 * 1024))
                     if maps.termination == .exited(0) {
                         try maps.stdout.write(to: destination.appendingPathComponent("modules-\(foregroundPID).txt"))
-                        if maps.stdoutText.contains("/moltenvkcx/libMoltenVK.dylib") &&
-                            maps.stdoutText.contains("/shared-pe-v3-dxvk-macos-1.10.3-20230507-1/") {
+                        if maps.stdoutText.contains(expectedMoltenVKLibrary ?? "/moltenvkcx/libMoltenVK.dylib") &&
+                            maps.stdoutText.contains(expectedGameBundle + "/Contents/lib/wine/x86_64-windows/d3d11.dll") {
                             verifiedMoltenVKPairing = true
-                            print("E6 verified DXVK game loader and paired moltenvkcx mapped in owned game PID=\(foregroundPID)")
+                            print("E6 verified DXVK game loader and expected MoltenVK mapped in owned game PID=\(foregroundPID)")
                         }
                         mappedPIDs.insert(foregroundPID)
                     }
@@ -449,7 +455,7 @@ struct GameEvaluationLaunchTests {
             }
             try #require(!(passiveAfterWarning || tryAgainDriverWarning) || continuedDriverWarning, "Requested warning action must have executed")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
-            try #require(!expectMoltenVKPairing || verifiedMoltenVKPairing, "Expected paired MoltenVK must be mapped in the owned game")
+            try #require(!(expectMoltenVKPairing || expectedMoltenVKLibrary != nil) || verifiedMoltenVKPairing, "Expected paired MoltenVK must be mapped in the owned game")
         } catch {
             try await cleanup()
             throw error

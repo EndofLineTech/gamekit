@@ -9,7 +9,9 @@ unchanged D3DMetal 4.0b2 payload.
 In **Setup and prerequisites**, Gamekit displays **Saved graphics backend** and
 offers a dropdown with **Automatic (Apple default)** and **Metal 3 compatibility**.
 Each game's gear panel offers a separate override with **Use shared default**.
-**DXVK (In Dev)** and **DXMT (In Dev)** are listed but disabled until implemented.
+**DXVK** and **DXMT** are optional Direct3D 10/11 choices. They require qualified
+payloads; see [graphics backends](graphics-backends.md). Steam itself retains an
+Apple renderer when either is the shared game default.
 
 - **Automatic (Apple default):** Gamekit leaves `D3DM_MTL4` unset. On the
   validated macOS 27 host, Apple's documented D3D12 default is Metal 4.

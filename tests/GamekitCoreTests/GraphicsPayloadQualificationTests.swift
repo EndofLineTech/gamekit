@@ -42,7 +42,8 @@ struct GraphicsPayloadQualificationTests {
             for index in probes.indices {
                 if backend == .metal3 && index == 1 { continue } // Apple payload is x64 only.
                 let session = try await RuntimeSession.startGameProbe(store: store, id: id, layout: layout, game: game,
-                    arguments: [directory.appendingPathComponent("probe\(index).exe").path])
+                    arguments: [directory.appendingPathComponent("probe\(index).exe").path] +
+                        (backend == .dxmt ? ["--shared-compat"] : backend == .dxvk ? ["--query-compat"] : []))
                 let result = await session.command.result(); _ = try await session.stop()
                 print("Derived \(backend.rawValue) arch=\(index == 0 ? "x64" : "x86"): \(result.termination)\n\(result.stdoutText)\n\(result.stderrText)")
                 #expect(result.termination == .exited(0))
@@ -54,12 +55,15 @@ struct GraphicsPayloadQualificationTests {
         print("Disposable derived-loader evidence: \(root.path)")
     }
     @Test("Render using isolated candidate runtimes and fresh prefixes",
-          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_GRAPHICS_QUALIFICATION"] != nil))
+          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_GRAPHICS_QUALIFICATION"] != nil || ProcessInfo.processInfo.environment["GAMEKIT_QUERY_COMPARISON"] != nil || ProcessInfo.processInfo.environment["GAMEKIT_SHARED_COMPARISON"] != nil))
     func render() async throws {
         let env = ProcessInfo.processInfo.environment
-        let candidates = URL(fileURLWithPath: try #require(env["GAMEKIT_GRAPHICS_QUALIFICATION"]))
+        let queryComparison = env["GAMEKIT_QUERY_COMPARISON"] != nil
+        let sharedComparison = env["GAMEKIT_SHARED_COMPARISON"] != nil
+        let candidates = URL(fileURLWithPath: try #require(env["GAMEKIT_SHARED_COMPARISON"] ?? env["GAMEKIT_QUERY_COMPARISON"] ?? env["GAMEKIT_GRAPHICS_QUALIFICATION"]))
         let probe = try #require(env["GAMEKIT_D3D11_PROBE"])
-        for backend in ["dxmt", "dxvk"] {
+        let labels = env["GAMEKIT_QUALIFICATION_FIXED_ONLY"] == "1" ? ["fixed"] : queryComparison || sharedComparison ? ["control", "fixed"] : ["dxmt", "dxvk"]
+        for backend in labels {
             let bundle = candidates.appendingPathComponent("\(backend)/Candidate.app")
             let replacements = try JSONDecoder().decode([String: String].self,
                 from: Data(contentsOf: candidates.appendingPathComponent("\(backend)/qualification.json")))
@@ -73,13 +77,16 @@ struct GraphicsPayloadQualificationTests {
             _ = try await store.create(.init(id: id, name: "Disposable graphics probe", runtime: profile.identity,
                 installation: .installing(.creatingPrefix)))
             try FileManager.default.createDirectory(at: store.prefixURL(for: id), withIntermediateDirectories: true)
-            let session = try await RuntimeSession.start(store: store, id: id, layout: layout, arguments: [probe], timeout: 120)
+            let session = try await RuntimeSession.start(store: store, id: id, layout: layout,
+                arguments: [probe] + (queryComparison ? ["--query-compat"] : sharedComparison ? ["--shared-compat"] : []), timeout: 120)
             let result = await session.command.result()
             print("Backend \(backend): \(result.termination)\n\(result.stdoutText)\n\(result.stderrText)")
             _ = try await session.stop()
             #expect(try await session.snapshot().processes.isEmpty)
-            #expect(result.termination == .exited(0))
-            #expect(result.stdoutText.contains("PASS D3D11 shader draw/readback/present"))
+            #expect(result.termination == .exited(backend == "control" ? (sharedComparison ? 2 : 4) : 0))
+            if queryComparison && backend == "fixed" { #expect(result.stdoutText.contains("calibration attempts=100 pending=0")) }
+            if !(sharedComparison && backend == "control") { #expect(result.stdoutText.contains("PASS D3D11 shader draw/readback/present")) }
+            if sharedComparison && backend == "fixed" { #expect(result.stdoutText.contains("PASS legacy shared alias/lifetime/stale/bogus/unsupported handles")) }
         }
     }
 }
