@@ -17,6 +17,8 @@ struct GameEvaluationLaunchTests {
         try #require([553850, 413150, 526870].contains(appID))
         let satisfactoryD3D11 = env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1"
         try #require(!satisfactoryD3D11 || appID == 526870)
+        let helldiversD3D11 = env["GAMEKIT_E6_HELLDIVERS_D3D11"] == "1"
+        try #require(!helldiversD3D11 || (appID == 553850 && env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] == nil && !satisfactoryD3D11))
         let disableStreamline = env["GAMEKIT_E6_DISABLE_STREAMLINE"] == "1"
         try #require(!disableStreamline || satisfactoryD3D11)
         let preferComputePost = env["GAMEKIT_E6_PREFER_COMPUTE_POST"] == "1"
@@ -177,7 +179,7 @@ struct GameEvaluationLaunchTests {
                     print(pressed.stdoutText)
                     try #require(pressed.termination == .exited(0))
                     try await Task.sleep(for: .seconds(8))
-                } else if env["GAMEKIT_E6_STEAM_URL_LAUNCH"] == "1" || satisfactoryD3D11 {
+                } else if env["GAMEKIT_E6_STEAM_URL_LAUNCH"] == "1" || satisfactoryD3D11 || helldiversD3D11 {
                     _ = try await lifecycle.launch()
                     let observed = try await lifecycle.diagnosticProcesses()
                     let sessions = Set(observed.processes.compactMap(\.sessionID))
@@ -185,7 +187,7 @@ struct GameEvaluationLaunchTests {
                     let session = try #require(sessions.first)
                     let steam = prefix.appendingPathComponent(record.steamExecutable.rawValue)
                     let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
-                        arguments: satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
+                        arguments: helldiversD3D11 ? [steam.path, "-applaunch", String(appID), "--use-d3d11"] : satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
                             (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) +
                             (preferComputePost ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : []) : [steam.path, "steam://rungameid/\(appID)"],
                         environment: layout.environment(prefix: prefix, session: session),
@@ -216,7 +218,7 @@ struct GameEvaluationLaunchTests {
                         gamePIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular && $0.localizedName == game.name
                     })?.processIdentifier
                 }
-                if satisfactoryD3D11, sample >= 5, let foregroundPID, !mappedPIDs.contains(foregroundPID) {
+                if (satisfactoryD3D11 || helldiversD3D11), sample >= (helldiversD3D11 ? 1 : 5), let foregroundPID, !mappedPIDs.contains(foregroundPID) {
                     let maps = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/vmmap"),
                         arguments: ["-w", String(foregroundPID)], timeout: 10, outputLimit: 4 * 1024 * 1024))
                     if maps.termination == .exited(0) {

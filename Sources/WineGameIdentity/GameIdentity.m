@@ -259,6 +259,14 @@ static NSString *CurrentLoaderPath(void) {
  * The one-shot marker is removed before Wine creates any Windows children. */
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
+#ifdef GAMEKIT_DEVICE_API_CAPTURE
+        extern void GamekitArmDeviceAPICapture(int enabled);
+        NSDictionary *captureDocument = ReadSessionDocument();
+        NSString *captureID = ImageAppID(captureDocument);
+        NSString *captureImage = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
+        GamekitArmDeviceAPICapture(([captureID isEqual:@"553850"] && [captureImage isEqual:@"helldivers2.exe"]) ||
+                                  ([captureID isEqual:@"900001"] && [captureImage hasPrefix:@"probe"]));
+#endif
         BOOL libraryPathChanged = ApplyGraphicsBackend();
         if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
         NSString *current = CurrentLoaderPath();
