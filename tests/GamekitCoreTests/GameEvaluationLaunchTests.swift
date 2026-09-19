@@ -14,10 +14,16 @@ struct GameEvaluationLaunchTests {
         let env = ProcessInfo.processInfo.environment
         let rawID = try #require(env["GAMEKIT_E6_APPID"])
         let appID = try #require(UInt32(rawID))
-        try #require([553850, 413150].contains(appID))
+        try #require([553850, 413150, 526870].contains(appID))
+        let satisfactoryD3D11 = env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1"
+        try #require(!satisfactoryD3D11 || appID == 526870)
+        let disableStreamline = env["GAMEKIT_E6_DISABLE_STREAMLINE"] == "1"
+        try #require(!disableStreamline || satisfactoryD3D11)
+        let expectMoltenVKPairing = env["GAMEKIT_E6_EXPECT_MOLTENVK_CX"] == "1"
+        try #require(!expectMoltenVKPairing || satisfactoryD3D11)
         let seconds = Double(env["GAMEKIT_E6_OBSERVE_SECONDS"] ?? "45") ?? 45
         let observeExisting = env["GAMEKIT_E6_OBSERVE_EXISTING"] == "1"
-        let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil && !observeExisting ? 90 : 180
+        let maximumSeconds: Double = env["GAMEKIT_TEXT_INPUT_EXPERIMENT"] == nil && !observeExisting && !satisfactoryD3D11 ? 90 : 180
         try #require((15...maximumSeconds).contains(seconds))
         try #require(CGPreflightScreenCaptureAccess(), "Grant window-capture permission before this opt-in observation")
         let tryAgainDriverWarning = env["GAMEKIT_E6_TRY_AGAIN_GPU_WARNING"] == "1"
@@ -166,7 +172,7 @@ struct GameEvaluationLaunchTests {
                     print(pressed.stdoutText)
                     try #require(pressed.termination == .exited(0))
                     try await Task.sleep(for: .seconds(8))
-                } else if env["GAMEKIT_E6_STEAM_URL_LAUNCH"] == "1" {
+                } else if env["GAMEKIT_E6_STEAM_URL_LAUNCH"] == "1" || satisfactoryD3D11 {
                     _ = try await lifecycle.launch()
                     let observed = try await lifecycle.diagnosticProcesses()
                     let sessions = Set(observed.processes.compactMap(\.sessionID))
@@ -174,7 +180,8 @@ struct GameEvaluationLaunchTests {
                     let session = try #require(sessions.first)
                     let steam = prefix.appendingPathComponent(record.steamExecutable.rawValue)
                     let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
-                        arguments: [steam.path, "steam://rungameid/\(appID)"],
+                        arguments: satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
+                            (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) : [steam.path, "steam://rungameid/\(appID)"],
                         environment: layout.environment(prefix: prefix, session: session),
                         workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
                     try #require(launched.termination == .exited(0))
@@ -191,6 +198,8 @@ struct GameEvaluationLaunchTests {
             var continuedDriverWarning = false
             var completedScreenActions = Set<String>()
             var completedSpaceRoundTrip = false
+            var mappedPIDs = Set<Int32>()
+            var verifiedMoltenVKPairing = false
             repeat {
                 try await Task.sleep(for: .seconds(10))
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
@@ -200,6 +209,19 @@ struct GameEvaluationLaunchTests {
                     NSWorkspace.shared.runningApplications.first(where: {
                         gamePIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular && $0.localizedName == game.name
                     })?.processIdentifier
+                }
+                if satisfactoryD3D11, sample >= 5, let foregroundPID, !mappedPIDs.contains(foregroundPID) {
+                    let maps = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/vmmap"),
+                        arguments: ["-w", String(foregroundPID)], timeout: 10, outputLimit: 4 * 1024 * 1024))
+                    if maps.termination == .exited(0) {
+                        try maps.stdout.write(to: destination.appendingPathComponent("modules-\(foregroundPID).txt"))
+                        if maps.stdoutText.contains("/moltenvkcx/libMoltenVK.dylib") &&
+                            maps.stdoutText.contains("/shared-pe-v3-dxvk-macos-1.10.3-20230507-1/") {
+                            verifiedMoltenVKPairing = true
+                            print("E6 verified DXVK game loader and paired moltenvkcx mapped in owned game PID=\(foregroundPID)")
+                        }
+                        mappedPIDs.insert(foregroundPID)
+                    }
                 }
                 if let foregroundPID, !verifyDriverWarning, !(passiveAfterWarning && continuedDriverWarning) {
                     _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
@@ -427,6 +449,7 @@ struct GameEvaluationLaunchTests {
             }
             try #require(!(passiveAfterWarning || tryAgainDriverWarning) || continuedDriverWarning, "Requested warning action must have executed")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
+            try #require(!expectMoltenVKPairing || verifiedMoltenVKPairing, "Expected paired MoltenVK must be mapped in the owned game")
         } catch {
             try await cleanup()
             throw error

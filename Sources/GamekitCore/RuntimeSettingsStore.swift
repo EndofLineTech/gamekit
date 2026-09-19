@@ -89,6 +89,8 @@ public actor RuntimeSettingsStore {
         case .graphics(let backend):
             graphicsBackend = backend
         }
+        try GraphicsPayload(backend: graphicsBackend)?.validate(layout: RuntimeLayout(dataRoot: store.root,
+            profile: revision.profile, bundle: bundle, graphicsBackend: graphicsBackend))
         guard let directory = try metadata(create: true) else { throw EnvironmentStoreError.notFound }
         try directory.withWriteLock {
             try directory.write(JSONEncoder().encode(Settings(bundle: bundle, revision: revision, graphicsBackend: graphicsBackend)), to: "RuntimeSelection.json", createOnly: false, beforeCommit: {})
