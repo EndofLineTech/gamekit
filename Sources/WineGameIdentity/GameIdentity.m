@@ -146,23 +146,47 @@ static NSString *ImageAppID(NSDictionary *document) {
     return found;
 }
 
-static void ApplyGraphicsBackend(void) {
+static BOOL ValidGraphicsBackend(id value) {
+    return [value isKindOfClass:NSString.class] &&
+        ( [value isEqual:@"automatic"] || [value isEqual:@"metal3"] || [value isEqual:@"dxmt"] || [value isEqual:@"dxvk"] );
+}
+
+static BOOL ValidLibraryPath(id value) {
+    if (![value isKindOfClass:NSString.class] || ![value length] || [value length] > 16384 ||
+        [value rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return NO;
+    for (NSString *part in [value componentsSeparatedByString:@":"]) {
+        if (![part hasPrefix:@"/"] || [part.pathComponents containsObject:@".."] || [part.pathComponents containsObject:@"."]) return NO;
+    }
+    return YES;
+}
+
+static BOOL ApplyGraphicsBackend(void) {
     NSDictionary *document = ReadSessionDocument();
     id shared = document[@"sharedGraphicsBackend"];
-    if (![shared isKindOfClass:NSString.class] || !([shared isEqual:@"automatic"] || [shared isEqual:@"metal3"])) return;
-    NSString *backend = shared;
+    if (!ValidGraphicsBackend(shared)) return NO;
+    NSString *backend = [shared isEqual:@"automatic"] ? @"automatic" : @"metal3";
     NSString *imageID = ImageAppID(document), *advertised = EnvironmentString("SteamAppId");
     id overrides = document[@"graphicsBackends"];
     if (imageID && [document[@"games"][imageID] isKindOfClass:NSString.class] &&
         (!advertised.length || [GameAppID() isEqual:imageID]) &&
-        [overrides isKindOfClass:NSDictionary.class] && [overrides count] <= 512) {
+        (!overrides || ([overrides isKindOfClass:NSDictionary.class] && [overrides count] <= 512))) {
+        backend = shared;
         id chosen = overrides[imageID];
-        if ([chosen isKindOfClass:NSString.class] && ([chosen isEqual:@"automatic"] || [chosen isEqual:@"metal3"])) backend = chosen;
+        if (ValidGraphicsBackend(chosen)) backend = chosen;
     }
     // Reset inherited game overrides for Steam/services/unrelated children.
     // Automatic means UNSET, not a guessed Metal 4 flag value.
     if ([backend isEqual:@"metal3"]) setenv("D3DM_MTL4", "0", 1);
     else unsetenv("D3DM_MTL4");
+    // Leave the VC++ family and feature-detection DLL loads intact. These
+    // backends qualify D3D10/11 only; D3D12 rendering requires an Apple backend.
+    NSString *base = document[@"defaultLibraryPath"], *cx = document[@"dxvkLibraryPath"];
+    if (!ValidLibraryPath(base) || !ValidLibraryPath(cx)) return NO;
+    NSString *desired = [backend isEqual:@"dxvk"] ? cx : base;
+    if ([EnvironmentString("DYLD_FALLBACK_LIBRARY_PATH") isEqual:desired]) return NO;
+    // dyld captures its search paths at process startup. The constructor must
+    // re-exec even when the correct game's loader is already selected.
+    return setenv("DYLD_FALLBACK_LIBRARY_PATH", desired.UTF8String, 1) == 0;
 }
 
 static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace) {
@@ -205,6 +229,7 @@ int main(void) {
     @autoreleasepool {
         if (getenv("GAMEKIT_TEST_BACKEND_SETTING")) {
             ApplyGraphicsBackend();
+            if (getenv("GAMEKIT_TEST_DLL_SETTING")) { puts(getenv("WINEDLLOVERRIDES") ?: "unset"); return 0; }
             puts(getenv("D3DM_MTL4") ?: "unset"); return 0;
         }
         if (getenv("GAMEKIT_TEST_SPACE_SETTING")) { puts(GamekitShouldUseFullscreenSpace() ? "enabled" : "disabled"); return 0; }
@@ -227,7 +252,7 @@ static NSString *CurrentLoaderPath(void) {
  * The one-shot marker is removed before Wine creates any Windows children. */
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
-        ApplyGraphicsBackend();
+        BOOL libraryPathChanged = ApplyGraphicsBackend();
         if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
         NSString *current = CurrentLoaderPath();
         NSString *routed = EnvironmentString("GAMEKIT_IDENTITY_ROUTED");
@@ -237,7 +262,7 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
         }
         NSString *target = nil;
         (void)ReadGameNameWithLoader(&target, NULL);
-        if (!current || !target.length || [current isEqual:target]) return;
+        if (!current || !target.length || ([current isEqual:target] && !libraryPathChanged)) return;
         NSString *root = [[[[EnvironmentString("WINEPREFIX") stringByDeletingLastPathComponent]
             stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Launchers"] stringByAppendingString:@"/"];
         if (![current hasPrefix:root] || ![target hasPrefix:root]) return;

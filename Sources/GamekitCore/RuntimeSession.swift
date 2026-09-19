@@ -71,6 +71,7 @@ public actor RuntimeSession {
             try GameDockNames.publish(root: layout.dataRoot, prefix: lease.prefix, session: sessionID, games: games,
                 steamExecutable: lease.record.steamExecutable, loaders: [String(game.appID): executable.path],
                 defaultLoader: SteamApplicationBundle(layout: layout).executable.path, graphicsBackend: layout.graphicsBackend,
+                libraryLayout: layout,
                 validate: { try lease.validate() })
         }
         let command = try await ProcessExecutor().start(CommandRequest(

@@ -22,19 +22,25 @@ struct SteamApplicationBundle: Sendable {
     let layout: RuntimeLayout
     let game: GameApplicationIdentity?
     private let driverCompatibilityEnabled: Bool
-    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool = true) {
+    private let graphicsPayload: GraphicsPayload?
+    var hasAlternativeGraphics: Bool { graphicsPayload != nil }
+    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool = true,
+         graphicsBackend: GraphicsBackend? = nil) {
         self.layout = layout; self.game = game; self.driverCompatibilityEnabled = driverCompatibilityEnabled
+        graphicsPayload = game == nil ? nil : GraphicsPayload(backend: graphicsBackend ?? layout.graphicsBackend)
     }
     static func configured(layout: RuntimeLayout, game: GameApplicationIdentity) throws -> Self {
         let preferences = try GameCompatibilityPreferences.read(root: layout.dataRoot)
-        return Self(layout: layout, game: game, driverCompatibilityEnabled: preferences.driverEnabled(appID: game.appID, revision: layout.profile.revision))
+        return Self(layout: layout, game: game, driverCompatibilityEnabled: preferences.driverEnabled(appID: game.appID, revision: layout.profile.revision),
+                    graphicsBackend: (preferences.graphicsBackends[String(game.appID)] ?? .inherit).effectiveBackend(shared: layout.graphicsBackend))
     }
     static let identifier = "tech.endofline.gamekit.windows-steam"
     static let displayName = "Windows Steam"
     private var executableName: String { game?.filename ?? Self.displayName }
-    private var driverCompatibility: Bool { layout.profile.revision == .driverVersion1 && game?.appID == 553850 && driverCompatibilityEnabled }
+    private var driverCompatibility: Bool { graphicsPayload == nil && layout.profile.revision == .driverVersion1 && game?.appID == 553850 && driverCompatibilityEnabled }
     private var gameCacheFormat: String {
-        layout.profile.revision == .driverVersion1 && game?.appID == 553850 && !driverCompatibilityEnabled
+        if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision }
+        return layout.profile.revision == .driverVersion1 && game?.appID == 553850 && !driverCompatibilityEnabled
             ? "shared-pe-v2-driver-off" : "shared-pe-v2"
     }
     private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
@@ -79,15 +85,25 @@ struct SteamApplicationBundle: Sendable {
         else { throw SteamApplicationError.invalidBundle }
         for (path, hash) in layout.profile.hashes {
             guard let copy = copiedPath(path) else { continue }
+            if let graphicsPayload, path.hasPrefix("Contents/SharedSupport/wine/lib/wine/"),
+               graphicsPayload.hashes[String(path.dropFirst("Contents/SharedSupport/wine/lib/wine/".count))] != nil { continue }
             let expected = driverCompatibility && path == dxgiRelative ? layout.profile.hashes[RuntimeProfile.driverShimRelative] : hash
             guard let expected, RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: expected) else { throw SteamApplicationError.invalidBundle }
+        }
+        if let graphicsPayload {
+            try graphicsPayload.validate(layout: layout)
+            for (path, hash) in graphicsPayload.hashes {
+                guard RuntimeDetector.matches(bundle.appendingPathComponent("Contents/lib/wine/" + path), root: bundle, hash: hash)
+                else { throw SteamApplicationError.invalidBundle }
+            }
         }
         if game != nil && !legacyGameCache {
             guard let steam = try ManagedDirectory.openRoot(layout.steamApplicationBundle, create: false) else { throw SteamApplicationError.invalidBundle }
             for arch in ["x86_64-windows", "i386-windows"] {
                 if let source = try steam.directory("Contents")?.directory("lib")?.directory("wine")?.directory(arch) {
                     guard let target = try contents.directory("lib")?.directory("wine")?.directory(arch) else { throw SteamApplicationError.invalidBundle }
-                    try target.validateSharedFiles(from: source, privateRegularFiles: driverCompatibility && arch == "x86_64-windows" ? ["dxgi.dll"] : [])
+                    let privateFiles = graphicsPayload?.privateFiles(arch: arch) ?? (driverCompatibility && arch == "x86_64-windows" ? ["dxgi.dll"] : [])
+                    try target.validateSharedFiles(from: source, privateRegularFiles: privateFiles)
                 }
             }
         }
@@ -97,6 +113,7 @@ struct SteamApplicationBundle: Sendable {
         return try await Task.detached { try prepareSynchronously() }.value
     }
     private func prepareSynchronously() throws -> URL {
+        try graphicsPayload?.validate(layout: layout)
         guard RuntimeDetector.safeBundle(layout),
               let wineHash = layout.profile.hashes["Contents/SharedSupport/wine/bin/wine"],
               RuntimeDetector.matches(layout.wine, root: layout.bundle, hash: wineHash),
@@ -142,6 +159,19 @@ struct SteamApplicationBundle: Sendable {
                     let shared = try target.createExclusiveDirectory(arch)
                     try shared.copyContents(from: images, shareRegularFiles: true)
                 }
+            }
+        }
+        if let graphicsPayload {
+            guard let payload = try ManagedDirectory.openRoot(graphicsPayload.root(layout), create: false),
+                  let wine = try contents.directory("lib")?.directory("wine") else { throw GraphicsPayloadError.unavailable }
+            for (path, _) in graphicsPayload.hashes {
+                let parts = path.split(separator: "/").map(String.init)
+                guard let input = try payload.directory(parts[0]),
+                      let bytes = try input.read(parts[1], maximumBytes: 128 * 1024 * 1024),
+                      let output = try wine.directory(parts[0], create: true) else { throw GraphicsPayloadError.unavailable }
+                // Unlink the staging hard link before writing a private renderer.
+                if try output.containsRegularFile(parts[1]) { try output.removeRegularFile(parts[1]) }
+                try output.write(bytes, to: parts[1], createOnly: true, maximumBytes: 128 * 1024 * 1024, beforeCommit: {})
             }
         }
         if driverCompatibility {

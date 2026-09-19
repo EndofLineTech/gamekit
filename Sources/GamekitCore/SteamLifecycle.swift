@@ -154,7 +154,7 @@ public actor SteamLifecycle {
         try directory.withWriteLock {
             try directory.write(JSONEncoder().encode(receipt), to: filename, createOnly: false, beforeCommit: { try lease.validate() })
         }
-        try publishGameNames(record: record, lease: lease, receipt: receipt)
+        try await publishGameNames(record: record, lease: lease, receipt: receipt)
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
         // Suppress the separate bootstrapper UI, then explicitly open the main
         // web UI. This avoids retaining an empty client-side Dock application.
@@ -224,7 +224,7 @@ public actor SteamLifecycle {
         guard clientReady else { throw SteamLifecycleError.observationUnavailable }
         guard try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable)
             .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
-        try publishGameNames(record: record, lease: lease, receipt: receipt)
+        try await publishGameNames(record: record, lease: lease, receipt: receipt)
         try lease.validate()
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
         let result = try await driver.execute(.init(executable: layout.wine,
@@ -238,12 +238,16 @@ public actor SteamLifecycle {
             guard snapshot.processes.allSatisfy({ $0.sessionID == receipt.token.uuidString }) else { throw SteamLifecycleError.foreignActivity }
         }
     }
-    private func publishGameNames(record: EnvironmentRecord, lease: EnvironmentExecutionLease, receipt: SteamLaunchReceipt) throws {
+    private func publishGameNames(record: EnvironmentRecord, lease: EnvironmentExecutionLease, receipt: SteamLaunchReceipt) async throws {
         guard layout.hasGameIdentityHelper else { return }
         let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable).games
         var loaders: [String: String] = [:]
         for game in games {
             let bundle = try SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name))
+            if game.state == .ready && bundle.hasAlternativeGraphics {
+                _ = try await bundle.prepare()
+                try Task.checkCancellation(); try lease.validate()
+            }
             if FileManager.default.fileExists(atPath: bundle.bundleURL.path) {
                 try bundle.validate(bundle.bundleURL)
                 loaders[String(game.id)] = bundle.executable.path
@@ -251,8 +255,9 @@ public actor SteamLifecycle {
         }
         try GameDockNames.publish(root: store.root, prefix: lease.prefix, session: receipt.token, games: games,
                                   steamExecutable: record.steamExecutable, loaders: loaders,
-                                   defaultLoader: SteamApplicationBundle(layout: layout).executable.path,
-                                   graphicsBackend: layout.graphicsBackend,
+                                  defaultLoader: SteamApplicationBundle(layout: layout).executable.path,
+                                  graphicsBackend: layout.graphicsBackend,
+                                  libraryLayout: layout,
                                   validate: { try lease.validate() })
     }
 
@@ -268,7 +273,7 @@ public actor SteamLifecycle {
         defer { withExtendedLifetime(lease) {} }
         guard let receipt = try receipt() else { return }
         _ = try await ownedSnapshot(record, lease: lease, receipt: receipt)
-        try publishGameNames(record: record, lease: lease, receipt: receipt)
+        try await publishGameNames(record: record, lease: lease, receipt: receipt)
     }
 
     /// Shutdown can race an exiting process between the observer's identity
