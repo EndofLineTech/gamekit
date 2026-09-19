@@ -23,7 +23,8 @@ Selection is an atomic metadata change. No prefix DLL, registry value, game
 binary or anti-cheat component is installed or edited by this revision.
 Each revision has its own validated launcher namespace.
 
-The per-game choice is saved in `Metadata/GameCompatibility.json`, schema 1,
+The per-game choice is saved in `Metadata/GameCompatibility.json`, now schema 2
+(schema-1 driver preferences migrate on write),
 with a boolean `driverVersions["553850"]`. Malformed values, unsupported game
 IDs and changes during active/uncertain sessions are refused. The disabled
 Helldivers loader uses `shared-pe-v2-driver-off`; the enabled loader retains

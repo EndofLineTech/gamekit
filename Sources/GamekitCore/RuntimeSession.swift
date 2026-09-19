@@ -52,18 +52,27 @@ public actor RuntimeSession {
         _ = try await builder.prepare()
         try builder.validate(builder.bundleURL)
         return try await launch(lease: lease, layout: layout, arguments: arguments,
-            workingDirectory: nil, timeout: 60, onOutput: nil, executable: builder.executable)
+            workingDirectory: nil, timeout: 60, onOutput: nil, executable: builder.executable, game: game)
     }
 
     private static func launch(lease: EnvironmentExecutionLease, layout: RuntimeLayout, arguments: [String],
                                workingDirectory: URL?, timeout: TimeInterval,
-                                onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil) async throws -> RuntimeSession {
+                                onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil,
+                                game: GameApplicationIdentity? = nil) async throws -> RuntimeSession {
         try Task.checkCancellation()
         try lease.validate()
         let snapshot = RuntimeProcessObserver().snapshot(record: lease.record, prefix: lease.prefix, layout: layout)
         guard snapshot.complete else { throw RuntimeSessionError.observationUnavailable }
         guard snapshot.processes.isEmpty else { throw RuntimeSessionError.prefixBusy }
-        let token = UUID().uuidString
+        let sessionID = UUID()
+        let token = sessionID.uuidString
+        if let game, let executable {
+            let games = try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: lease.record.steamExecutable).games
+            try GameDockNames.publish(root: layout.dataRoot, prefix: lease.prefix, session: sessionID, games: games,
+                steamExecutable: lease.record.steamExecutable, loaders: [String(game.appID): executable.path],
+                defaultLoader: SteamApplicationBundle(layout: layout).executable.path, graphicsBackend: layout.graphicsBackend,
+                validate: { try lease.validate() })
+        }
         let command = try await ProcessExecutor().start(CommandRequest(
             executable: executable ?? layout.wine, arguments: arguments, environment: layout.environment(prefix: lease.prefix, session: token),
             workingDirectory: workingDirectory ?? lease.prefix, timeout: nil

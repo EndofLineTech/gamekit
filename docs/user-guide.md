@@ -96,11 +96,16 @@ recurrence in this setup; they are not the delivered fix.
 
 To retain the tested Helldivers Metal 3 configuration, save/exit games and
 **Stop Windows Steam**, then choose **Metal 3 compatibility** in the
-**Shared graphics backend** dropdown under Setup or a game's gear panel.
-The saved choice applies to **all games in this managed Steam environment** and
-survives app and Steam restarts. **Automatic (Apple default)** restores Apple's default
+**Shared graphics backend** dropdown under Setup. This is the default for
+Windows Steam and games with no override, and survives app and Steam restarts.
+Each game's gear panel now has its own dropdown: **Use shared default**,
+**Automatic (Apple default)**, or **Metal 3 compatibility**. It shows the
+effective next-launch backend. Changing it affects only that game, including
+launches from managed Steam. **Automatic (Apple default)** restores Apple's default
 backend using the same stopped-session flow. See
 [persistent graphics settings](persistent-graphics-backend.md) for scope and verification.
+See [per-game backend overrides](per-game-graphics-backends.md) for inheritance
+and migration details.
 
 The dropdown also lists **DXVK (In Dev)** and **DXMT (In Dev)** as disabled
 development placeholders. They cannot be selected yet.
@@ -171,10 +176,10 @@ for scope and validation.
 
 ## Per-game compatibility
 
-Choose the **gear icon beside Play** in an installed game's row. Every game
-shows the saved graphics backend and explains that it is shared by the managed
-Steam environment. The same dropdown is available under **Setup and prerequisites**
-and in the gear panel; it is not a per-game backend override.
+Choose the **gear icon beside Play** in an installed game's row. Every ready
+installed game offers an independent graphics-backend override and displays its
+effective next-launch choice. **Use shared default** follows Setup; explicit
+Automatic or Metal3 choices leave Steam and other games on their own settings.
 
 Helldivers 2 additionally offers the validated **Fullscreen display capture**
 override for the Dock-edge cursor issue:
@@ -203,7 +208,7 @@ For capture, Gamekit reads the saved registry, changes only the supported
 app-specific value, and verifies it after saving. Driver and Space preferences
 are stored separately in Gamekit metadata. Other registry settings, saves, runtime binaries and
 launcher caches are preserved. Unsupported or ambiguous registry values are
-refused. Other titles show that validated per-game overrides are not yet available.
+refused. Other titles offer backend selection but not the Helldivers-specific fixes.
 
 ## Recovery
 

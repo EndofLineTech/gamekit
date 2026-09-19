@@ -7,14 +7,21 @@ struct GameCompatibilityView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @Environment(\.dismiss) private var dismiss
     @State private var snapshot: GameCompatibilitySnapshot?
+    @State private var graphics: GameGraphicsSnapshot?
     @State private var status = "Reading saved compatibility settings…"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Compatibility · \(game.name)").font(.title2)
-            Text("Graphics backend — shared by all games").font(.headline)
-            GraphicsBackendPicker()
-            Text("Steam passes this backend to every game in its managed environment. Change it while Steam is stopped; a fresh Steam session applies it.")
+            Text("Graphics backend — this game").font(.headline)
+            if let graphics {
+                GameGraphicsBackendPicker(selection: Binding(get: { graphics.override }, set: { run(backend: $0) }))
+                    .disabled(setup.isBusy || graphics.sessionLocked || !setup.actions.reset)
+                Text("Effective next launch: \(graphics.effectiveBackend.title)")
+                    .accessibilityIdentifier("game-effective-backend")
+                Text("Shared default: \(graphics.sharedBackend.title)").font(.caption)
+            }
+            Text("Use shared default follows the choice in Setup. Automatic and Metal 3 override it only for this game, including launches from managed Steam. Stop Windows Steam before changing settings.")
                 .font(.caption).foregroundStyle(.secondary)
             if let problem = setup.problem { Text(problem).font(.callout).foregroundStyle(.secondary) }
             Divider()
@@ -59,26 +66,32 @@ struct GameCompatibilityView: View {
                 }
                 Text("Stop Windows Steam and its games before changing settings. Restore capture default removes only the capture override; fullscreen presentation and the shared graphics backend are separate settings.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text(status).font(.callout).accessibilityIdentifier("game-compatibility-status")
-                Button("Refresh saved settings") { run() }.disabled(setup.isBusy)
             } else {
-                Text("No validated game-specific overrides are available for this title yet.")
+                Text("No additional validated compatibility overrides are available for this title yet.")
             }
+            Text(status).font(.callout).accessibilityIdentifier("game-compatibility-status")
+            Button("Refresh saved settings") { run() }.disabled(setup.isBusy)
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(24).frame(width: 580)
         .task {
             while setup.isBusy && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
-            if !Task.isCancelled && GameCompatibilityStore.supports(game.id) { run() }
+            if !Task.isCancelled { run() }
         }
     }
 
-    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil) {
-        guard let token = setup.begin(capture == nil && space == nil && driver == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
+    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil) {
+        guard let token = setup.begin(capture == nil && space == nil && driver == nil && backend == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
             do {
                 let settings = GameCompatibilityStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
+                if let backend {
+                    graphics = try await settings.setGraphicsBackend(backend, appID: game.id)
+                    status = "Saved and verified. Applies to this game's next launch."
+                    return
+                }
+                graphics = try await settings.inspectGraphics(appID: game.id)
                 if let driver {
                     snapshot = try await settings.setDriverCompatibility(driver, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
@@ -89,8 +102,8 @@ struct GameCompatibilityView: View {
                     snapshot = try await settings.setCapture(capture, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else {
-                    snapshot = try await settings.inspect(appID: game.id)
-                    status = snapshot?.sessionLocked == true ? "Stop Windows Steam to unlock changes, then refresh saved settings." : "Saved settings loaded."
+                    if GameCompatibilityStore.supports(game.id) { snapshot = try await settings.inspect(appID: game.id) }
+                    status = graphics?.sessionLocked == true ? "Stop Windows Steam to unlock changes, then refresh saved settings." : "Saved settings loaded."
                 }
             } catch {
                 snapshot = nil

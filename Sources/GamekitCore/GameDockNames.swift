@@ -12,6 +12,8 @@ struct GameDockNames: Codable {
     var loaders: [String: String] = [:]
     var defaultLoader: String? = nil
     var fullscreenSpaces: [String: Bool]? = nil
+    var sharedGraphicsBackend: D3DMetalBackend? = nil
+    var graphicsBackends: [String: GameGraphicsOverride]? = nil
 
     static func url(root: URL, prefix: URL) -> URL {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
@@ -19,14 +21,18 @@ struct GameDockNames: Codable {
 
     static func publish(root: URL, prefix: URL, session: UUID, games: [InstalledSteamGame],
                         steamExecutable: RelativePath = .steamDefault, loaders: [String: String] = [:],
-                        defaultLoader: String? = nil, validate: () throws -> Void) throws {
+                        defaultLoader: String? = nil, graphicsBackend: D3DMetalBackend = .automatic, validate: () throws -> Void) throws {
         guard games.count <= 512 else { throw EnvironmentStoreError.documentTooLarge }
         let common = "c:\\" + steamExecutable.components.dropFirst().dropLast().joined(separator: "\\") + "\\steamapps\\common\\"
         let document = Self(schemaVersion: 1, prefix: prefix.path, sessionID: session.uuidString,
                             games: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), $0.name) }),
                             directories: Dictionary(uniqueKeysWithValues: games.map { (String($0.id), common + $0.installDirectory + "\\") }),
                             loaders: loaders, defaultLoader: defaultLoader,
-                            fullscreenSpaces: try GamePresentationPreferences.read(root: root).fullscreenSpaces.filter { key, enabled in enabled && games.contains { String($0.id) == key } })
+                            fullscreenSpaces: try GamePresentationPreferences.read(root: root).fullscreenSpaces.filter { key, enabled in enabled && games.contains { String($0.id) == key } },
+                            sharedGraphicsBackend: graphicsBackend,
+                            graphicsBackends: try GameCompatibilityPreferences.read(root: root).graphicsBackends.filter { key, choice in
+                                choice != .inherit && games.contains { String($0.id) == key && $0.state == .ready }
+                            })
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(document)
         guard let root = try ManagedDirectory.openRoot(root, create: true),

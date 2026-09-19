@@ -38,7 +38,9 @@ struct GameDockAcceptanceTests {
         do {
             try await lifecycle.launchGame(appID: 526870)
             var found = false
-            for _ in 0..<90 {
+            // Cold Steam initialization can delay the game beyond 45 seconds.
+            // Match the bounded 90-second startup observation used for games.
+            for _ in 0..<180 {
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
                 var gamePIDs = Set<Int32>()
                 for process in snapshot.processes where process.role == .other {

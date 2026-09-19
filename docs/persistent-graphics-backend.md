@@ -8,16 +8,17 @@ unchanged D3DMetal 4.0b2 payload.
 
 In **Setup and prerequisites**, Gamekit displays **Saved graphics backend** and
 offers a dropdown with **Automatic (Apple default)** and **Metal 3 compatibility**.
-The same shared setting is accessible from each game's gear panel. **DXVK (In Dev)**
-and **DXMT (In Dev)** are listed but disabled until implemented.
+Each game's gear panel offers a separate override with **Use shared default**.
+**DXVK (In Dev)** and **DXMT (In Dev)** are listed but disabled until implemented.
 
 - **Automatic (Apple default):** Gamekit leaves `D3DM_MTL4` unset. On the
   validated macOS 27 host, Apple's documented D3D12 default is Metal 4.
 - **Metal 3 compatibility:** Gamekit explicitly supplies `D3DM_MTL4=0`.
 
-This is a **managed Steam-environment setting**, affecting Steam and every game
-started by that Steam client. It is not a per-game override. Per-game controls
-are backlog `gamekit-tmx`; they must account for Steam's inherited environment.
+This is the **managed Steam-environment default**, affecting Steam and games
+that inherit it. [Per-game overrides](per-game-graphics-backends.md), delivered
+in `gamekit-aty`, explicitly replace or clear that inherited choice in the
+matching game process before graphics initialization.
 
 Save/exit games, **Stop Windows Steam**, select the backend, then launch Steam
 or a game tile. Backend controls are disabled during a recorded session or a
@@ -52,8 +53,9 @@ metadata write. They preserve the custom bundle/default-path choice, component
 revision, environment records and prefix contents. The per-game
 `CaptureDisplaysForFullscreen=y` cursor fix is not rewritten by this operation.
 
-The environment allowlist discards inherited `D3DM_MTL4` values. Only the explicit
-selected backend supplies the flag. Both modes retain AVX advertisement and
+The launch environment allowlist discards inherited `D3DM_MTL4` values. The
+selected shared backend supplies Steam's flag; the owned-process helper applies
+the corresponding per-game override. Both modes retain AVX advertisement and
 the native Visual C++ DLL preference.
 
 Backend changes do not change Wine/PE binary identity, so existing

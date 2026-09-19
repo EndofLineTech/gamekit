@@ -5,7 +5,7 @@
   "template": "1.0.11",
   "wine": "10.0 (Sikarugir)",
   "graphics": "Apple D3DMetal 4.0b2, unchanged payload",
-  "graphicsBackendSelection": "Persistent environment-wide automatic or metal3; Metal3 supplies D3DM_MTL4=0 on fresh managed Steam launches; per-game overrides are separate backlog",
+  "graphicsBackendSelection": "Persistent shared automatic/metal3 default plus per-game inherit/automatic/metal3; session-scoped helper sets D3DM_MTL4=0 for Metal3 or unsets it for Automatic in matching game images, restoring the shared choice for non-game processes",
   "gstreamer": "1.28.1",
   "textInputRevision": "Selectable text-input-1; msctf.dll SHA256 bb8db266526cff89c2bc6a436482b24c632c13596c1864adb4cb2e42e58fca8b; packaged-app acceptance recorded separately",
   "driverCompatibilityRevision": "Selectable driver-version-1, includes text-input-1; Helldivers-only DXGI sentinel substitution to compatibility version35.0.15.6094; shim SHA2565ccd55cf94faaab72dcdef651aaccc7907c3eef46d0ecb1cb0f5de204940d2b2; no prefix DLL or registry edits; real query/control/rollback passed",

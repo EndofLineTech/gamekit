@@ -240,7 +240,8 @@ public actor SteamLifecycle {
         }
         try GameDockNames.publish(root: store.root, prefix: lease.prefix, session: receipt.token, games: games,
                                   steamExecutable: record.steamExecutable, loaders: loaders,
-                                  defaultLoader: SteamApplicationBundle(layout: layout).executable.path,
+                                   defaultLoader: SteamApplicationBundle(layout: layout).executable.path,
+                                   graphicsBackend: layout.graphicsBackend,
                                   validate: { try lease.validate() })
     }
 
