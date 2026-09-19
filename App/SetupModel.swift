@@ -18,6 +18,7 @@ final class SetupModel: ObservableObject {
     @Published private(set) var snapshot: RuntimeProcessSnapshot?
     @Published private(set) var lifecycleState: SteamLifecycleState = .notInstalled
     @Published private(set) var metadataValid = false
+    @Published private(set) var availableGraphicsBackends: Set<GraphicsBackend> = [.automatic, .metal3]
     private var owner: UUID?
     private var fixtureReads = 0
     private var refreshCount = 0
@@ -54,6 +55,9 @@ final class SetupModel: ObservableObject {
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
                 let settings = RuntimeSettingsStore(store: store)
                 let selected = try await settings.layout()
+                availableGraphicsBackends = await Task.detached {
+                    Set(GraphicsBackend.allCases.filter { selected.isGraphicsBackendAvailable($0) })
+                }.value
                 if layout.bundle != selected.bundle || layout.profile.revision != selected.profile.revision
                     || layout.graphicsBackend != selected.graphicsBackend {
                     layout = selected; selectionRevision = UUID()
@@ -162,6 +166,7 @@ final class SetupModel: ObservableObject {
 enum AppFailure {
     static func message(_ error: any Error) -> String {
         switch error {
+        case GraphicsPayloadError.unavailable: "The selected graphics payload is missing, changed, or incompatible with this runtime. Install the pinned backend payload and refresh Setup, or select an Apple backend."
         case EnvironmentStoreError.busy: "Another operation or Steam session owns this environment. Finish or stop it, then retry."
         case EnvironmentStoreError.unsafePath, EnvironmentStoreError.identityMismatch, SteamLifecycleError.scopeChanged:
             "A managed path changed or redirects elsewhere. Restore the expected location and refresh; Gamekit will not overwrite it."

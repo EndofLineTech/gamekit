@@ -1,0 +1,312 @@
+diff --git a/include/ftl.hpp b/include/ftl.hpp
+index c20f48f..5ee4cc1 100644
+--- a/include/ftl.hpp
++++ b/include/ftl.hpp
+@@ -1,4 +1,5 @@
+ #pragma once
++#include <iterator>
+ #include <type_traits>
+ #include <utility>
+ #include <vector>
+diff --git a/meson.build b/meson.build
+index e10c901..a408c3f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -78,6 +78,7 @@ compiler_args += [
+ 
+ link_args += [
+   '-static',
++  '-Wl,--no-insert-timestamp',
+   # -static is sufficient for clang, while c runtime will be linked to api-ms-win-crt-* (ucrt)
+   # '-static-libgcc',
+   # '-static-libstdc++',
+diff --git a/meson.options b/meson.options
+index b54c86e..90bfa7e 100644
+--- a/meson.options
++++ b/meson.options
+@@ -7,4 +7,5 @@ option('wine_install_path', type : 'string')
+ option('wine_builtin_dll', type : 'boolean', value : true)
+ option('enable_tests', type : 'boolean', value : false)
+ option('enable_nvapi', type : 'boolean', value : false)
+-option('enable_nvngx', type : 'boolean', value : false)
+\ No newline at end of file
++option('enable_nvngx', type : 'boolean', value : false)
++option('candidate_winemetal_import', type: 'string', value: '', description: 'Qualification-only import library for the identical v0.80 winemetal ABI')
+diff --git a/src/airconv/meson.build b/src/airconv/meson.build
+index f5d877a..68debb9 100644
+--- a/src/airconv/meson.build
++++ b/src/airconv/meson.build
+@@ -99,6 +99,6 @@ executable('airconv', airconv_src + airconv_cli_src,
+ 
+ endif
+ 
+-if cpu_family == 'x86_64' or cpu_family == 'aarch64' or not dxmt_crossbuild
++if (cpu_family == 'x86_64' or cpu_family == 'aarch64' or not dxmt_crossbuild) and get_option('candidate_winemetal_import') == ''
+   subdir('darwin')
+-endif
+\ No newline at end of file
++endif
+diff --git a/src/d3d11/d3d11_texture_device.cpp b/src/d3d11/d3d11_texture_device.cpp
+index 55ee999..a6ab6df 100644
+--- a/src/d3d11/d3d11_texture_device.cpp
++++ b/src/d3d11/d3d11_texture_device.cpp
+@@ -7,9 +7,55 @@
+ #include "dxmt_texture.hpp"
+ #include "d3d11_resource.hpp"
+ #include "util_win32_compat.h"
++#include <memory>
++#include <mutex>
++#include <unordered_map>
+ 
+ namespace dxmt {
+ 
++// Wine < 10.18 has no D3DKMT shared-resource objects. Retain the useful
++// same-process subset of pre-v0.72 DXMT without exposing/dereferencing raw COM
++// pointers from handles. NT handles and keyed mutexes still require D3DKMT.
++struct LegacySharedTexture;
++struct LegacySharedTextureRegistry {
++  std::mutex mutex;
++  std::unordered_map<uintptr_t, std::weak_ptr<LegacySharedTexture>> textures;
++  uint64_t next = 1;
++};
++static LegacySharedTextureRegistry &legacy_registry() {
++  static auto *registry = new LegacySharedTextureRegistry();
++  return *registry; // Lives through DLL/process teardown; entries are weak.
++}
++struct LegacySharedTexture {
++  Rc<Texture> texture;
++  D3D11_TEXTURE2D_DESC1 desc;
++  uint64_t device_id;
++  uintptr_t handle = 0;
++  ATOM atom = 0;
++  ~LegacySharedTexture() {
++    auto &registry = legacy_registry();
++    {
++      std::lock_guard lock(registry.mutex);
++      registry.textures.erase(handle);
++    }
++    if (atom) GlobalDeleteAtom(atom);
++  }
++};
++static bool register_legacy_texture(const std::shared_ptr<LegacySharedTexture> &texture) {
++  auto &registry = legacy_registry();
++  std::lock_guard lock(registry.mutex);
++  if (registry.next == UINT64_MAX || registry.textures.size() >= 65536) return false;
++  WCHAR name[96];
++  swprintf(name, 96, L"GamekitDXMTLegacy:%lu:%llu", GetCurrentProcessId(), (unsigned long long)registry.next++);
++  // Global atoms make live tokens unique across the Wine prefix, so a token
++  // from another process cannot accidentally alias one of our own textures.
++  texture->atom = GlobalAddAtomW(name);
++  if (!texture->atom) return false;
++  texture->handle = 0x20000003 | (uintptr_t(texture->atom) << 2);
++  registry.textures.emplace(texture->handle, texture);
++  return true;
++}
++
+ #pragma region DeviceTexture
+ 
+ template <typename tag_texture>
+@@ -19,6 +65,7 @@ private:
+   float min_lod = 0.0;
+   D3DKMT_HANDLE local_kmt_ = 0;
+   D3DKMT_HANDLE global_kmt_ = 0;
++  std::shared_ptr<LegacySharedTexture> legacy_shared_;
+ 
+   using SRVBase =
+       TResourceViewBase<tag_shader_resource_view<DeviceTexture<tag_texture>>>;
+@@ -103,6 +150,10 @@ private:
+   };
+ 
+ public:
++  DeviceTexture(const tag_texture::DESC1 *desc, const std::shared_ptr<LegacySharedTexture> &shared,
++                MTLD3D11Device *device) : TResourceBase<tag_texture, IMTLMinLODClampable>(*desc, device), legacy_shared_(shared) {
++    this->texture_ = shared->texture;
++  }
+   DeviceTexture(const tag_texture::DESC1 *pDesc, Rc<Texture> &&u_texture, MTLD3D11Device *pDevice) :
+       TResourceBase<tag_texture, IMTLMinLODClampable>(*pDesc, pDevice) {
+         this->texture_ = std::move(u_texture);
+@@ -257,6 +308,10 @@ public:
+ 
+   virtual HRESULT
+   GetSharedHandle(HANDLE *pSharedHandle) override {
++    if (pSharedHandle && legacy_shared_) {
++      *pSharedHandle = reinterpret_cast<HANDLE>(legacy_shared_->handle);
++      return S_OK;
++    }
+     if (pSharedHandle == nullptr || (this->desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE)) {
+       return E_INVALIDARG;
+     }
+@@ -361,8 +416,23 @@ HRESULT CreateDeviceTextureInternal(MTLD3D11Device *pDevice,
+       D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+   if (finalDesc.MiscFlags & shared_flag) {
+     if (!(pDevice->GetLocalD3DKMT() & 0xc0000000)) {
+-      ERR("DeviceTexture: Invalid device handle");
+-      return E_FAIL;
++      if constexpr (std::is_same_v<typename tag::DESC1, D3D11_TEXTURE2D_DESC1>) {
++        if (finalDesc.MiscFlags & (D3D11_RESOURCE_MISC_SHARED_NTHANDLE | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX))
++          return E_NOTIMPL;
++        if (finalDesc.MipLevels != 1 || finalDesc.ArraySize != 1 || finalDesc.SampleDesc.Count != 1 ||
++            finalDesc.Usage != D3D11_USAGE_DEFAULT || finalDesc.CPUAccessFlags) return E_INVALIDARG;
++        Flags<TextureAllocationFlag> flags;
++        flags.set(TextureAllocationFlag::GpuPrivate);
++        initialize(texture->allocate(flags));
++        auto shared = std::make_shared<LegacySharedTexture>();
++        shared->texture = texture;
++        shared->desc = finalDesc;
++        shared->device_id = pDevice->GetMTLDevice().registryID();
++        if (!register_legacy_texture(shared)) return E_OUTOFMEMORY;
++        *ppTexture = reinterpret_cast<typename tag::COM_IMPL *>(ref(new DeviceTexture<tag>(&finalDesc, shared, pDevice)));
++        return S_OK;
++      }
++      return E_NOTIMPL;
+     }
+     // use a dedicated path for now, because there are other works for private storage mode
+ 
+@@ -492,6 +562,20 @@ HRESULT
+ ImportSharedTexture(MTLD3D11Device *pDevice, HANDLE hResource, REFIID riid, void **ppTexture) {
+   InitReturnPtr(ppTexture);
+ 
++  if (!(pDevice->GetLocalD3DKMT() & 0xc0000000)) {
++    if (!ppTexture) return E_INVALIDARG;
++    std::shared_ptr<LegacySharedTexture> shared;
++    {
++      auto &registry = legacy_registry();
++      std::lock_guard lock(registry.mutex);
++      auto found = registry.textures.find(reinterpret_cast<uintptr_t>(hResource));
++      if (found != registry.textures.end()) shared = found->second.lock();
++    }
++    if (!shared || shared->device_id != pDevice->GetMTLDevice().registryID()) return E_INVALIDARG;
++    Com<DeviceTexture<tag_texture_2d>> texture = new DeviceTexture<tag_texture_2d>(&shared->desc, shared, pDevice);
++    return texture->QueryInterface(riid, ppTexture);
++  }
++
+   if (!(reinterpret_cast<uintptr_t>(hResource) & 0xc0000000)) {
+     WARN("ImportSharedTexture: Invalid shared handle type");
+     return E_INVALIDARG;
+@@ -692,4 +776,4 @@ ImportSharedTextureByName(
+ 
+ #pragma endregion
+ 
+-} // namespace dxmt
+\ No newline at end of file
++} // namespace dxmt
+diff --git a/src/dxmt/dxmt_command_queue.cpp b/src/dxmt/dxmt_command_queue.cpp
+index 565a801..7597d9e 100644
+--- a/src/dxmt/dxmt_command_queue.cpp
++++ b/src/dxmt/dxmt_command_queue.cpp
+@@ -190,6 +190,7 @@ CommandQueue::WaitForFinishThread() {
+       frame_latency_fence_.signal(chunk.signal_frame_latency_fence_);
+ 
+     chunk.reset();
++    readback_event_seq.store(chunk.chunk_event_id, std::memory_order_release);
+     cpu_coherent.signal(internal_seq);
+     chunk_ongoing.fetch_sub(1, std::memory_order_release);
+     chunk_ongoing.notify_one();
+diff --git a/src/dxmt/dxmt_command_queue.hpp b/src/dxmt/dxmt_command_queue.hpp
+index 61a5c12..68c33ad 100644
+--- a/src/dxmt/dxmt_command_queue.hpp
++++ b/src/dxmt/dxmt_command_queue.hpp
+@@ -144,6 +144,7 @@ private:
+   std::atomic_uint64_t ready_for_commit = 1;
+   std::atomic_uint64_t chunk_ongoing = 0;
+   CpuFence cpu_coherent;
++  std::atomic_uint64_t readback_event_seq = 0;
+   CpuFence frame_latency_fence_;
+   std::atomic_bool stopped;
+ 
+@@ -214,7 +215,10 @@ public:
+ 
+   uint64_t
+   SignaledEventSeqId() {
+-    return event.signaledValue();
++    // A GPU event alone can precede the finishing thread's query publication.
++    // Preserve nonblocking GetData and the GPU error boundary while ensuring
++    // preceding timestamp/occlusion results have reached CPU-visible storage.
++    return std::min<uint64_t>(event.signaledValue(), readback_event_seq.load(std::memory_order_acquire));
+   };
+ 
+   obj_handle_t GetSharedEventListener() {
+@@ -294,4 +298,4 @@ public:
+   void Retain(uint64_t seq, Allocation *allocation);
+ };
+ 
+-} // namespace dxmt
+\ No newline at end of file
++} // namespace dxmt
+diff --git a/src/dxmt/dxmt_occlusion_query.hpp b/src/dxmt/dxmt_occlusion_query.hpp
+index 56e9e76..dd3f600 100644
+--- a/src/dxmt/dxmt_occlusion_query.hpp
++++ b/src/dxmt/dxmt_occlusion_query.hpp
+@@ -209,20 +209,21 @@ public:
+ 
+   bool
+   getValue(uint64_t *value) {
+-    if (cached_value_ == ~0ull)
++    const uint64_t published = cached_value_.load(std::memory_order_acquire);
++    if (published == ~0ull)
+       return false;
+ 
+-    *value = cached_value_;
++    *value = published;
+     return true;
+   }
+ 
+   void
+   issue(uint64_t sampled_data) {
+-    cached_value_ = sampled_data;
++    cached_value_.store(sampled_data, std::memory_order_release);
+   }
+ 
+ private:
+-  uint64_t cached_value_ = ~0ull;
++  std::atomic<uint64_t> cached_value_ = ~0ull;
+   std::atomic<uint32_t> refcount_ = {0u};
+ };
+ 
+diff --git a/src/util/com/com_guid.cpp b/src/util/com/com_guid.cpp
+index 11bf4a7..623f349 100644
+--- a/src/util/com/com_guid.cpp
++++ b/src/util/com/com_guid.cpp
+@@ -9,6 +9,7 @@
+  */
+ 
+ #include <mutex>
++#include <iomanip>
+ #include <unordered_set>
+ 
+ #include "com_guid.hpp"
+diff --git a/src/util/sha1/sha1_util.hpp b/src/util/sha1/sha1_util.hpp
+index 8197c5e..21e39a9 100644
+--- a/src/util/sha1/sha1_util.hpp
++++ b/src/util/sha1/sha1_util.hpp
+@@ -9,6 +9,7 @@
+  */
+ 
+ #pragma once
++#include <functional>
+ 
+ #include <cstdint>
+ #include <cstring>
+diff --git a/src/winemetal/meson.build b/src/winemetal/meson.build
+index 858d4b3..14e04c0 100644
+--- a/src/winemetal/meson.build
++++ b/src/winemetal/meson.build
+@@ -1,3 +1,10 @@
++if get_option('candidate_winemetal_import') != ''
++  winemetal_dep = declare_dependency(
++    link_args: [get_option('candidate_winemetal_import')],
++    include_directories: [include_directories('.')],
++  )
++  winebuild = get_option('wine_build_path') / 'tools/winebuild/winebuild'
++else
+ winemetal_src = [
+   'main.c',
+   'airconv_thunks.c',
+@@ -59,4 +66,5 @@ custom_target('postprocess_lib',
+ 
+ if cpu_family == 'x86_64' or cpu_family == 'aarch64'
+   subdir('unix')
+-endif
+\ No newline at end of file
++endif
++endif

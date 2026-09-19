@@ -66,6 +66,30 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Satisfactory backend options are scoped to one owned Play request", arguments: ["dxmt", "dxvk", "metal3"])
+    func backendLaunchOptions(_ backend: String) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let apps = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
+        try Data(#""AppState" { "appid" "526870" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
+            .write(to: apps.appendingPathComponent("appmanifest_526870.acf"))
+        let settings = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
+        let original = Data("{\"schemaVersion\":2,\"driverVersions\":{},\"graphicsBackends\":{\"526870\":\"\(backend)\"}}".utf8)
+        try original.write(to: settings)
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        _ = try await lifecycle.launchGame(appID: 526870)
+        let commands = await runtime.commands
+        #expect(commands.count == 1)
+        let args = try #require(commands.first)
+        #expect(args.dropFirst().prefix(2) == ["-applaunch", "526870"])
+        #expect(args.contains("-dx11") == (backend != "metal3"))
+        #expect(args.contains("-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0") == (backend != "metal3"))
+        #expect(args.contains("-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1") == (backend == "dxvk"))
+        #expect(GraphicsBackend.dxvk.launchOptions(appID: 553850).isEmpty)
+        #expect(try Data(contentsOf: settings) == original)
+        _ = try await lifecycle.stop()
+    }
     @Test("Cloud-blocked launch feedback observes without sending a second Play request")
     func launchFeedbackDoesNotRetry() async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }

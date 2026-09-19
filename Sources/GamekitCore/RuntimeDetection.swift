@@ -74,16 +74,35 @@ public struct RuntimeProfile: Sendable {
     )
 }
 
-public enum D3DMetalBackend: String, Codable, Sendable {
-    case automatic, metal3
+public enum GraphicsBackend: String, Codable, Sendable, CaseIterable {
+    case automatic, metal3, dxvk, dxmt
+
+    /// Qualification is limited to the documented D3D10/11 paths, not every
+    /// game's API/features. Payload integrity is checked independently.
+    public var qualifiedForGames: Bool {
+        switch self { case .automatic, .metal3, .dxvk, .dxmt: true }
+    }
+
+    /// Validated, one-request options for Gamekit Play. These never overwrite
+    /// the game's saved settings or Steam's user-authored launch options.
+    public func launchOptions(appID: UInt32) -> [String] {
+        guard appID == 526870, self == .dxmt || self == .dxvk else { return [] }
+        return ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] +
+            (self == .dxvk ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : [])
+    }
 
     public var title: String {
         switch self {
         case .automatic: "Automatic (Apple default)"
         case .metal3: "Metal 3 compatibility"
+        case .dxvk: "DXVK (Direct3D 10/11)"
+        case .dxmt: "DXMT (Direct3D 10/11)"
         }
     }
 }
+
+// Source compatibility for the original Apple-only settings API.
+public typealias D3DMetalBackend = GraphicsBackend
 
 public struct RuntimeLayout: Sendable {
     public let dataRoot: URL
@@ -114,6 +133,8 @@ public struct RuntimeLayout: Sendable {
     }
     public var steamApplicationBundle: URL { launchersRoot.appendingPathComponent("Windows Steam.app") }
     public var gameApplicationsRoot: URL { launchersRoot.appendingPathComponent("Games") }
+    var defaultLibraryPath: String { "\(engine.path)/lib:\(frameworks.path):\(frameworks.path)/GStreamer.framework/Libraries" }
+    var dxvkLibraryPath: String { "\(frameworks.path)/moltenvkcx:" + defaultLibraryPath }
 
     public func environment(prefix: URL? = nil, session: String? = nil,
                             inheriting inherited: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
@@ -131,12 +152,12 @@ public struct RuntimeLayout: Sendable {
         // Apple documents this per-process fallback inside the same D3DMetal
         // payload. An explicit saved/session choice selects the fallback;
         // automatic mode leaves Apple's default in control.
-        if graphicsBackend == .metal3 { result["D3DM_MTL4"] = "0" }
+        if graphicsBackend != .automatic { result["D3DM_MTL4"] = "0" }
         // Steam installs the genuine VC++ redistributables. Prefer that coherent
         // DLL family when present: builtin version resources can make Unreal's
         // bootstrapper repeatedly request an already-installed runtime.
         result["WINEDLLOVERRIDES"] = "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b"
-        result["DYLD_FALLBACK_LIBRARY_PATH"] = "\(engine.path)/lib:\(frameworks.path):\(frameworks.path)/GStreamer.framework/Libraries"
+        result["DYLD_FALLBACK_LIBRARY_PATH"] = defaultLibraryPath
         result["DYLD_FALLBACK_FRAMEWORK_PATH"] = "\(engine.path)/lib/external:\(frameworks.path)"
         if let prefix { result["WINEPREFIX"] = prefix.path }
         if let session { result["GAMEKIT_SESSION_ID"] = session }

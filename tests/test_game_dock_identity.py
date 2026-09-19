@@ -28,12 +28,19 @@ class GameDockIdentityTests(unittest.TestCase):
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dlfcn.h>
 int main(void) {
     char path[4096]; uint32_t size = sizeof(path);
     if (_NSGetExecutablePath(path, &size) || getenv("GAMEKIT_IDENTITY_ROUTED")) return 2;
     const char *actual = getenv("D3DM_MTL4"); if (!actual) actual = "unset";
     const char *name = strrchr(path, '/'); name = name ? name + 1 : path;
     printf("%s %s\n", name, actual);
+    if (getenv("EXPECT_LIBRARY")) {
+        void *library = dlopen("libGamekitBackendProbe.dylib", RTLD_NOW);
+        if (!library) { puts(dlerror()); return 3; }
+        const char *(*identity)(void) = dlsym(library, "identity");
+        if (!identity || strcmp(identity(), getenv("EXPECT_LIBRARY"))) return 4;
+    }
     return strcmp(actual, getenv("EXPECT_BACKEND")) || strcmp(name, getenv("EXPECT_LOADER"));
 }
 ''', text=True, check=True, capture_output=True)
@@ -98,7 +105,7 @@ int main(void) {
         self.assertEqual(self.run_reader(**steam), "unset")
         self.assertEqual(self.run_reader("123456", **flags), "unset")
         self.assertEqual(self.run_reader(**(flags | {"GAMEKIT_SESSION_ID": "foreign", "D3DM_MTL4": "1"})), "1")
-        for bad in ["dxvk", "dxmt", True, 1, {}]:
+        for bad in ["unknown", True, 1, {}]:
             self.document["graphicsBackends"]["526870"] = bad
             self.write()
             self.assertEqual(self.run_reader(**flags), "unset")
@@ -106,6 +113,20 @@ int main(void) {
         self.document["directories"]["123456"] = self.document["directories"]["526870"]
         self.write()
         self.assertEqual(self.run_reader(**flags), "unset")
+
+    def test_alternative_backend_is_game_scoped_and_preserves_dll_overrides(self):
+        flags = dict(GAMEKIT_TEST_BACKEND_SETTING="1", GAMEKIT_TEST_DLL_SETTING="1",
+                     GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\program files (x86)\steam\steamapps\common\satisfactory\game.exe",
+                     WINEDLLOVERRIDES="vcruntime140=n,b")
+        for backend in ["dxmt", "dxvk"]:
+            self.document["sharedGraphicsBackend"] = backend
+            self.write()
+            self.assertEqual(self.run_reader(**flags), "vcruntime140=n,b")
+            child = flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\program files (x86)\steam\Steam.exe",
+                             "WINEDLLOVERRIDES": "vcruntime140=n,b"}
+            self.assertEqual(self.run_reader(**child), "vcruntime140=n,b")
+            child.pop("GAMEKIT_TEST_DLL_SETTING")
+            self.assertEqual(self.run_reader(**child), "0")
 
     def test_fullscreen_space_requires_boolean_opt_in_owned_session_and_main_image(self):
         self.document["games"]["553850"] = "Helldivers"
@@ -219,6 +240,30 @@ int main(void) {
         env.update(D3DM_MTL4="0", EXPECT_BACKEND="unset", EXPECT_LOADER="Windows Steam")
         child = subprocess.run([str(target), r"C:\program files (x86)\steam\Steam.exe"], env=env, capture_output=True, text=True, timeout=15)
         self.assertEqual(child.returncode, 0, child.stdout + child.stderr)
+
+    def test_dxvk_library_pairing_reexecutes_even_same_loader_and_restores_steam(self):
+        source, target, env = self.routing_fixture(self.backend_probe, self.helper)
+        for name in ["base", "cx"]:
+            directory = self.root / name
+            directory.mkdir()
+            subprocess.run(["xcrun", "clang", "-dynamiclib", "-x", "c", "-", "-o",
+                            str(directory / "libGamekitBackendProbe.dylib")],
+                           input=f'const char *identity(void) {{ return "{name}"; }}',
+                           text=True, check=True, capture_output=True)
+        base = str(self.root / "base")
+        cx = str(self.root / "cx") + ":" + base
+        self.document.update(sharedGraphicsBackend="metal3", graphicsBackends={"526870": "dxvk"},
+                             defaultLibraryPath=base, dxvkLibraryPath=cx)
+        self.write()
+        image = r"C:\program files (x86)\steam\steamapps\common\satisfactory\game.exe"
+        env.update(DYLD_FALLBACK_LIBRARY_PATH=base, EXPECT_LIBRARY="cx", EXPECT_BACKEND="unset", EXPECT_LOADER="Gamekit Route Probe")
+        for loader in [source, target]:
+            result = subprocess.run([str(loader), image], env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        env.update(DYLD_FALLBACK_LIBRARY_PATH=cx, EXPECT_LIBRARY="base", EXPECT_BACKEND="0", EXPECT_LOADER="Windows Steam")
+        for loader in [source, target]:
+            result = subprocess.run([str(loader), r"C:\program files (x86)\steam\Steam.exe"], env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_refuses_redirected_or_external_loader(self):
         source, target, env = self.routing_fixture(self.probe, self.helper)

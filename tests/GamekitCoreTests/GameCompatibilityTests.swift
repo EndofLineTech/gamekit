@@ -46,6 +46,20 @@ private struct CompatibilityFixture {
 
 @Suite("Per-game compatibility settings")
 struct GameCompatibilityTests {
+    @Test("Unavailable payloads cannot change a saved backend or driver preference")
+    func missingGraphicsPayload() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let settings = fixture.settings()
+        for choice in [GameGraphicsOverride.dxmt, .dxvk] {
+            await #expect(throws: GraphicsPayloadError.unavailable) { try await settings.setGraphicsBackend(choice, appID: 553850) }
+            #expect(try await settings.inspectGraphics(appID: 553850).override == .inherit)
+        }
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+        #expect(GameGraphicsOverride.dxmt.effectiveBackend(shared: .metal3) == .dxmt)
+        #expect(GameGraphicsOverride.inherit.effectiveBackend(shared: .dxvk) == .dxvk)
+        let layout = RuntimeLayout(dataRoot: fixture.store.root, graphicsBackend: .dxmt)
+        #expect(layout.environment()["D3DM_MTL4"] == "0", "Steam retains Metal3 when the shared game default is DXMT")
+    }
     @Test("Backend overrides are per installed game, preserve shared selection and migrate driver preferences")
     func graphicsOverrides() async throws {
         let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
@@ -81,7 +95,7 @@ struct GameCompatibilityTests {
         await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setGraphicsBackend(.automatic, appID: 553850) }
         await #expect(throws: SteamGameLibraryError.notInstalled) { try await fixture.settings().setGraphicsBackend(.metal3, appID: 999) }
         let file = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
-        for invalid in [#"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"553850":"dxvk"}}"#,
+        for invalid in [#"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"553850":"unknown"}}"#,
                         #"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":null}"#,
                         #"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"0553850":"metal3"}}"#,
                         #"{"schemaVersion":1,"driverVersions":{},"graphicsBackends":{"553850":"metal3"}}"#] {

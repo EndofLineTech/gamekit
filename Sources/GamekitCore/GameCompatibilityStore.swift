@@ -12,12 +12,14 @@ public enum GameCaptureOverride: String, CaseIterable, Sendable {
     }
 }
 public enum GameGraphicsOverride: String, Codable, CaseIterable, Sendable {
-    case inherit, automatic, metal3
+    case inherit, automatic, metal3, dxvk, dxmt
     public var title: String {
         switch self {
         case .inherit: "Use shared default"
         case .automatic: D3DMetalBackend.automatic.title
         case .metal3: D3DMetalBackend.metal3.title
+        case .dxvk: GraphicsBackend.dxvk.title
+        case .dxmt: GraphicsBackend.dxmt.title
         }
     }
     public func effectiveBackend(shared: D3DMetalBackend) -> D3DMetalBackend {
@@ -25,6 +27,8 @@ public enum GameGraphicsOverride: String, Codable, CaseIterable, Sendable {
         case .inherit: shared
         case .automatic: .automatic
         case .metal3: .metal3
+        case .dxvk: .dxvk
+        case .dxmt: .dxmt
         }
     }
 }
@@ -228,6 +232,7 @@ public actor GameCompatibilityStore {
             guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
         }
         try execution.validate(); try Task.checkCancellation()
+        try GraphicsPayload(backend: override.effectiveBackend(shared: selected.graphicsBackend))?.validate(layout: selected)
         var preferences = try GameCompatibilityPreferences.read(root: store.root)
         if override == .inherit { preferences.graphicsBackends.removeValue(forKey: String(appID)) }
         else { preferences.graphicsBackends[String(appID)] = override }

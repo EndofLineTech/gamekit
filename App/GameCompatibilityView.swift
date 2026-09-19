@@ -20,8 +20,14 @@ struct GameCompatibilityView: View {
                 Text("Effective next launch: \(graphics.effectiveBackend.title)")
                     .accessibilityIdentifier("game-effective-backend")
                 Text("Shared default: \(graphics.sharedBackend.title)").font(.caption)
+                if !graphics.effectiveBackend.launchOptions(appID: game.id).isEmpty {
+                    Text("Gamekit Play applies the tested Direct3D 11 launch options. For launches directly from Steam, add these to its Launch Options:")
+                        .font(.caption)
+                    Text(graphics.effectiveBackend.launchOptions(appID: game.id).joined(separator: " "))
+                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                }
             }
-            Text("Use shared default follows the choice in Setup. Automatic and Metal 3 override it only for this game, including launches from managed Steam. Stop Windows Steam before changing settings.")
+            Text("Use shared default follows Setup. An override applies only to this game, including launches from managed Steam. DXMT and DXVK support Direct3D 10/11 only; choose an Apple backend for Direct3D 12 games. Steam keeps its Apple backend. Stop Windows Steam before changing settings.")
                 .font(.caption).foregroundStyle(.secondary)
             if let problem = setup.problem { Text(problem).font(.callout).foregroundStyle(.secondary) }
             Divider()
@@ -34,7 +40,7 @@ struct GameCompatibilityView: View {
                         .accessibilityIdentifier("game-driver-compatibility")
                         .disabled(setup.isBusy || snapshot.sessionLocked || !snapshot.driverCompatibilityAvailable || !setup.actions.reset)
                     Text(snapshot.driverCompatibilityAvailable
-                         ? "Reports compatibility version 35.0.15.6094 to Helldivers instead of the invalid all-65535 value. This is not an actual driver update. Steam and other games are unaffected."
+                         ? "With an Apple backend, reports compatibility version 35.0.15.6094 to Helldivers instead of the invalid all-65535 value. This is not an actual driver update. The preference is retained but inactive with DXMT/DXVK."
                          : "Requires the updated runtime. Choose Use updated runtime under Setup and prerequisites, then return to this game's settings.")
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()

@@ -14,6 +14,8 @@ struct GameDockNames: Codable {
     var fullscreenSpaces: [String: Bool]? = nil
     var sharedGraphicsBackend: D3DMetalBackend? = nil
     var graphicsBackends: [String: GameGraphicsOverride]? = nil
+    var defaultLibraryPath: String? = nil
+    var dxvkLibraryPath: String? = nil
 
     static func url(root: URL, prefix: URL) -> URL {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
@@ -21,7 +23,8 @@ struct GameDockNames: Codable {
 
     static func publish(root: URL, prefix: URL, session: UUID, games: [InstalledSteamGame],
                         steamExecutable: RelativePath = .steamDefault, loaders: [String: String] = [:],
-                        defaultLoader: String? = nil, graphicsBackend: D3DMetalBackend = .automatic, validate: () throws -> Void) throws {
+                        defaultLoader: String? = nil, graphicsBackend: D3DMetalBackend = .automatic,
+                        libraryLayout: RuntimeLayout? = nil, validate: () throws -> Void) throws {
         guard games.count <= 512 else { throw EnvironmentStoreError.documentTooLarge }
         let common = "c:\\" + steamExecutable.components.dropFirst().dropLast().joined(separator: "\\") + "\\steamapps\\common\\"
         let document = Self(schemaVersion: 1, prefix: prefix.path, sessionID: session.uuidString,
@@ -32,7 +35,7 @@ struct GameDockNames: Codable {
                             sharedGraphicsBackend: graphicsBackend,
                             graphicsBackends: try GameCompatibilityPreferences.read(root: root).graphicsBackends.filter { key, choice in
                                 choice != .inherit && games.contains { String($0.id) == key && $0.state == .ready }
-                            })
+                            }, defaultLibraryPath: libraryLayout?.defaultLibraryPath, dxvkLibraryPath: libraryLayout?.dxvkLibraryPath)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(document)
         guard let root = try ManagedDirectory.openRoot(root, create: true),

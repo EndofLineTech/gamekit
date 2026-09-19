@@ -175,9 +175,16 @@ final class ManagedDirectory {
     /// Wine shares PE image mappings by file identity. Game loaders must retain
     /// the Steam client's PE inodes so remote-thread entry points remain valid.
     func validateSharedFiles(from source: ManagedDirectory, privateRegularFiles: Set<String> = []) throws {
-        guard try names() == source.names() else { throw EnvironmentStoreError.identityMismatch }
+        let originals = try source.names(), targets = try names()
+        guard Set(originals).subtracting(privateRegularFiles) == Set(targets).subtracting(privateRegularFiles),
+              Set(originals).isSubset(of: Set(targets)) else { throw EnvironmentStoreError.identityMismatch }
         for name in try names() {
             var original = stat(), linked = stat()
+            if privateRegularFiles.contains(name) {
+                guard fstatat(descriptor, name, &linked, AT_SYMLINK_NOFOLLOW) == 0,
+                      linked.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG), linked.st_nlink == 1 else { throw EnvironmentStoreError.identityMismatch }
+                continue // Caller independently verifies each private module's hash.
+            }
             guard fstatat(source.descriptor, name, &original, AT_SYMLINK_NOFOLLOW) == 0,
                   fstatat(descriptor, name, &linked, AT_SYMLINK_NOFOLLOW) == 0,
                   original.st_mode & mode_t(S_IFMT) == linked.st_mode & mode_t(S_IFMT) else { throw EnvironmentStoreError.identityMismatch }
@@ -185,10 +192,6 @@ final class ManagedDirectory {
                 guard let a = try source.directory(name), let b = try directory(name) else { throw EnvironmentStoreError.notFound }
                 try b.validateSharedFiles(from: a)
             } else if original.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) {
-                if privateRegularFiles.contains(name) {
-                    guard linked.st_nlink == 1 else { throw EnvironmentStoreError.identityMismatch }
-                    continue // The caller must independently verify these module hashes.
-                }
                 guard original.st_dev == linked.st_dev, original.st_ino == linked.st_ino else { throw EnvironmentStoreError.identityMismatch }
             } else if original.st_mode & mode_t(S_IFMT) == mode_t(S_IFLNK) {
                 var a = [CChar](repeating: 0, count: Int(PATH_MAX) + 1)

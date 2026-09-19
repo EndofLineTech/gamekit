@@ -82,7 +82,10 @@ public actor LauncherCacheMaintenance {
                     var status: LauncherCacheEntry.Status = .protected
                     var bytes: Int64?
                     var identity = parentIdentity
-                    if name == "shared-pe-v2" || name == "shared-pe-v2-driver-off" { status = .retained }
+                    if name == "shared-pe-v2" || name == "shared-pe-v2-driver-off" ||
+                        name == "shared-pe-v3-dxmt-0.80-1" || name == "shared-pe-v3-dxmt-0.80-query1" || name == "shared-pe-v3-dxmt-0.80-compat2" ||
+                        name == "shared-pe-v3-dxvk-macos-1.10.3-20230507-1" || name == "shared-pe-v3-dxvk-macos-1.10.3-query1" ||
+                        name == "shared-pe-v3-dxvk-macos-1.10.3-compat2" { status = .retained }
                     else {
                         do {
                             if let saved = try ticket(parent, name: name) {
