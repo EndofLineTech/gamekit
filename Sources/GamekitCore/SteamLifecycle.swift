@@ -42,7 +42,10 @@ public actor SteamLifecycle {
         spawn: { request in
             try await SteamApplicationBundle.launch(request, layout: layout)
             guard let record = try await store.load(id), let token = request.environment["GAMEKIT_SESSION_ID"] else { throw SteamLifecycleError.notInstalled }
-            for _ in 0..<120 {
+            // Observed cold starts exceed 45s. Do not abandon opening Steam's
+            // UI at 30s while -silent can leave a later Cloud/login prompt hidden.
+            // This waits for presentation only; it never retries a game request.
+            for _ in 0..<360 {
                 try Task.checkCancellation()
                 let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: id), layout: layout)
                 guard snapshot.complete else { try await Task.sleep(for: .milliseconds(250)); continue }
@@ -191,10 +194,13 @@ public actor SteamLifecycle {
 
     /// Send a numeric AppID to the owned Windows client, never the host's Steam
     /// URL handler or a manifest-supplied executable. Success means request sent.
-    public func launchGame(appID: UInt32) async throws {
+    @discardableResult public func launchGame(appID: UInt32) async throws -> SteamGameLaunchObservation {
         let initial = try await installed()
         guard let game = try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
             .games.first(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
+        let logs = store.prefixURL(for: id).appendingPathComponent(initial.steamExecutable.rawValue)
+            .deletingLastPathComponent().appendingPathComponent("logs")
+        let launchLog = try? SteamLaunchLogTail(directory: logs)
         if layout.hasGameIdentityHelper {
             _ = try await SteamApplicationBundle.configured(layout: layout, game: .init(appID: game.id, name: game.name)).prepare()
         }
@@ -226,6 +232,11 @@ public actor SteamLifecycle {
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
         guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+        return SteamGameLaunchObservation(appID: appID, tail: launchLog) { [self] in
+            guard let current = try await self.receipt(), current.token == receipt.token else { throw SteamLifecycleError.scopeChanged }
+            let snapshot = try await self.diagnosticProcesses()
+            guard snapshot.processes.allSatisfy({ $0.sessionID == receipt.token.uuidString }) else { throw SteamLifecycleError.foreignActivity }
+        }
     }
     private func publishGameNames(record: EnvironmentRecord, lease: EnvironmentExecutionLease, receipt: SteamLaunchReceipt) throws {
         guard layout.hasGameIdentityHelper else { return }
