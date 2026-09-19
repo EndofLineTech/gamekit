@@ -1,3 +1,4 @@
+import AppKit
 import GamekitCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -32,6 +33,18 @@ struct DiagnosticsView: View {
                 }
                 Text("Summary exports exclude captured output, paths and session fields.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Debug mode — capture game startup performance", isOn: Binding(
+                    get: { model.debugMode }, set: { model.setDebugMode($0) }))
+                    .accessibilityIdentifier("debug-performance-mode")
+                Text("Off by default when Gamekit starts. For games launched from Gamekit, records up to 60 seconds of read-only CPU, memory and disk-I/O counters for one identified game process. No screenshots, file contents or shader hooks. Captures can add overhead.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(model.debugStatus).font(.callout).accessibilityIdentifier("debug-capture-status")
+                HStack {
+                    Button("Stop debug capture") { model.stopDebugCapture() }
+                        .disabled(!model.debugCapturing).accessibilityIdentifier("stop-debug-capture")
+                    Button("Open local logs") { NSWorkspace.shared.open(AppStorageLocations.diagnostics) }
+                        .accessibilityIdentifier("open-debug-logs")
+                }
                 if model.recordingProblem {
                     Text("Some diagnostic output could not be saved. Runtime results are reported separately.")
                         .font(.callout).foregroundStyle(.secondary)

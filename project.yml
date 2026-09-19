@@ -17,6 +17,20 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
 targets:
+  GamekitProcessCounters:
+    type: tool
+    platform: macOS
+    sources:
+      - diagnostics/process_counters.c
+      - Sources/CProcessSupport/ProcessSupport.c
+    settings:
+      base:
+        PRODUCT_NAME: GamekitProcessCounters
+        CLANG_ENABLE_CODE_COVERAGE: NO
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/CProcessSupport/include"]
+        GCC_TREAT_WARNINGS_AS_ERRORS: YES
+        SKIP_INSTALL: YES
   WineGameIdentity:
     type: library.dynamic
     platform: macOS
@@ -36,6 +50,12 @@ targets:
     sources: [App]
     dependencies:
       - package: GamekitCore
+      - target: GamekitProcessCounters
+        link: false
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
       - target: WineGameIdentity
         link: false
         embed: true

@@ -27,6 +27,14 @@ class LocalPackageTests(unittest.TestCase):
                 MODULE.validate_app(app)
             helper.unlink()
             helper.write_bytes(b"helper fixture")
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            counter = app / "Contents/MacOS/GamekitProcessCounters"
+            counter.symlink_to(app / "Contents/MacOS/Gamekit")
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            counter.unlink()
+            counter.write_bytes(b"counter fixture")
             self.assertEqual(MODULE.validate_app(app)["CFBundleExecutable"], "Gamekit")
 
     def test_refuses_existing_destination_and_wrong_app(self):
@@ -56,6 +64,10 @@ class LocalPackageTests(unittest.TestCase):
             self.assertEqual(first, MODULE.source_fingerprint(root))
             source.write_text("second", encoding="utf-8")
             self.assertNotEqual(first, MODULE.source_fingerprint(root))
+            before_counter = MODULE.source_fingerprint(root)
+            (root / "diagnostics").mkdir()
+            (root / "diagnostics/process_counters.c").write_text("shipped helper source", encoding="utf-8")
+            self.assertNotEqual(before_counter, MODULE.source_fingerprint(root))
 
 
 if __name__ == "__main__":

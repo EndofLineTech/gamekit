@@ -106,6 +106,19 @@ public actor SteamLifecycle {
         return state(await driver.observe(record, store.prefixURL(for: id)), receipt: receipt)
     }
 
+    /// Read-only diagnostic observation; no lease is held for the duration of a
+    /// capture, so diagnostics cannot prevent the user from stopping Steam.
+    public func diagnosticProcesses() async throws -> RuntimeProcessSnapshot {
+        let record = try await installed()
+        guard let before = try receipt() else { throw SteamLifecycleError.observationUnavailable }
+        let snapshot = await driver.observe(record, store.prefixURL(for: id))
+        guard snapshot.complete, try receipt()?.token == before.token,
+              snapshot.processes.allSatisfy({ $0.sessionID == before.token.uuidString }) else {
+            throw SteamLifecycleError.observationUnavailable
+        }
+        return snapshot
+    }
+
     public func launch() async throws -> SteamLifecycleState {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }

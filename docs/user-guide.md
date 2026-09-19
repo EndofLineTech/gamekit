@@ -62,6 +62,19 @@ bar shows the current stage, with no invented progress percentages.
 
 ## Everyday use
 
+### Debug capture
+
+Under **Local diagnostics**, enable **Debug mode — capture game startup
+performance** before launching a game from Gamekit. It records up to 60 seconds
+of read-only CPU, memory and disk-I/O counters for one identified owned game
+process. **Stop debug capture** stops only the sampler. Debug mode starts off
+on each fresh app launch.
+
+Read the resulting **performanceCapture** record using **View local output**;
+**Open local logs** reveals the private records. Summary exports omit the raw
+counters. No screenshots or shader hooks are enabled. See
+[debug capture details and retained developer tools](debug-performance-capture.md).
+
 ### Helldivers driver alert
 
 Open the **gear beside Helldivers' Play button** and use **Avoid the virtual-GPU

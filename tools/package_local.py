@@ -33,6 +33,9 @@ def source_fingerprint(root):
             paths.extend(path for path in directory.rglob("*") if path.is_file() and not path.is_symlink()
                          and "__pycache__" not in path.parts)
     paths.extend(root / name for name in ("project.yml", "Package.swift", "Makefile") if (root / name).is_file())
+    counter_source = root / "diagnostics/process_counters.c"
+    if counter_source.is_file() and not counter_source.is_symlink():
+        paths.append(counter_source)
     records = {str(path.relative_to(root)): digest(path) for path in sorted(paths)}
     return hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
 
@@ -50,6 +53,9 @@ def validate_app(app):
     helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
     if helper.parent.is_symlink() or helper.is_symlink() or not helper.is_file():
         raise ValueError("Expected the embedded Wine game identity helper")
+    counter = app / "Contents/MacOS/GamekitProcessCounters"
+    if counter.parent.is_symlink() or counter.is_symlink() or not counter.is_file():
+        raise ValueError("Expected the embedded read-only process counter helper")
     if (app / "Contents/SharedSupport/wine").exists():
         raise ValueError("The local package must not bundle the external Wine runtime")
     return info
@@ -82,6 +88,10 @@ def package(app, destination, root):
     helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
     if command("/usr/bin/lipo", "-archs", str(helper)) != "x86_64":
         raise ValueError("Expected the x86_64 Wine-side identity helper")
+    counter = app / "Contents/MacOS/GamekitProcessCounters"
+    if command("/usr/bin/lipo", "-archs", str(counter)) != "arm64":
+        raise ValueError("Expected the arm64 process counter helper")
+    command(str(counter), "--self-test")
     manifest = {
         "schemaVersion": 1,
         "status": "local-candidate; release acceptance recorded separately",
@@ -92,7 +102,9 @@ def package(app, destination, root):
         "architecture": "arm64",
         "executableSHA256": digest(binary),
         "wineIdentityHelper": {"path": "Contents/Frameworks/WineGameIdentity.dylib",
-                               "architecture": "x86_64", "sha256": digest(helper)},
+                                "architecture": "x86_64", "sha256": digest(helper)},
+        "processCounterHelper": {"path": "Contents/MacOS/GamekitProcessCounters",
+                                 "architecture": "arm64", "sha256": digest(counter)},
         "sourceCommit": command("git", "-C", str(root), "rev-parse", "HEAD"),
         "sourceDirty": bool(command("git", "-C", str(root), "status", "--porcelain")),
         "sourceTreeSHA256": source_fingerprint(root),
@@ -116,9 +128,11 @@ def package(app, destination, root):
             raise ValueError("Copied application identity changed")
         if digest(copied / manifest["wineIdentityHelper"]["path"]) != manifest["wineIdentityHelper"]["sha256"]:
             raise ValueError("Copied Wine identity helper changed")
+        if digest(copied / manifest["processCounterHelper"]["path"]) != manifest["processCounterHelper"]["sha256"]:
+            raise ValueError("Copied process counter helper changed")
         (stage / "build-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
-        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md"):
+        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md", "debug-performance-capture.md", "helldivers-startup-hitches.md"):
             command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
         # A no-clobber directory move; existing output is never removed or replaced.
         validate_destination(destination)
