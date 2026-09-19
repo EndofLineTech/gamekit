@@ -13,9 +13,10 @@ struct GameCompatibilityView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Compatibility · \(game.name)").font(.title2)
             Text("Graphics backend — shared by all games").font(.headline)
-            Text(setup.layout.graphicsBackend.title).accessibilityIdentifier("game-shared-backend")
-            Text("Steam passes this backend to every game in its managed environment. Change it under Setup and prerequisites while Steam is stopped; a fresh Steam session applies it.")
+            GraphicsBackendPicker()
+            Text("Steam passes this backend to every game in its managed environment. Change it while Steam is stopped; a fresh Steam session applies it.")
                 .font(.caption).foregroundStyle(.secondary)
+            if let problem = setup.problem { Text(problem).font(.callout).foregroundStyle(.secondary) }
             Divider()
             if GameCompatibilityStore.supports(game.id) {
                 if let snapshot {

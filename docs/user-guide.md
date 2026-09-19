@@ -82,11 +82,15 @@ recurrence in this setup; they are not the delivered fix.
 ### Graphics backend
 
 To retain the tested Helldivers Metal 3 configuration, save/exit games and
-**Stop Windows Steam**, then choose **Use Metal 3** under Setup and prerequisites.
+**Stop Windows Steam**, then choose **Metal 3 compatibility** in the
+**Shared graphics backend** dropdown under Setup or a game's gear panel.
 The saved choice applies to **all games in this managed Steam environment** and
-survives app and Steam restarts. **Automatic graphics** restores Apple's default
+survives app and Steam restarts. **Automatic (Apple default)** restores Apple's default
 backend using the same stopped-session flow. See
 [persistent graphics settings](persistent-graphics-backend.md) for scope and verification.
+
+The dropdown also lists **DXVK (In Dev)** and **DXMT (In Dev)** as disabled
+development placeholders. They cannot be selected yet.
 
 ### Steam controls
 
@@ -156,8 +160,8 @@ for scope and validation.
 
 Choose the **gear icon beside Play** in an installed game's row. Every game
 shows the saved graphics backend and explains that it is shared by the managed
-Steam environment. Change Automatic/Metal 3 under **Setup and prerequisites**;
-it is not a per-game switch.
+Steam environment. The same dropdown is available under **Setup and prerequisites**
+and in the gear panel; it is not a per-game backend override.
 
 Helldivers 2 additionally offers the validated **Fullscreen display capture**
 override for the Dock-edge cursor issue:

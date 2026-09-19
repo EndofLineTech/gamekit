@@ -33,7 +33,7 @@ final class GamekitUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
         }
         openSettings()
-        XCTAssertTrue(app.staticTexts["game-shared-backend"].exists)
+        XCTAssertTrue(app.sheets.firstMatch.popUpButtons["graphics-backend-picker"].exists)
         change("enable-game-capture", expected: "Enabled for this game")
         change("disable-game-capture", expected: "Disabled for this game")
         change("restore-game-defaults", expected: "Inherit Wine default")
@@ -144,10 +144,15 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
-        let metal = app.buttons["use-metal3-graphics"]
-        XCTAssertTrue(metal.waitForExistence(timeout: 20))
-        revealRecoveryButton(metal, in: app)
-        metal.click()
+        let picker = app.popUpButtons["graphics-backend-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 20))
+        revealRecoveryButton(picker, in: app)
+        picker.click()
+        XCTAssertTrue(app.menuItems["DXVK (In Dev)"].exists)
+        XCTAssertTrue(app.menuItems["DXMT (In Dev)"].exists)
+        XCTAssertFalse(app.menuItems["DXVK (In Dev)"].isEnabled)
+        XCTAssertFalse(app.menuItems["DXMT (In Dev)"].isEnabled)
+        app.menuItems["Metal 3 compatibility"].click()
         let selected = app.staticTexts["selected-graphics-backend"]
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
@@ -160,9 +165,9 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(selected.waitForExistence(timeout: 20))
         let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 15), .completed)
-        let automatic = app.buttons["use-automatic-graphics"]
-        revealRecoveryButton(automatic, in: app)
-        automatic.click()
+        revealRecoveryButton(picker, in: app)
+        picker.click()
+        app.menuItems["Automatic (Apple default)"].click()
         let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Automatic"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
         let automaticLayout = try await RuntimeSettingsStore(store: store).layout()
@@ -179,8 +184,7 @@ final class GamekitUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
-        XCTAssertFalse(app.buttons["use-metal3-graphics"].isEnabled)
-        XCTAssertFalse(app.buttons["use-automatic-graphics"].isEnabled)
+        XCTAssertFalse(app.popUpButtons["graphics-backend-picker"].isEnabled)
     }
 
     func testInstalledGamesRefreshAndUnavailableLaunch() async throws {
