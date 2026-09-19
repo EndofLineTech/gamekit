@@ -3,6 +3,23 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testDebugCaptureIsOptInAndResetsWhenAppReopens() throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        let toggle = app.checkBoxes["debug-performance-mode"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        revealRecoveryButton(toggle, in: app)
+        XCTAssertEqual(toggle.value as? Int, 0)
+        toggle.click()
+        XCTAssertEqual(toggle.value as? Int, 1)
+        XCTAssertFalse(app.buttons["stop-debug-capture"].isEnabled)
+        app.terminate(); app.launch()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertEqual(toggle.value as? Int, 0)
+    }
     func testPerGameCaptureSettingsPersistAndRestoreDefaults() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

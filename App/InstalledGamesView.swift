@@ -52,6 +52,7 @@ private final class InstalledGamesModel: ObservableObject {
             do {
                 let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
                 try await lifecycle.launchGame(appID: game.id)
+                diagnostics.captureGameIfEnabled(game, layout: setup.layout)
                 message = "Launch requested for \(game.name). Steam handles first-run setup; check the game window."
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
             } catch {

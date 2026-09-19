@@ -24,6 +24,18 @@ struct GameEvaluationLaunchTests {
         try #require(!tryAgainDriverWarning || env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] != "1")
         let continueDriverWarning = env["GAMEKIT_E6_CONTINUE_GPU_WARNING"] == "1" || tryAgainDriverWarning
         let passiveAfterWarning = env["GAMEKIT_E6_PASSIVE_AFTER_WARNING"] == "1"
+        let profileStartup = env["GAMEKIT_E6_PROFILE_STARTUP"] == "1"
+        let countersOnly = env["GAMEKIT_E6_COUNTERS_ONLY"] == "1"
+        let visualTool = env["GAMEKIT_E6_VISUAL_TOOL"]
+        if let visualTool {
+            try #require(profileStartup && visualTool.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: visualTool))
+        }
+        try #require(!countersOnly || profileStartup)
+        try #require(!profileStartup || (passiveAfterWarning && seconds >= 90))
+        if profileStartup {
+            let counter = try #require(env["GAMEKIT_E6_COUNTER_TOOL"])
+            try #require(counter.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: counter))
+        }
         try #require(!passiveAfterWarning || (appID == 553850 && continueDriverWarning))
         let confirmEnglish = env["GAMEKIT_E6_CONFIRM_ENGLISH"] == "1"
         let advanceTitle = env["GAMEKIT_E6_ADVANCE_TITLE"] == "1"
@@ -92,8 +104,15 @@ struct GameEvaluationLaunchTests {
         }
         var activeSession: String?
         var warningWatch: Task<[String], Never>?
+        var cpuProfile: Task<Void, Error>?
+        var counters: Task<Void, Error>?
+        var visual: Task<Void, Error>?
 
         func cleanup() async throws {
+            cpuProfile?.cancel(); counters?.cancel(); visual?.cancel()
+            _ = try? await visual?.value
+            _ = try? await cpuProfile?.value
+            _ = try? await counters?.value
             warningWatch?.cancel()
             if let warningWatch {
                 let observations = await warningWatch.value
@@ -205,8 +224,44 @@ struct GameEvaluationLaunchTests {
                         try await Task.sleep(for: .seconds(1))
                     }
                 }
+                if profileStartup && continuedDriverWarning && counters == nil, let foregroundPID,
+                   let process = snapshot.processes.first(where: { $0.identity.pid == foregroundPID }) {
+                    let identity = process.identity
+                    if let visualTool {
+                        visual = Task {
+                            let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: visualTool),
+                                arguments: [String(identity.pid), destination.path], timeout: 88, outputLimit: 8192))
+                            try (result.stdout + result.stderr).write(to: destination.appendingPathComponent("visual-command.txt"), options: .atomic)
+                            guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+                        }
+                    }
+                    cpuProfile = countersOnly ? nil : Task {
+                        for index in 0..<2 {
+                            try Task.checkCancellation()
+                            let fresh = await RuntimeProcessObserver().inspect(record: record, prefix: prefix, layout: layout)
+                            guard fresh.complete else { throw SteamLifecycleError.observationUnavailable }
+                            guard fresh.processes.contains(where: { $0.identity == identity && $0.sessionID == token }) else { return }
+                            let started = Date().timeIntervalSince1970
+                            let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/sample"),
+                                arguments: [String(identity.pid), "8", "10", "-file", destination.appendingPathComponent("cpu-\(index).txt").path],
+                                timeout: 30, outputLimit: 8192))
+                            print("E6 CPU sample \(index): start=\(started) end=\(Date().timeIntervalSince1970) result=\(result.termination)")
+                            try (result.stdout + result.stderr).write(to: destination.appendingPathComponent("cpu-\(index)-command.txt"), options: .atomic)
+                            guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+                        }
+                    }
+                    let tool = try #require(env["GAMEKIT_E6_COUNTER_TOOL"])
+                    counters = Task {
+                        let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: tool),
+                            arguments: [String(identity.pid), String(identity.startSeconds), String(identity.startMicroseconds), "60"],
+                            timeout: 70, outputLimit: 262144))
+                        try result.stdout.write(to: destination.appendingPathComponent("counters.jsonl"), options: .atomic)
+                        try result.stderr.write(to: destination.appendingPathComponent("counter-errors.txt"), options: .atomic)
+                        guard result.termination == .exited(0), result.stdoutBytes <= 262144 else { throw SteamLifecycleError.observationUnavailable }
+                    }
+                }
                 if passiveAfterWarning && continuedDriverWarning {
-                    print("E6 passive sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count); no capture or focus action")
+                    print("E6 passive sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count); no loop capture or focus action; visual task requested=\(visualTool != nil)")
                     sample += 1
                     continue
                 }
@@ -351,6 +406,12 @@ struct GameEvaluationLaunchTests {
                 print("E6 sample \(sample): owned game/service processes=\(snapshot.processes.filter { $0.role == .other }.count), captured windows=\(captured)")
                 sample += 1
             } while ContinuousClock.now < deadline
+            if profileStartup {
+                try #require(counters != nil && (countersOnly || cpuProfile != nil), "Profiling must identify the owned game")
+                try await cpuProfile?.value
+                try await counters?.value
+                try await visual?.value
+            }
             try #require(!(passiveAfterWarning || tryAgainDriverWarning) || continuedDriverWarning, "Requested warning action must have executed")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
         } catch {

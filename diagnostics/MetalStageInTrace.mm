@@ -14,6 +14,15 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef GAMEKIT_COMPILE_TIMING
+#include <string>
+#include <vector>
+struct IRObject;
+struct IRError;
+struct IRCompiler;
+extern IRObject *IRCompilerAllocCompileAndLink(IRCompiler *, const std::vector<std::string> &, const IRObject *, IRError **);
+static unsigned compileCalls;
+#endif
 
 #ifndef GAMEKIT_STAGEIN_LOG_DIRECTORY
 #error Supply an explicit private diagnostic output directory at build time.
@@ -96,9 +105,37 @@ static bool TracePrivateStageIn(const IRCompiler *compiler, IRMetalLibBinary *bi
     return result;
 }
 
+#ifdef GAMEKIT_COMPILE_TIMING
+// D3DMetal 4.0b2 imports this vector-reference overload, not the public C entry.
+// Its register-return ABI was inspected locally. Forward opaque objects and
+// the original vector reference untouched; never export shader data or names.
+static IRObject *TraceCompile(IRCompiler *compiler, const std::vector<std::string> &entries,
+                              const IRObject *input, IRError **error) {
+    if (!targetGame) return IRCompilerAllocCompileAndLink(compiler, entries, input, error);
+    uint64_t start = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+    IRObject *result = IRCompilerAllocCompileAndLink(compiler, entries, input, error);
+    int savedErrno = errno;
+    double duration = (clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - start) / 1000000.0;
+    unsigned sequence = __atomic_fetch_add(&compileCalls, 1, __ATOMIC_RELAXED);
+    if (sequence < 8192) {
+        @autoreleasepool {
+            uint64_t thread = 0; pthread_threadid_np(NULL, &thread);
+            AppendRecord(@{@"event": @"compile-link", @"pid": @(getpid()), @"thread": @(thread),
+                @"unixTime": @(NSDate.date.timeIntervalSince1970), @"durationMS": @(duration),
+                @"sequence": @(sequence), @"success": @(result != nullptr)});
+        }
+    }
+    errno = savedErrno;
+    return result;
+}
+#endif
+
 __attribute__((used, section("__DATA,__interpose")))
 static const struct { const void *replacement; const void *original; } stageInInterpose[] = {
     {(const void *)&TracePrivateStageIn, (const void *)&IRCreateStageInFunction}
+#ifdef GAMEKIT_COMPILE_TIMING
+    , {(const void *)&TraceCompile, (const void *)&IRCompilerAllocCompileAndLink}
+#endif
 };
 
 __attribute__((constructor)) static void InitializeStageInTrace(void) {
