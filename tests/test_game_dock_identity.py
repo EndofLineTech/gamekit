@@ -22,6 +22,21 @@ class GameDockIdentityTests(unittest.TestCase):
         ], check=True, capture_output=True)
         cls.helper = Path(cls.workspace.name).resolve() / "WineGameIdentity.dylib"
         cls.probe = Path(cls.workspace.name).resolve() / "dock-probe"
+        cls.backend_probe = Path(cls.workspace.name).resolve() / "backend-probe"
+        subprocess.run(["xcrun", "clang", "-x", "c", "-", "-o", str(cls.backend_probe)], input=r'''
+#include <mach-o/dyld.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    char path[4096]; uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) || getenv("GAMEKIT_IDENTITY_ROUTED")) return 2;
+    const char *actual = getenv("D3DM_MTL4"); if (!actual) actual = "unset";
+    const char *name = strrchr(path, '/'); name = name ? name + 1 : path;
+    printf("%s %s\n", name, actual);
+    return strcmp(actual, getenv("EXPECT_BACKEND")) || strcmp(name, getenv("EXPECT_LOADER"));
+}
+''', text=True, check=True, capture_output=True)
         subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wall", "-Wextra", "-Werror",
                         "-dynamiclib", "-framework", "AppKit", str(source), "-o", str(cls.helper)],
                        check=True, capture_output=True)
@@ -65,8 +80,36 @@ class GameDockIdentityTests(unittest.TestCase):
         self.assertEqual(self.run_reader("526870;bad"), "")
         self.assertEqual(self.run_reader("4294967296"), "")
 
+    def test_backend_override_is_image_and_session_scoped_and_restores_shared_default(self):
+        image = r"C:\program files (x86)\steam\steamapps\common\satisfactory\game.exe"
+        self.document["sharedGraphicsBackend"] = "metal3"
+        self.document["graphicsBackends"] = {"526870": "automatic"}
+        self.write()
+        flags = dict(GAMEKIT_TEST_BACKEND_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=image, D3DM_MTL4="0")
+        self.assertEqual(self.run_reader(**flags), "unset")
+        self.assertEqual(self.run_reader("", **flags), "unset")
+        # A Steam process must not adopt a game override even with inherited AppID.
+        steam = flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\program files (x86)\steam\Steam.exe", "D3DM_MTL4": "1"}
+        self.assertEqual(self.run_reader(**steam), "0")
+        self.document["sharedGraphicsBackend"] = "automatic"
+        self.document["graphicsBackends"] = {"526870": "metal3"}
+        self.write()
+        self.assertEqual(self.run_reader(**flags), "0")
+        self.assertEqual(self.run_reader(**steam), "unset")
+        self.assertEqual(self.run_reader("123456", **flags), "unset")
+        self.assertEqual(self.run_reader(**(flags | {"GAMEKIT_SESSION_ID": "foreign", "D3DM_MTL4": "1"})), "1")
+        for bad in ["dxvk", "dxmt", True, 1, {}]:
+            self.document["graphicsBackends"]["526870"] = bad
+            self.write()
+            self.assertEqual(self.run_reader(**flags), "unset")
+        self.document["graphicsBackends"] = {"526870": "metal3"}
+        self.document["directories"]["123456"] = self.document["directories"]["526870"]
+        self.write()
+        self.assertEqual(self.run_reader(**flags), "unset")
+
     def test_fullscreen_space_requires_boolean_opt_in_owned_session_and_main_image(self):
         self.document["games"]["553850"] = "Helldivers"
+        self.document["directories"]["553850"] = "c:\\games\\"
         self.document["fullscreenSpaces"] = {"553850": True, "526870": True}
         self.write()
         flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\games\helldivers2.exe")
@@ -159,6 +202,23 @@ class GameDockIdentityTests(unittest.TestCase):
         refused = subprocess.run([str(source), "Windows Steam"], env=env,
                                  capture_output=True, text=True, timeout=15)
         self.assertEqual(refused.returncode, 0, refused.stdout + refused.stderr)
+
+    def test_backend_survives_reexec_and_child_steam_does_not_inherit_game_choice(self):
+        source, target, env = self.routing_fixture(self.backend_probe, self.helper)
+        self.document["sharedGraphicsBackend"] = "metal3"
+        self.document["graphicsBackends"] = {"526870": "automatic"}
+        self.write()
+        env.update(D3DM_MTL4="0", EXPECT_BACKEND="unset", EXPECT_LOADER="Gamekit Route Probe")
+        image = r"C:\program files (x86)\steam\steamapps\common\satisfactory\game.exe"
+        result = subprocess.run([str(source), image], env=env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.document["sharedGraphicsBackend"] = "automatic"
+        self.document["graphicsBackends"] = {"526870": "metal3"}
+        self.write()
+        # Model a Steam child starting through a game's current loader/env.
+        env.update(D3DM_MTL4="0", EXPECT_BACKEND="unset", EXPECT_LOADER="Windows Steam")
+        child = subprocess.run([str(target), r"C:\program files (x86)\steam\Steam.exe"], env=env, capture_output=True, text=True, timeout=15)
+        self.assertEqual(child.returncode, 0, child.stdout + child.stderr)
 
     def test_refuses_redirected_or_external_loader(self):
         source, target, env = self.routing_fixture(self.probe, self.helper)

@@ -46,6 +46,50 @@ private struct CompatibilityFixture {
 
 @Suite("Per-game compatibility settings")
 struct GameCompatibilityTests {
+    @Test("Backend overrides are per installed game, preserve shared selection and migrate driver preferences")
+    func graphicsOverrides() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let apps = fixture.prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Another Game"), withIntermediateDirectories: true)
+        try Data(#""AppState" { "appid" "123456" "name" "Another Game" "installdir" "Another Game" "StateFlags" "4" }"#.utf8).write(to: apps.appendingPathComponent("appmanifest_123456.acf"))
+        let runtime = RuntimeSettingsStore(store: fixture.store)
+        try await runtime.select(nil, revision: .driverVersion1, graphicsBackend: .metal3)
+        let selected = try Data(contentsOf: fixture.store.root.appendingPathComponent("Metadata/RuntimeSelection.json"))
+        let preferences = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
+        try Data(#"{"schemaVersion":1,"driverVersions":{"553850":false}}"#.utf8).write(to: preferences)
+        let settings = fixture.settings()
+        let inherited = try await settings.inspectGraphics(appID: 123456)
+        #expect(inherited.override == .inherit && inherited.effectiveBackend == .metal3)
+        let automatic = try await settings.setGraphicsBackend(.automatic, appID: 123456)
+        #expect(automatic.override == .automatic && automatic.effectiveBackend == .automatic)
+        #expect(try await settings.inspectGraphics(appID: 553850).override == .inherit)
+        #expect(try await settings.inspect(appID: 553850).driverCompatibility == false)
+        #expect(try await fixture.settings().inspectGraphics(appID: 123456).override == .automatic)
+        #expect(try Data(contentsOf: fixture.store.root.appendingPathComponent("Metadata/RuntimeSelection.json")) == selected)
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+        let restored = try await settings.setGraphicsBackend(.inherit, appID: 123456)
+        #expect(restored.effectiveBackend == .metal3)
+        try await runtime.selectGraphicsBackend(.automatic)
+        #expect(try await settings.inspectGraphics(appID: 123456).effectiveBackend == .automatic)
+        #expect(try await settings.setGraphicsBackend(.metal3, appID: 553850).effectiveBackend == .metal3)
+    }
+
+    @Test("Backend choices reject active/uncertain sessions, absent games and unsupported values")
+    func graphicsGuards() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setGraphicsBackend(.automatic, appID: 553850) }
+        await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setGraphicsBackend(.automatic, appID: 553850) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await fixture.settings().setGraphicsBackend(.metal3, appID: 999) }
+        let file = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
+        for invalid in [#"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"553850":"dxvk"}}"#,
+                        #"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":null}"#,
+                        #"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"0553850":"metal3"}}"#,
+                        #"{"schemaVersion":1,"driverVersions":{},"graphicsBackends":{"553850":"metal3"}}"#] {
+            try Data(invalid.utf8).write(to: file)
+            await #expect(throws: (any Error).self) { try await fixture.settings().setGraphicsBackend(.inherit, appID: 553850) }
+            #expect(try String(contentsOf: file, encoding: .utf8) == invalid)
+        }
+    }
     @Test("Per-game driver toggle changes the real query and restores the user's choice",
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_GAME_DRIVER_ACCEPTANCE"] == "1"))
     func liveDriverPreference() async throws {
@@ -234,6 +278,7 @@ struct GameCompatibilityTests {
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setCapture(.enabled, appID: 553850) }
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setFullscreenSpace(true, appID: 553850) }
         await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setDriverCompatibility(false, appID: 553850) }
+        await #expect(throws: EnvironmentStoreError.busy) { try await fixture.settings().setGraphicsBackend(.automatic, appID: 553850) }
         #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
     }
 

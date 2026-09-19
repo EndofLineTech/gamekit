@@ -11,6 +11,29 @@ public enum GameCaptureOverride: String, CaseIterable, Sendable {
         }
     }
 }
+public enum GameGraphicsOverride: String, Codable, CaseIterable, Sendable {
+    case inherit, automatic, metal3
+    public var title: String {
+        switch self {
+        case .inherit: "Use shared default"
+        case .automatic: D3DMetalBackend.automatic.title
+        case .metal3: D3DMetalBackend.metal3.title
+        }
+    }
+    public func effectiveBackend(shared: D3DMetalBackend) -> D3DMetalBackend {
+        switch self {
+        case .inherit: shared
+        case .automatic: .automatic
+        case .metal3: .metal3
+        }
+    }
+}
+public struct GameGraphicsSnapshot: Sendable {
+    public let override: GameGraphicsOverride
+    public let sharedBackend: D3DMetalBackend
+    public let sessionLocked: Bool
+    public var effectiveBackend: D3DMetalBackend { override.effectiveBackend(shared: sharedBackend) }
+}
 public struct GameCompatibilitySnapshot: Sendable {
     public let capture: GameCaptureOverride
     public let inheritedCapture: Bool
@@ -23,15 +46,35 @@ public struct GameCompatibilitySnapshot: Sendable {
 }
 
 struct GameCompatibilityPreferences: Codable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var driverVersions: [String: Bool] = [:]
+    var graphicsBackends: [String: GameGraphicsOverride] = [:]
+    init() {}
+    private enum CodingKeys: String, CodingKey { case schemaVersion, driverVersions, graphicsBackends }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        driverVersions = try values.decode([String: Bool].self, forKey: .driverVersions)
+        if schemaVersion == 1 {
+            guard !values.contains(.graphicsBackends) else { throw GameCompatibilityError.unsupportedPresentation }
+            graphicsBackends = [:]
+        } else {
+            graphicsBackends = try values.decode([String: GameGraphicsOverride].self, forKey: .graphicsBackends)
+        }
+    }
 
     static func read(root: URL) throws -> Self {
         guard let metadata = try ManagedDirectory.openRoot(root, create: false)?.directory("Metadata"),
               let data = try metadata.read("GameCompatibility.json") else { return .init() }
-        let preferences = try JSONDecoder().decode(Self.self, from: data)
-        guard preferences.schemaVersion == 1, preferences.driverVersions.keys.allSatisfy({ $0 == "553850" })
+        var preferences = try JSONDecoder().decode(Self.self, from: data)
+        guard (preferences.schemaVersion == 1 && preferences.graphicsBackends.isEmpty || preferences.schemaVersion == 2),
+              preferences.driverVersions.keys.allSatisfy({ $0 == "553850" }), preferences.graphicsBackends.count <= 512,
+              preferences.graphicsBackends.keys.allSatisfy({ key in
+                  guard let id = UInt32(key), id > 0 else { return false }
+                  return String(id) == key
+              })
         else { throw GameCompatibilityError.unsupportedPresentation }
+        preferences.schemaVersion = 2
         return preferences
     }
 
@@ -127,8 +170,8 @@ public actor GameCompatibilityStore {
     init(store: EnvironmentStore, observe: @escaping @Sendable (EnvironmentRecord, URL, RuntimeLayout) async -> RuntimeProcessSnapshot) {
         self.store = store; self.observe = observe
     }
-    private func record(_ appID: UInt32) async throws -> EnvironmentRecord {
-        guard Self.supports(appID) else { throw GameCompatibilityError.unsupportedGame }
+    private func record(_ appID: UInt32, specialized: Bool = true) async throws -> EnvironmentRecord {
+        guard !specialized || Self.supports(appID) else { throw GameCompatibilityError.unsupportedGame }
         guard let record = try await store.load(SteamInstallationRecipe.environmentID), record.installation == .installed,
               record.installationRecipeVersion == 1, record.runtime == RuntimeProfile.sikarugir.identity,
               record.steamExecutable == .steamDefault,
@@ -159,6 +202,41 @@ public actor GameCompatibilityStore {
         let record = try await record(appID)
         let settings = RuntimeSettingsStore(store: store)
         return try await snapshot(registry(prefix(record)), layout: settings.layout(), locked: settings.isSelectionLocked())
+    }
+
+    public func inspectGraphics(appID: UInt32) async throws -> GameGraphicsSnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        _ = try await record(appID, specialized: false)
+        let settings = RuntimeSettingsStore(store: store)
+        return try await .init(override: GameCompatibilityPreferences.read(root: store.root).graphicsBackends[String(appID)] ?? .inherit,
+                              sharedBackend: settings.layout().graphicsBackend, sessionLocked: settings.isSelectionLocked())
+    }
+
+    @discardableResult public func setGraphicsBackend(_ override: GameGraphicsOverride, appID: UInt32) async throws -> GameGraphicsSnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await record(appID, specialized: false)
+        let settings = RuntimeSettingsStore(store: store)
+        guard !(try await settings.isSelectionLocked()) else { throw EnvironmentStoreError.busy }
+        let execution = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(execution) {} }
+        let selected = try await settings.layout()
+        for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
+            let observed = await observe(record, execution.prefix, layout)
+            guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
+            guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
+        }
+        try execution.validate(); try Task.checkCancellation()
+        var preferences = try GameCompatibilityPreferences.read(root: store.root)
+        if override == .inherit { preferences.graphicsBackends.removeValue(forKey: String(appID)) }
+        else { preferences.graphicsBackends[String(appID)] = override }
+        guard let metadata = try ManagedDirectory.openRoot(store.root, create: false)?.directory("Metadata") else { throw EnvironmentStoreError.notFound }
+        try metadata.withWriteLock {
+            try metadata.write(JSONEncoder().encode(preferences), to: "GameCompatibility.json", createOnly: false, beforeCommit: { try execution.validate() })
+        }
+        let saved = try GameCompatibilityPreferences.read(root: store.root)
+        return .init(override: saved.graphicsBackends[String(appID)] ?? .inherit, sharedBackend: selected.graphicsBackend, sessionLocked: false)
     }
 
     @discardableResult public func setDriverCompatibility(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {

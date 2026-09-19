@@ -3,6 +3,43 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testPerGameBackendPersistsWithoutChangingSharedDefault() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Graphics fixture", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent("drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture Game"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "123456" "name" "Fixture Game" "installdir" "Fixture Game" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_123456.acf"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch(); defer { app.terminate() }
+        func openPanel() {
+            let gear = app.buttons["game-compatibility-123456"]
+            XCTAssertTrue(gear.waitForExistence(timeout: 20)); revealRecoveryButton(gear, in: app); gear.click()
+            XCTAssertTrue(app.popUpButtons["game-graphics-backend-picker"].waitForExistence(timeout: 15))
+        }
+        func choose(_ title: String, effective: String) {
+            let picker = app.popUpButtons["game-graphics-backend-picker"]
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: picker)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+            picker.click()
+            XCTAssertFalse(app.menuItems["DXVK (In Dev)"].isEnabled)
+            XCTAssertFalse(app.menuItems["DXMT (In Dev)"].isEnabled)
+            app.menuItems[title].click()
+            let value = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", effective), object: app.staticTexts["game-effective-backend"])
+            XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
+        }
+        openPanel(); choose("Metal 3 compatibility", effective: "Metal 3")
+        let shared = try await RuntimeSettingsStore(store: store).layout()
+        XCTAssertEqual(shared.graphicsBackend, .automatic)
+        app.terminate(); app.launch(); openPanel()
+        XCTAssertTrue((app.staticTexts["game-effective-backend"].value as? String ?? "").contains("Metal 3"))
+        choose("Use shared default", effective: "Automatic")
+        let snapshot = try await GameCompatibilityStore(store: store).inspectGraphics(appID: 123456)
+        XCTAssertEqual(snapshot.override, .inherit)
+    }
     func testDebugCaptureIsOptInAndResetsWhenAppReopens() throws {
         let root = try temporaryRoot()
         let app = XCUIApplication()
@@ -50,7 +87,7 @@ final class GamekitUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
         }
         openSettings()
-        XCTAssertTrue(app.sheets.firstMatch.popUpButtons["graphics-backend-picker"].exists)
+        XCTAssertTrue(app.sheets.firstMatch.popUpButtons["game-graphics-backend-picker"].exists)
         change("enable-game-capture", expected: "Enabled for this game")
         change("disable-game-capture", expected: "Disabled for this game")
         change("restore-game-defaults", expected: "Inherit Wine default")

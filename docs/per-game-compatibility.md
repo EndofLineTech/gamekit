@@ -13,10 +13,11 @@ capture to false. `winemac.drv/macdrv_main.c` initializes
 `capture_displays_for_fullscreen` to zero and reads application-specific config
 before the global fallback. The control applies to the next game process.
 
-The graphics backend remains environment-wide because persistent Steam passes it
-to children. Every game panel labels that scope and directs the user to the
-existing stopped-session backend selector. This feature does not implement
-per-game backend overrides, aspect-ratio changes or automatic warning handling.
+The shared graphics backend in Setup is the default for Steam and its games.
+`gamekit-aty` adds [per-game backend overrides](per-game-graphics-backends.md)
+to each ready installed game's gear panel, accounting for Steam's inherited
+environment. The original capture feature does not change aspect ratio or
+implement automatic warning handling.
 The later `gamekit-deg` feature adds an independent opt-in Helldivers fullscreen
 Space; see [native fullscreen Spaces](native-fullscreen-spaces.md). No unsupported
 cursor-handler preference is exposed.

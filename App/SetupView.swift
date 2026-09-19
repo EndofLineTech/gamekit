@@ -46,7 +46,7 @@ struct SetupView: View {
                 Text("Saved graphics backend: \(setup.layout.graphicsBackend.title)")
                     .accessibilityIdentifier("selected-graphics-backend")
                 GraphicsBackendPicker()
-                Text("Applies to Windows Steam and all games in this managed environment. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
+                Text("Applies to Windows Steam and all games using the shared default. Individual games can override it in their gear panel. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
                     .font(.caption).accessibilityIdentifier("graphics-backend-scope")
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)

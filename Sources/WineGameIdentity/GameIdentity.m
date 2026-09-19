@@ -101,13 +101,10 @@ static NSData *ReadMapping(NSString *path) {
     return data;
 }
 
-static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace) {
-    if (loader) *loader = nil;
-    if (fullscreenSpace) *fullscreenSpace = NO;
-    NSString *appID = GameAppID();
+static NSDictionary *ReadSessionDocument(void) {
     NSString *prefix = EnvironmentString("WINEPREFIX");
     NSString *session = EnvironmentString("GAMEKIT_SESSION_ID");
-    if ((!appID && EnvironmentString("SteamAppId").length) || !prefix.length || !session.length || ![[NSUUID alloc] initWithUUIDString:session]) return nil;
+    if (!prefix.length || !session.length || ![[NSUUID alloc] initWithUUIDString:session]) return nil;
     NSData *data = ReadMapping(EnvironmentString("GAMEKIT_GAME_NAMES_FILE"));
     if (!data) return nil;
     id document = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
@@ -117,28 +114,70 @@ static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace
         ![document[@"prefix"] isEqual:prefix] || ![document[@"sessionID"] isEqual:session]) return nil;
     id games = document[@"games"];
     if (![games isKindOfClass:NSDictionary.class] || [games count] > 512) return nil;
-    if (loader && [document[@"defaultLoader"] isKindOfClass:NSString.class]) *loader = document[@"defaultLoader"];
-    if (!appID) {
-        id directories = document[@"directories"];
-        if (![directories isKindOfClass:NSDictionary.class] || [directories count] > 512) return nil;
-        NSString *image = [WindowsImage() stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"\""]];
-        NSString *unixBase = [prefix stringByAppendingString:@"/drive_c/"];
-        if ([image hasPrefix:unixBase]) image = [@"c:\\" stringByAppendingString:[image substringFromIndex:unixBase.length]];
-        image = [image stringByReplacingOccurrencesOfString:@"/" withString:@"\\"].lowercaseString;
-        NSArray *parts = [image componentsSeparatedByString:@"\\"];
-        if (![image hasSuffix:@".exe"] || [parts containsObject:@".."] || [parts containsObject:@"."] ||
-            [image rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
-        for (id key in directories) {
-            id directory = directories[key];
-            if (![CanonicalAppID(key) isEqual:key] || ![directory isKindOfClass:NSString.class] ||
-                ![directory hasSuffix:@"\\"] || ![directory length]) continue;
-            if ([image hasPrefix:[directory lowercaseString]]) {
-                if (appID) return nil; // Ambiguous directories cannot name the process.
-                appID = key;
-            }
+    return document;
+}
+
+/* Resolve the actual image, not an inherited AppID that may belong to a parent
+ * game. This also handles Wine launches whose native environment has no AppID. */
+static NSString *ImageAppID(NSDictionary *document) {
+    id directories = document[@"directories"];
+    if (![directories isKindOfClass:NSDictionary.class] || [directories count] > 512) return nil;
+    NSString *image = [WindowsImage() stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"\""]];
+    NSString *unixBase = [EnvironmentString("WINEPREFIX") stringByAppendingString:@"/drive_c/"];
+    if ([image hasPrefix:unixBase]) image = [@"c:\\" stringByAppendingString:[image substringFromIndex:unixBase.length]];
+    image = [image stringByReplacingOccurrencesOfString:@"/" withString:@"\\"].lowercaseString;
+    NSArray *parts = [image componentsSeparatedByString:@"\\"];
+    if (!([image hasPrefix:@"c:\\"] || [image hasPrefix:@"z:\\"]) || ![image hasSuffix:@".exe"] || [parts containsObject:@".."] || [parts containsObject:@"."] ||
+        [image rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
+    NSString *found = nil;
+    for (id key in directories) {
+        id directory = directories[key];
+        if (![CanonicalAppID(key) isEqual:key] || ![directory isKindOfClass:NSString.class]) continue;
+        NSString *path = [directory lowercaseString];
+        NSArray *components = [path componentsSeparatedByString:@"\\"];
+        if (!([path hasPrefix:@"c:\\"] || [path hasPrefix:@"z:\\"]) || ![path hasSuffix:@"\\"] || [components count] < 3 ||
+            [components containsObject:@".."] || [components containsObject:@"."] ||
+            [path rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) continue;
+        if ([image hasPrefix:path]) {
+            if (found) return nil;
+            found = key;
         }
-        if (!appID) return nil;
     }
+    return found;
+}
+
+static void ApplyGraphicsBackend(void) {
+    NSDictionary *document = ReadSessionDocument();
+    id shared = document[@"sharedGraphicsBackend"];
+    if (![shared isKindOfClass:NSString.class] || !([shared isEqual:@"automatic"] || [shared isEqual:@"metal3"])) return;
+    NSString *backend = shared;
+    NSString *imageID = ImageAppID(document), *advertised = EnvironmentString("SteamAppId");
+    id overrides = document[@"graphicsBackends"];
+    if (imageID && [document[@"games"][imageID] isKindOfClass:NSString.class] &&
+        (!advertised.length || [GameAppID() isEqual:imageID]) &&
+        [overrides isKindOfClass:NSDictionary.class] && [overrides count] <= 512) {
+        id chosen = overrides[imageID];
+        if ([chosen isKindOfClass:NSString.class] && ([chosen isEqual:@"automatic"] || [chosen isEqual:@"metal3"])) backend = chosen;
+    }
+    // Reset inherited game overrides for Steam/services/unrelated children.
+    // Automatic means UNSET, not a guessed Metal 4 flag value.
+    if ([backend isEqual:@"metal3"]) setenv("D3DM_MTL4", "0", 1);
+    else unsetenv("D3DM_MTL4");
+}
+
+static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace) {
+    if (loader) *loader = nil;
+    if (fullscreenSpace) *fullscreenSpace = NO;
+    NSString *appID = GameAppID();
+    if (!appID && EnvironmentString("SteamAppId").length) return nil;
+    NSDictionary *document = ReadSessionDocument();
+    if (!document) return nil;
+    id games = document[@"games"];
+    if (loader && [document[@"defaultLoader"] isKindOfClass:NSString.class]) *loader = document[@"defaultLoader"];
+    NSString *imageID = ImageAppID(document);
+    if (appID && WindowsImage().length && ![appID isEqual:imageID]) return nil;
+    if (!appID) appID = imageID;
+    if (!appID) return nil;
     id name = games[appID];
     if (![name isKindOfClass:NSString.class] || ![name length] || [name length] > 1024 ||
         [name rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return nil;
@@ -164,6 +203,10 @@ BOOL GamekitShouldUseFullscreenSpace(void) {
 #ifdef GAMEKIT_IDENTITY_READER_TEST
 int main(void) {
     @autoreleasepool {
+        if (getenv("GAMEKIT_TEST_BACKEND_SETTING")) {
+            ApplyGraphicsBackend();
+            puts(getenv("D3DM_MTL4") ?: "unset"); return 0;
+        }
         if (getenv("GAMEKIT_TEST_SPACE_SETTING")) { puts(GamekitShouldUseFullscreenSpace() ? "enabled" : "disabled"); return 0; }
         NSString *name = ReadGameNameWithLoader(NULL, NULL);
         if (name) puts(name.UTF8String);
@@ -184,6 +227,7 @@ static NSString *CurrentLoaderPath(void) {
  * The one-shot marker is removed before Wine creates any Windows children. */
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
+        ApplyGraphicsBackend();
         if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;
         NSString *current = CurrentLoaderPath();
         NSString *routed = EnvironmentString("GAMEKIT_IDENTITY_ROUTED");

@@ -166,6 +166,19 @@ struct GameEvaluationLaunchTests {
                     print(pressed.stdoutText)
                     try #require(pressed.termination == .exited(0))
                     try await Task.sleep(for: .seconds(8))
+                } else if env["GAMEKIT_E6_STEAM_URL_LAUNCH"] == "1" {
+                    _ = try await lifecycle.launch()
+                    let observed = try await lifecycle.diagnosticProcesses()
+                    let sessions = Set(observed.processes.compactMap(\.sessionID))
+                    try #require(sessions.count == 1)
+                    let session = try #require(sessions.first)
+                    let steam = prefix.appendingPathComponent(record.steamExecutable.rawValue)
+                    let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
+                        arguments: [steam.path, "steam://rungameid/\(appID)"],
+                        environment: layout.environment(prefix: prefix, session: session),
+                        workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
+                    try #require(launched.termination == .exited(0))
+                    print("E6 launch requested directly through the owned Steam client URL handler")
                 } else { try await lifecycle.launchGame(appID: appID) }
             }
             struct Receipt: Decodable { let token: UUID }
