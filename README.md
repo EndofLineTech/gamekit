@@ -33,6 +33,8 @@ installer silently, follows bootstrap, and detects stable web-UI readiness autom
 managed installation, including after Gamekit restarts.
 [Installed game tiles](docs/installed-games.md) detect the managed Steam library,
 show game artwork and launch individual titles through Windows Steam.
+Each tile also offers [Uninstall through managed Steam](docs/uninstall-games.md),
+with confirmation and automatic library refresh.
 [E6 evaluation evidence](docs/e6-game-results.md) records the three-game baseline
 and Stardew's completed hands-on acceptance. The
 [compatibility findings](docs/e6-compatibility-findings.md) summarize accepted

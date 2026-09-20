@@ -167,6 +167,18 @@ Install games using **Windows Steam**, in its default managed library. Gamekit's
 each title with artwork and a play button. The list refreshes every three seconds,
 when Gamekit becomes active, or with **Refresh games**. Uninstalled titles disappear.
 
+To uninstall, click the **trash button beside the game's gear**, then choose
+**Continue in Windows Steam**. Steam opens its uninstall flow; review and confirm
+or cancel there. Gamekit starts managed Windows Steam if needed and updates the
+tile list after Steam removes the installation record. **Cancel** in Gamekit's
+confirmation sends no request. Incomplete or missing-file installations also
+offer Uninstall, provided the runtime and Steam controls are ready.
+
+An **Uninstall requested** message means the request was sent, not that removal
+finished. Use **Show Windows Steam** if its prompt is hidden. Steam controls
+which files are removed; Gamekit does not directly delete game folders or saves.
+See [uninstall behavior](uninstall-games.md) for details.
+
 Click a game's tile to launch it. Gamekit starts its managed Windows Steam session
 if necessary and sends that game's AppID to the Windows client. The native macOS
 Steam app is not used. A launch-request message means Steam received the request;

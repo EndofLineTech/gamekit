@@ -11,6 +11,7 @@ private final class InstalledGamesModel: ObservableObject {
     @Published private(set) var pendingGame: UInt32?
     private var launchObservation: Task<Void, Never>?
     private var namesNeedRefresh = true
+    private var requestedUninstall: (id: UInt32, name: String)?
 
     func refresh(setup: SetupModel) async {
         guard !refreshing, !setup.isBusy else { return }
@@ -27,6 +28,11 @@ private final class InstalledGamesModel: ObservableObject {
             }.value
             guard !setup.isBusy, !Task.isCancelled else { return }
             if games != result.games { games = result.games; namesNeedRefresh = true }
+            if result.unreadableManifests == 0, let requested = requestedUninstall,
+               !result.games.contains(where: { $0.id == requested.id }) {
+                message = "\(requested.name) is no longer listed as installed in Windows Steam."
+                requestedUninstall = nil
+            }
             warning = result.unreadableManifests == 0 ? nil :
                 "\(result.unreadableManifests) Steam installation records could not be read. Let Steam finish its changes, then refresh."
             if namesNeedRefresh {
@@ -92,6 +98,31 @@ private final class InstalledGamesModel: ObservableObject {
         }
     }
 
+    func uninstall(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
+        guard pendingGame == nil, setup.actions.launch || setup.actions.show,
+              let token = setup.begin("Requesting uninstall for \(game.name)") else { return }
+        message = "Opening uninstall for \(game.name) in Windows Steam…"
+        Task { [self] in
+            let operation = try? await diagnostics.store?.begin(stage: .uninstallation, context: .init(component: .steam))
+            do {
+                let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                try await lifecycle.requestGameUninstall(appID: game.id)
+                requestedUninstall = (game.id, game.name)
+                message = "Uninstall requested for \(game.name). Confirm or cancel in Windows Steam; this list refreshes automatically."
+                if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
+            } catch {
+                message = error as? SteamGameLibraryError == .notInstalled
+                    ? "This game is no longer listed in the managed Steam library. Refresh games."
+                    : AppFailure.message(error)
+                if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .executionFailed) }
+            }
+            setup.end(token)
+            await refresh(setup: setup)
+            setup.refresh(diagnostics: diagnostics)
+            diagnostics.refreshID = UUID()
+        }
+    }
+
     func showSteam(setup: SetupModel, diagnostics: AppDiagnosticsModel) {
         guard let token = setup.begin("Showing Windows Steam") else { return }
         Task {
@@ -109,6 +140,8 @@ struct InstalledGamesView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = InstalledGamesModel()
     @State private var compatibilityGame: InstalledSteamGame?
+    @State private var uninstallGame: InstalledSteamGame?
+    @State private var confirmUninstall = false
 
     var body: some View {
         GroupBox {
@@ -156,6 +189,18 @@ struct InstalledGamesView: View {
                         .accessibilityLabel("Compatibility settings for \(game.name)")
                         .accessibilityIdentifier("game-compatibility-\(game.id)")
                         .help("Compatibility settings for \(game.name)")
+                        Button {
+                            uninstallGame = game
+                            confirmUninstall = true
+                        } label: {
+                            Image(systemName: "trash").font(.title2).frame(width: 40, height: 40)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.pendingGame != nil || !(setup.actions.launch || setup.actions.show))
+                        .accessibilityLabel("Uninstall \(game.name)")
+                        .accessibilityIdentifier("uninstall-game-\(game.id)")
+                        .help("Uninstall \(game.name) through managed Windows Steam")
                         .padding(.trailing, 10)
                     }
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
@@ -184,6 +229,16 @@ struct InstalledGamesView: View {
             if phase == .active { Task { await model.refresh(setup: setup) } }
         }
         .sheet(item: $compatibilityGame) { game in GameCompatibilityView(game: game) }
+        .confirmationDialog("Uninstall \(uninstallGame?.name ?? "game")?", isPresented: $confirmUninstall, titleVisibility: .visible) {
+            Button("Continue in Windows Steam", role: .destructive) {
+                if let game = uninstallGame { model.uninstall(game, setup: setup, diagnostics: diagnostics) }
+                uninstallGame = nil
+            }
+            .disabled(model.pendingGame != nil || !(setup.actions.launch || setup.actions.show))
+            Button("Cancel", role: .cancel) { uninstallGame = nil }
+        } message: {
+            Text("Windows Steam will handle removal. Review and confirm it there. The installed-game list updates automatically.")
+        }
     }
 
     private func status(_ game: InstalledSteamGame) -> String {
