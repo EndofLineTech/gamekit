@@ -173,7 +173,8 @@ subfolder. Windows Steam does not need to be running to use this button.
 
 To uninstall, click the **trash button beside the game's gear**, then choose
 **Continue in Windows Steam**. Steam opens its uninstall flow; review and confirm
-or cancel there. Gamekit starts managed Windows Steam if needed and updates the
+or cancel there. Gamekit brings the owned Steam window forward for confirmation,
+starts managed Windows Steam if needed, and updates the
 tile list after Steam removes the installation record. **Cancel** in Gamekit's
 confirmation sends no request. Incomplete or missing-file installations also
 offer Uninstall, provided the runtime and Steam controls are ready.

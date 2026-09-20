@@ -109,6 +109,9 @@ private final class InstalledGamesModel: ObservableObject {
                 try await lifecycle.requestGameUninstall(appID: game.id)
                 requestedUninstall = (game.id, game.name)
                 message = "Uninstall requested for \(game.name). Confirm or cancel in Windows Steam; this list refreshes automatically."
+                if (try? await SteamWindowPresentation.bringForward(using: lifecycle)) != true {
+                    message = "Uninstall requested for \(game.name), but Steam could not be brought forward. Use Show Windows Steam to review its confirmation."
+                }
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
             } catch {
                 message = error as? SteamGameLibraryError == .notInstalled
@@ -152,7 +155,11 @@ private final class InstalledGamesModel: ObservableObject {
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
             do {
-                try await SteamLifecycle(store: EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout).show()
+                let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                try await lifecycle.show()
+                if try await !SteamWindowPresentation.bringForward(using: lifecycle) {
+                    message = "Steam's window was requested, but macOS did not activate it. Select Windows Steam in the Dock."
+                }
             } catch { message = AppFailure.message(error) }
         }
     }

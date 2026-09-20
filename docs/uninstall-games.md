@@ -1,6 +1,6 @@
 # Uninstall games from Gamekit
 
-Issue: `gamekit-q28`.
+Issue: `gamekit-q28`; foreground handoff follow-up: `gamekit-29g`.
 
 ## User flow
 
@@ -14,7 +14,14 @@ Issue: `gamekit-q28`.
    games** is also available.
 
 The action starts managed Windows Steam if necessary. It never invokes macOS
-Steam. An **Uninstall requested** message reports dispatch, not completed file
+Steam. After sending the request, Gamekit explicitly transfers macOS focus to
+the owned Steam window process so the confirmation is visible. The bounded
+focus check never resends an uninstall request. If activation is unavailable,
+the UI still reports the request as sent and offers **Show Windows Steam**.
+The handoff waits for Gamekit's confirmation sheet to dismiss, uses the verified
+session's Steam UI PID, and checks that activation remains stable. The same
+handoff is used by the Show Windows Steam controls.
+An **Uninstall requested** message reports dispatch, not completed file
 removal. A cancellation in Steam leaves the tile installed. **Show Windows
 Steam** exposes a hidden prompt. Steam owns local-file/save behavior; the feature
 does not guarantee that every title stores or retains saves in the same way.
