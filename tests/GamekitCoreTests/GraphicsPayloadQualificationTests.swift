@@ -37,18 +37,24 @@ struct GraphicsPayloadQualificationTests {
         for (index, probe) in probes.enumerated() {
             try FileManager.default.copyItem(at: URL(fileURLWithPath: probe), to: directory.appendingPathComponent("probe\(index).exe"))
         }
-        let backends: [GameGraphicsOverride] = env["GAMEKIT_PROBE_ONLY_APPLE"] == "1" ? [.metal3] : [.dxmt, .dxvk, .metal3]
+        let workload = env["GAMEKIT_QUERY_WORKLOAD"] == "1"
+        let selected = env["GAMEKIT_PROBE_BACKEND"].flatMap(GameGraphicsOverride.init(rawValue:))
+        try #require(env["GAMEKIT_PROBE_BACKEND"] == nil || [.dxmt, .dxvk, .metal3].contains(selected))
+        let appleOnly = env["GAMEKIT_PROBE_ONLY_APPLE"] == "1"
+        try #require(!appleOnly || selected == nil || selected == .metal3)
+        let backends: [GameGraphicsOverride] = selected.map { [$0] } ?? (appleOnly ? [.metal3] : [.dxmt, .dxvk, .metal3])
         for backend in backends {
             _ = try await preferences.setGraphicsBackend(backend, appID: game.appID)
             for index in probes.indices {
                 if backend == .metal3 && index == 1 { continue } // Apple payload is x64 only.
                 let session = try await RuntimeSession.startGameProbe(store: store, id: id, layout: layout, game: game,
                     arguments: [directory.appendingPathComponent("probe\(index).exe").path] +
-                        (backend == .dxmt ? ["--shared-compat"] : backend == .dxvk ? ["--query-compat"] : []))
+                        (workload ? ["--query-workload"] : backend == .dxmt ? ["--shared-compat"] : backend == .dxvk ? ["--query-compat"] : []))
                 let result = await session.command.result(); _ = try await session.stop()
                 print("Derived \(backend.rawValue) arch=\(index == 0 ? "x64" : "x86"): \(result.termination)\n\(result.stdoutText)\n\(result.stderrText)")
                 #expect(result.termination == .exited(0))
                 #expect(result.stdoutText.contains("PASS D3D11 shader draw/readback/present"))
+                if workload { #expect(result.stdoutText.contains("PASS pooled rendering queries and reuse")) }
                 #expect(try Data(contentsOf: prefixDXGI) == original)
                 try SteamApplicationBundle(layout: layout).validate(layout.steamApplicationBundle)
             }

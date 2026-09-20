@@ -78,6 +78,8 @@ responsiveness. **Do not recommend this DXVK payload for Satisfactory** based
 on the earlier menu-only result. Keep the accepted Apple/Metal 3 path as the
 default; DXMT is a functionally tested alternative with the stuttering caveat.
 See [hands-on results](satisfactory-backend-gameplay.md) for scope and restoration.
+Subsequent performance trials did not establish a fix; see the
+[performance investigation](satisfactory-performance-investigation.md).
 
 For build 24656030 (game 1.2.4.0 / UE 5.6.1), **Gamekit Play** adds these transient
 options when selecting DXMT or DXVK:

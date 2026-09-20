@@ -259,6 +259,16 @@ static NSString *CurrentLoaderPath(void) {
  * The one-shot marker is removed before Wine creates any Windows children. */
 __attribute__((constructor)) static void GameIdentityStart(void) {
     @autoreleasepool {
+#ifdef GAMEKIT_SAVE_WRITE_GUARD
+        void (^guardSaves)(void) = ^{
+            extern void GamekitProtectSatisfactorySaves(void);
+            NSString *appID = ImageAppID(ReadSessionDocument());
+            NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
+            if (([appID isEqual:@"526870"] && [image isEqual:@"factorygamesteam-win64-shipping.exe"]) ||
+                ([appID isEqual:@"900001"] && [image hasPrefix:@"probe"]))
+                GamekitProtectSatisfactorySaves();
+        };
+#endif
 #ifdef GAMEKIT_DEVICE_API_CAPTURE
         extern void GamekitArmDeviceAPICapture(int enabled);
         NSDictionary *captureDocument = ReadSessionDocument();
@@ -273,11 +283,21 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
         NSString *routed = EnvironmentString("GAMEKIT_IDENTITY_ROUTED");
         if (routed) {
             unsetenv("GAMEKIT_IDENTITY_ROUTED");
-            if ([routed isEqual:current]) return;
+            if ([routed isEqual:current]) {
+#ifdef GAMEKIT_SAVE_WRITE_GUARD
+                guardSaves();
+#endif
+                return;
+            }
         }
         NSString *target = nil;
         (void)ReadGameNameWithLoader(&target, NULL);
-        if (!current || !target.length || ([current isEqual:target] && !libraryPathChanged)) return;
+        if (!current || !target.length || ([current isEqual:target] && !libraryPathChanged)) {
+#ifdef GAMEKIT_SAVE_WRITE_GUARD
+            guardSaves();
+#endif
+            return;
+        }
         NSString *root = [[[[EnvironmentString("WINEPREFIX") stringByDeletingLastPathComponent]
             stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"Launchers"] stringByAppendingString:@"/"];
         if (![current hasPrefix:root] || ![target hasPrefix:root]) return;

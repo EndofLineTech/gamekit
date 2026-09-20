@@ -17,6 +17,19 @@ struct GameEvaluationLaunchTests {
         try #require([553850, 413150, 526870].contains(appID))
         let satisfactoryD3D11 = env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1"
         try #require(!satisfactoryD3D11 || appID == 526870)
+        let sandbox = env["GAMEKIT_E6_SATISFACTORY_USER_DIR"]
+        if let sandbox {
+            try #require(satisfactoryD3D11 && sandbox.hasPrefix("/") && !sandbox.contains(where: { $0.isWhitespace }))
+            _ = try #require(try ManagedDirectory.openRoot(URL(fileURLWithPath: sandbox), create: false))
+        }
+        let sandboxContinue = env["GAMEKIT_E6_SANDBOX_CONTINUE"] == "1"
+        try #require(!sandboxContinue || (sandbox != nil && env["GAMEKIT_SATISFACTORY_PERFORMANCE"] == "1" && CGPreflightPostEventAccess()))
+        let guardLog = env["GAMEKIT_SAVE_GUARD_LOG_FILE"].map { URL(fileURLWithPath: $0) }
+        try #require(!sandboxContinue || guardLog != nil)
+        let sampleSatisfactory = env["GAMEKIT_E6_SAMPLE_SATISFACTORY"] == "1"
+        try #require(!sampleSatisfactory || sandbox != nil)
+        let disableOcclusion = env["GAMEKIT_E6_DISABLE_OCCLUSION"] == "1"
+        try #require(!disableOcclusion || sandbox != nil)
         let helldiversD3D11 = env["GAMEKIT_E6_HELLDIVERS_D3D11"] == "1"
         try #require(!helldiversD3D11 || (appID == 553850 && env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] == nil && !satisfactoryD3D11))
         let disableStreamline = env["GAMEKIT_E6_DISABLE_STREAMLINE"] == "1"
@@ -189,7 +202,9 @@ struct GameEvaluationLaunchTests {
                     let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
                         arguments: helldiversD3D11 ? [steam.path, "-applaunch", String(appID), "--use-d3d11"] : satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
                             (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) +
-                            (preferComputePost ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : []) : [steam.path, "steam://rungameid/\(appID)"],
+                            (preferComputePost ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : []) +
+                            (disableOcclusion ? ["-ini:Engine:[SystemSettings]:r.AllowOcclusionQueries=0"] : []) +
+                            (sandbox.map { ["-UserDir=Z:" + $0] } ?? []) : [steam.path, "steam://rungameid/\(appID)"],
                         environment: layout.environment(prefix: prefix, session: session),
                         workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
                     try #require(launched.termination == .exited(0))
@@ -207,6 +222,7 @@ struct GameEvaluationLaunchTests {
             var completedScreenActions = Set<String>()
             var completedSpaceRoundTrip = false
             var mappedPIDs = Set<Int32>()
+            var guardedPIDs = Set<Int32>()
             var verifiedMoltenVKPairing = false
             repeat {
                 try await Task.sleep(for: .seconds(10))
@@ -217,6 +233,13 @@ struct GameEvaluationLaunchTests {
                     NSWorkspace.shared.runningApplications.first(where: {
                         gamePIDs.contains($0.processIdentifier) && $0.activationPolicy == .regular && $0.localizedName == game.name
                     })?.processIdentifier
+                }
+                if sandboxContinue, let foregroundPID, let guardLog, !guardedPIDs.contains(foregroundPID),
+                   let guardDirectory = try ManagedDirectory.openRoot(guardLog.deletingLastPathComponent(), create: false),
+                   let bytes = try guardDirectory.read(guardLog.lastPathComponent, maximumBytes: 65536),
+                   String(decoding: bytes, as: UTF8.self).contains("pid=\(foregroundPID) session=\(token) verified=1 ") {
+                    guardedPIDs.insert(foregroundPID)
+                    print("Verified save-write guard receipt for the current owned game/session")
                 }
                 if (satisfactoryD3D11 || helldiversD3D11), sample >= (helldiversD3D11 ? 1 : 5), let foregroundPID, !mappedPIDs.contains(foregroundPID) {
                     let maps = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/vmmap"),
@@ -230,6 +253,12 @@ struct GameEvaluationLaunchTests {
                         }
                         mappedPIDs.insert(foregroundPID)
                     }
+                }
+                if sampleSatisfactory, [7, 10].contains(sample), let foregroundPID {
+                    let captured = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/sample"),
+                        arguments: [String(foregroundPID), "5", "10", "-file", destination.appendingPathComponent("cpu-\(sample).txt").path],
+                        timeout: 20, outputLimit: 8192))
+                    print("Satisfactory diagnostic CPU sample \(sample): \(captured.termination); sampling perturbs timing")
                 }
                 if let foregroundPID, !verifyDriverWarning, !(passiveAfterWarning && continuedDriverWarning) {
                     _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
@@ -374,9 +403,9 @@ struct GameEvaluationLaunchTests {
                     // is an observation gap, not a game-compatibility assertion.
                     if capture.termination == .exited(0) {
                         captured += 1
-                        if (confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults) && completedScreenActions.count < 9 {
+                        if (confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults || (sandboxContinue && foregroundPID.map(guardedPIDs.contains) == true)) && completedScreenActions.count < 9 {
                             let image = destination.appendingPathComponent("sample-\(sample)-\(index).png")
-                            let observations = try await recognize(image, crop: nil)
+                            let observations = try await recognize(image, crop: sandboxContinue ? "satisfactory" : nil)
                             func text(_ observation: ScreenText) -> String {
                                 observation.text.lowercased().replacingOccurrences(of: " ", with: "")
                             }
@@ -390,6 +419,15 @@ struct GameEvaluationLaunchTests {
                             let optionalData = declineOptionalData && !completedScreenActions.contains("optional data")
                                 && Set(["aboutgamedata", "decline", "accept"]).isSubset(of: Set(observations.map(text)))
                             let words = Set(observations.map(text))
+                            let continueSandbox = sandboxContinue && !completedScreenActions.contains("sandbox load")
+                                && Set(["newgame", "load", "options", "exit"]).isSubset(of: words)
+                            let sandboxSession = sandboxContinue && completedScreenActions.contains("sandbox load")
+                                && !completedScreenActions.contains("sandbox session") && words.contains("deletesession") && words.contains("test")
+                            let saveLabel = observations.first { $0.boundingBox.minX > 0.30 && text($0).replacingOccurrences(of: "_", with: "").hasPrefix("testautosave") }.map(text)
+                            let sandboxSave = sandboxContinue && completedScreenActions.contains("sandbox session")
+                                && !completedScreenActions.contains("sandbox save") && saveLabel != nil
+                            let sandboxConfirm = sandboxContinue && completedScreenActions.contains("sandbox save")
+                                && !completedScreenActions.contains("sandbox confirm") && words.contains("loadgame") && !words.contains("resumegame")
                             var defaults: String?
                             if advanceSetupDefaults, words.contains(where: { $0.hasSuffix("setup") }) {
                                 if Set(["subtitles", "subtitlemode", "subtitlesize", "texttospeech"]).isSubset(of: words) { defaults = "subtitles" }
@@ -408,8 +446,8 @@ struct GameEvaluationLaunchTests {
                                words.contains(where: { $0.contains("theleftsideoftheskullshouldbebarelyvisible") }) {
                                 defaults = "brightness"
                             }
-                            let action = defaults ?? (optionalData ? "optional data" : (title ? "title" : stage))
-                            let label = defaults != nil ? "next" : (optionalData ? "decline" : (title ? "pressanybutton" : "confirm"))
+                            let action = sandboxConfirm ? "sandbox confirm" : sandboxSave ? "sandbox save" : sandboxSession ? "sandbox session" : continueSandbox ? "sandbox load" : defaults ?? (optionalData ? "optional data" : (title ? "title" : stage))
+                            let label = sandboxConfirm ? "loadgame" : sandboxSave ? (saveLabel ?? "test_autosave_0") : sandboxSession ? "test" : continueSandbox ? "load" : defaults != nil ? "next" : (optionalData ? "decline" : (title ? "pressanybutton" : "confirm"))
                             var buttonBounds = observations.first(where: { text($0) == label })?.boundingBox
                             if defaults != nil {
                                 let cropped = try await recognize(image, crop: defaults == "brightness" ? "brightness" : "next-button")
@@ -417,7 +455,7 @@ struct GameEvaluationLaunchTests {
                                     buttonBounds = found
                                 }
                             }
-                            if language || title || optionalData || defaults != nil, let buttonBounds {
+                            if sandboxConfirm || sandboxSave || sandboxSession || continueSandbox || language || title || optionalData || defaults != nil, let buttonBounds {
                                 let target = await MainActor.run { () -> (Int32, CGRect)? in
                                     for info in CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [] {
                                         guard info[kCGWindowNumber as String] as? UInt32 == window,
@@ -457,6 +495,7 @@ struct GameEvaluationLaunchTests {
             }
             try #require(!(passiveAfterWarning || tryAgainDriverWarning) || continuedDriverWarning, "Requested warning action must have executed")
             try #require(!spaceRoundTrip || completedSpaceRoundTrip, "Requested Space round trip must execute")
+            try #require(!sandboxContinue || completedScreenActions.contains("sandbox load"), "Sandbox Load must have executed")
             try #require(!(expectMoltenVKPairing || expectedMoltenVKLibrary != nil) || verifiedMoltenVKPairing, "Expected paired MoltenVK must be mapped in the owned game")
         } catch {
             try await cleanup()
