@@ -123,6 +123,30 @@ private final class InstalledGamesModel: ObservableObject {
         }
     }
 
+    func openSteamapps(setup: SetupModel) {
+        guard let token = setup.begin("Opening steamapps folder") else { return }
+        Task {
+            defer { setup.end(token) }
+            do {
+                let store = try EnvironmentStore(root: AppStorageLocations.metadata)
+                guard let record = try await store.load(SteamInstallationRecipe.environmentID), record.installation == .installed else {
+                    message = "Install Windows Steam before opening its steamapps folder."
+                    return
+                }
+                let folder = store.prefixURL(for: record.id).appendingPathComponent(record.steamExecutable.rawValue)
+                    .deletingLastPathComponent().appendingPathComponent("steamapps", isDirectory: true)
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+                    message = "The managed steamapps folder is not available yet. Open Windows Steam to finish setup."
+                    return
+                }
+                if !NSWorkspace.shared.open(folder) { message = "Finder could not open the managed steamapps folder." }
+            } catch {
+                message = AppFailure.message(error)
+            }
+        }
+    }
+
     func showSteam(setup: SetupModel, diagnostics: AppDiagnosticsModel) {
         guard let token = setup.begin("Showing Windows Steam") else { return }
         Task {
@@ -149,6 +173,10 @@ struct InstalledGamesView: View {
                 HStack {
                     Label("Installed games", systemImage: "square.grid.2x2.fill").font(.headline)
                     Spacer()
+                    Button("Open steamapps folder", systemImage: "folder") { model.openSteamapps(setup: setup) }
+                        .disabled(setup.isBusy || setup.record?.installation != .installed)
+                        .accessibilityIdentifier("open-steamapps-folder")
+                        .help("Open the managed Windows Steam library folder in Finder")
                     Button("Refresh games", systemImage: "arrow.clockwise") {
                         Task { await model.refresh(setup: setup) }
                     }
