@@ -33,8 +33,10 @@ installer silently, follows bootstrap, and detects stable web-UI readiness autom
 managed installation, including after Gamekit restarts.
 [Installed game tiles](docs/installed-games.md) detect the managed Steam library,
 show game artwork and launch individual titles through Windows Steam.
-[E6 evaluation evidence](docs/e6-game-results.md) records Satisfactory launcher
-acceptance and the remaining gameplay checks.
+[E6 evaluation evidence](docs/e6-game-results.md) records the three-game baseline
+and Stardew's completed hands-on acceptance. The
+[compatibility findings](docs/e6-compatibility-findings.md) summarize accepted
+paths, open defects and recommended follow-up work.
 [Recovery controls](docs/steam-recovery.md) retry interrupted setup and support a
 confirmed reset that archives the old environment and preserves game downloads.
 An explicitly confirmed clean reset can instead delete the current prefix and its

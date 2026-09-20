@@ -1,6 +1,10 @@
 # E6 game evaluation — current evidence
 
-Recorded 2026-09-17 UTC. E6.2 (`gamekit-ec8.2`) remains **in progress**.
+Baseline recorded 2026-09-17 UTC; hands-on acceptance updated **2026-09-20**.
+The deferred Stardew gameplay/save-reload check is now complete, with a known
+duplicate-cursor caveat. See the [consolidated findings](e6-compatibility-findings.md)
+for current outcomes, limitations and follow-up priorities. Historical baseline
+failures below remain evidence of the configurations originally tested.
 The [approved matrix](https://github.com/EndofLineTech/gamekit/pull/17) selects
 Helldivers 2, Satisfactory and Stardew Valley, with separate 75 GiB download and
 installed-data caps and a 15 GiB free-space reserve. The user started with
@@ -129,7 +133,7 @@ guest CPU feature exposure and documented runtime/Rosetta capabilities. The
 previously documented anti-cheat risk has not been established as the cause of
 this result. No CPU flags or game-specific workarounds were applied.
 
-## Stardew Valley — installed and menu reached; gameplay deferred
+## Stardew Valley — initial installation and menu evidence
 
 The user confirmed it was available for evaluation here. Windows Steam's install
 dialog showed 659.8 MB. The Windows build installed successfully:
@@ -145,7 +149,8 @@ dialog showed 659.8 MB. The Windows build installed successfully:
 | Install | Passed |
 | First launch observation | Blocked by Steam concurrent-account-use dialog |
 | Launch/rendering after that gate cleared | New / Load / Co-op / Exit menu captured |
-| Gameplay, audio/input, save/reload, measured FPS | Deferred by user; not passed by inference from the menu |
+| Gameplay, audio/input, save/reload at this initial checkpoint | Deferred; later user acceptance is recorded below |
+| Measured FPS | Not measured |
 
 The first observation showed that another computer was playing a game and that
 continuing would disconnect it. The assistant did not continue through that gate;
@@ -165,8 +170,35 @@ Private captures are under `.build/e6-stardew-launch-1/` through
 `.build/e6-stardew-launch-4/`. The last captured menu is `sample-5-0.png` in run 4.
 Some earlier bounded observations required the scoped forced-stop fallback; the
 final foreground observation ended with graceful cleanup. No existing save was
-opened or overwritten. The user chose to perform the 15-minute gameplay and
-save/reload check later, so Stardew remains installed and closed.
+opened or overwritten during those initial observations. The user deferred the
+gameplay and save/reload check until the later session below.
+
+### Stardew hands-on acceptance — 2026-09-20
+
+The installed manifest still reported AppID **413150**, build **16826371**.
+Gamekit package `Gamekit-20260919T192107Z` (source `117c988`) launched it through
+the normal Play control with the accepted `driver-version-1` runtime, shared
+Metal 3 default and no per-game graphics override. The Windows build's framework
+is MonoGame DesktopGL; the shared selection is not evidence of D3DMetal rendering
+this OpenGL-family game.
+
+The first request waited on a Steam Cloud `syncfailed` prompt. It was not a game
+crash or a successful launch. The user handled the prompt; Steam subsequently
+recorded the game process starting. Authentication/Cloud choices stayed user-owned.
+
+After the gameplay/audio/control checklist, the user reported **“Works great”**,
+with one issue: the macOS and Stardew cursors were visible simultaneously. The
+user then explicitly confirmed **“Saving and reloading works just fine.”**
+Record **Playable with a duplicate-cursor caveat**, not merely menu startup.
+No measured FPS, exact test duration, independently verified resolution, or
+new draw-call API trace is claimed.
+
+Cursor defect **`gamekit-vl6`** remains open. Saved preferences showed software
+cursor mode (`hardwareCursor=false`), `fullscreen=false`, and borderless mode
+enabled. A single stopped-game comparison changed only `hardwareCursor` to true.
+The user reported the same problem; the effective in-game option was not
+independently observed. The original false value was restored after graceful
+managed Steam shutdown. No Wine cursor override or save-file edits were applied.
 
 ## Budget accounting
 
