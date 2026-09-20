@@ -49,6 +49,9 @@ private final class SteamLifecycleModel: ObservableObject {
                     if state == .running { try await controller(layout: setup.layout).show() }
                     else { _ = try await controller(layout: setup.layout).launch() }
                     message = "Steam window requested. Quitting Gamekit leaves Steam running."
+                    if (try? await SteamWindowPresentation.bringForward(using: controller(layout: setup.layout))) != true {
+                        message = "Steam window requested. Select Windows Steam in the Dock if macOS has not brought it forward."
+                    }
                 }
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
             } catch {

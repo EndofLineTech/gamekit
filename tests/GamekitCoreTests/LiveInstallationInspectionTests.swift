@@ -26,7 +26,7 @@ struct LiveInstallationInspectionTests {
         let store = try EnvironmentStore()
         let record = try #require(await store.load(SteamInstallationRecipe.environmentID))
         let files = try await store.installationFiles(record.id)
-        let layout = RuntimeLayout(dataRoot: store.root)
+        let layout = try await RuntimeSettingsStore(store: store).layout()
         let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: record.id), layout: layout)
         print("Managed installation: progress=\(record.installation) revision=\(record.revision) prefix=\(files.prefixExists) executable=\(files.executableExists) complete=\(snapshot.complete)")
         for process in snapshot.processes {
