@@ -75,17 +75,17 @@
       ]
     },
     "413150": {
-      "recommendation": "No gameplay-qualified recommendation yet. The Windows OpenGL path reached the menu using the shared runtime.",
-      "recommended_backend": null,
-      "summary": "Startup only. User-controlled gameplay, audio/input and save/reload remain deferred.",
-      "issues": ["gamekit-ec8.2"],
+      "recommendation": "Use the normal Windows launch with the shared runtime. Playable with a known duplicate-cursor issue; no DX11/DX12 backend override is required for this DesktopGL build.",
+      "recommended_backend": "other",
+      "summary": "User reports the game works great and confirms saving and reloading work. Both macOS and Stardew cursors can be visible simultaneously.",
+      "issues": ["gamekit-vl6"],
       "results": [
         {
-          "backend": "other", "status": "startup", "version": ".NET 6.0.32 / MonoGame DesktopGL 3.8.0.1641",
-          "api": "OpenGL / MonoGame DesktopGL runtime family", "api_evidence": "reported", "build": "16826371 (1.6.15.24356)", "date": "2026-09-17", "environment": "m4-original",
+          "backend": "other", "status": "verified", "version": ".NET 6.0.32 / MonoGame DesktopGL 3.8.0.1641",
+          "api": "OpenGL / MonoGame DesktopGL runtime family", "api_evidence": "reported", "build": "16826371 (1.6.15.24356)", "date": "2026-09-20", "environment": "m4-driver-version-1",
           "launch_options": [],
-          "notes": "The Windows build rendered the New/Load/Co-op/Exit menu. This is not a DX11/DX12 backend test or gameplay/save-reload acceptance. Subsequent revised-runtime menu regressions are documented in the E6 report.",
-          "evidence": ["docs/e6-game-results.md", "docs/runtime-text-input-delivery.md"]
+          "notes": "Hands-on functional acceptance: user reported gameplay works great after the gameplay/audio/control checklist, then explicitly confirmed save/reload. Known caveat: simultaneous macOS and game cursors. A hardware-cursor preference trial did not resolve it and was reverted. No measured FPS, exact session duration, independently verified resolution, or draw-call API trace is claimed. This is not a DXMT/DXVK qualification.",
+          "evidence": ["docs/e6-game-results.md", "docs/e6-compatibility-findings.md"]
         }
       ]
     }
