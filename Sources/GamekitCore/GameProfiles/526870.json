@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "revision": 1,
+  "schemaVersion": 2,
+  "revision": 2,
   "appId": 526870,
   "name": "Satisfactory",
   "runtime": "sikarugir-10.0_6",
@@ -8,5 +8,6 @@
     "dxmt": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"],
     "dxvk": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0", "-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"]
   },
-  "notes": "Build 24656030: DXMT gameplay, audio, controls and save/reload passed with temporary startup stutter. DXVK was unplayable; its existing launch workaround is retained only for users explicitly selecting that backend. See the wiki for full evidence."
+  "notes": "Build 24656030: DXMT gameplay, audio, controls and save/reload passed with temporary startup stutter. DXVK was unplayable; its existing launch workaround is retained only for users explicitly selecting that backend. See the wiki for full evidence.",
+  "execution": {}
 }

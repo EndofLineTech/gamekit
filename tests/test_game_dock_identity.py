@@ -132,6 +132,7 @@ int main(void) {
         self.document["games"]["553850"] = "Helldivers"
         self.document["directories"]["553850"] = "c:\\games\\"
         self.document["fullscreenSpaces"] = {"553850": True, "526870": True}
+        self.document["fullscreenExecutables"] = {"553850": "helldivers2.exe"}
         self.write()
         flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\games\helldivers2.exe")
         self.assertEqual(self.run_reader("553850", **flags), "enabled")
@@ -142,6 +143,19 @@ int main(void) {
             self.document["fullscreenSpaces"]["553850"] = value
             self.write()
             self.assertEqual(self.run_reader("553850", **flags), "disabled")
+
+    def test_fullscreen_space_accepts_an_arbitrary_profile_identity(self):
+        self.document["games"]["42"] = "Fixture"
+        self.document["directories"]["42"] = "c:\\fixture\\"
+        self.document["fullscreenSpaces"] = {"42": True}
+        self.document["fullscreenExecutables"] = {"42": "custom.exe"}
+        self.write()
+        flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\fixture\custom.exe")
+        self.assertEqual(self.run_reader("42", **flags), "enabled")
+        self.assertEqual(self.run_reader("42", **(flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\fixture\other.exe"})), "disabled")
+        self.document.pop("fullscreenExecutables")
+        self.write()
+        self.assertEqual(self.run_reader("42", **flags), "disabled")
 
     def test_matches_actual_windows_image_when_native_appid_is_absent(self):
         self.write()

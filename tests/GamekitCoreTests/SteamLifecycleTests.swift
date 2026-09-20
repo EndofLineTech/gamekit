@@ -219,7 +219,7 @@ struct SteamLifecycleTests {
         #expect(GraphicsBackend.dxvk.launchOptions(appID: 553850).isEmpty)
         #expect(try Data(contentsOf: settings) == original)
         let updated = Data("""
-        {"schemaVersion":1,"revision":2,"appId":526870,"name":"Satisfactory","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["-dx11"],"dxvk":["-dx11"]},"notes":"Updated profile fixture"}
+        {"schemaVersion":1,"revision":3,"appId":526870,"name":"Satisfactory","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["-dx11"],"dxvk":["-dx11"]},"notes":"Updated profile fixture"}
         """.utf8)
         try await GameProfileStore(root: fixture.store.root).accept(updated, appID: 526870)
         _ = try await lifecycle.launchGame(appID: 526870)

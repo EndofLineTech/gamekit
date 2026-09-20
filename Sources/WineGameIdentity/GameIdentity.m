@@ -215,12 +215,14 @@ static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace
     id loaders = document[@"loaders"];
     if (loader && [loaders isKindOfClass:NSDictionary.class] && [loaders count] <= 512 &&
         [loaders[appID] isKindOfClass:NSString.class]) *loader = loaders[appID];
-    if (fullscreenSpace && [appID isEqualToString:@"553850"]) {
+    if (fullscreenSpace) {
         id spaces = document[@"fullscreenSpaces"];
         id enabled = [spaces isKindOfClass:NSDictionary.class] ? spaces[appID] : nil;
+        id executables = document[@"fullscreenExecutables"];
+        id executable = [executables isKindOfClass:NSDictionary.class] ? executables[appID] : nil;
         NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
         if ([enabled isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)enabled) == CFBooleanGetTypeID() &&
-            [enabled boolValue] && [image isEqualToString:@"helldivers2.exe"]) *fullscreenSpace = YES;
+            [enabled boolValue] && [executable isKindOfClass:NSString.class] && [image isEqual:executable]) *fullscreenSpace = YES;
     }
     return name;
 }

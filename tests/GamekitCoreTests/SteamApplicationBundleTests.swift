@@ -35,13 +35,13 @@ private struct ApplicationBundleFixture {
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
-    @Test("Only the Helldivers driver revision gets a private DXGI; other PE images remain shared")
+    @Test("Profile-selected driver adapters get private DXGI; other PE images remain shared")
     func scopedDriverShim() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
         let basePath = "Contents/SharedSupport/wine/"
         let dxgi = basePath + "lib/wine/x86_64-windows/dxgi.dll"
-        let shim = basePath + "lib/gamekit/helldivers-dxgi.dll"
-        let original = Data("original DXGI".utf8), replacement = Data("game scoped shim".utf8)
+        let shim = RuntimeProfile.driverOriginalRelative
+        let original = Data("original DXGI".utf8), replacement = try DriverVersionAdapter.data()
         try original.write(to: fixture.layout.bundle.appendingPathComponent(dxgi))
         try FileManager.default.createDirectory(at: fixture.layout.bundle.appendingPathComponent(shim).deletingLastPathComponent(), withIntermediateDirectories: true)
         try replacement.write(to: fixture.layout.bundle.appendingPathComponent(shim))
@@ -173,7 +173,7 @@ struct SteamApplicationBundleTests {
         let maintenance = LauncherCacheMaintenance(store: try EnvironmentStore())
         let entries = try await maintenance.inspect()
         for entry in entries { print("Launcher cache: \(entry.id), \(entry.status.rawValue), logical bytes=\(entry.bytes ?? -1)") }
-        #expect(entries.filter { $0.id.hasSuffix("shared-pe-v2") }.allSatisfy { !$0.canClean })
+        #expect(entries.filter { $0.id.hasSuffix("shared-pe-v4-base") }.allSatisfy { !$0.canClean })
     }
 
     @Test("A component revision creates coherent new Steam/game PE caches and preserves rollback caches")

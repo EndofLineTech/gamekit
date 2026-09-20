@@ -115,16 +115,26 @@ final class GamekitUITests: XCTestCase {
         _ = try await store.create(.init(id: id, name: "Compatibility fixture", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
         let prefix = store.prefixURL(for: id)
         let steam = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam")
-        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Helldivers"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
-        try Data(#""AppState" { "appid" "553850" "name" "Helldivers" "installdir" "Helldivers" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_553850.acf"))
+        try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_42.acf"))
         try Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8).write(to: prefix.appendingPathComponent("user.reg"))
+        var profile = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(GameProfileStore.bundled(appID: 553850))) as? [String: Any])
+        profile["appId"] = 42; profile["revision"] = 99; profile["name"] = "Fixture"
+        var execution = try XCTUnwrap(profile["execution"] as? [String: Any])
+        execution["executable"] = "custom.exe"
+        var capture = try XCTUnwrap(execution["capture"] as? [String: Any])
+        capture["guidance"] = "Capture guidance from the downloaded JSON fixture."
+        execution["capture"] = capture; profile["execution"] = execution
+        let profiles = root.appendingPathComponent("Metadata/GameProfiles")
+        try FileManager.default.createDirectory(at: profiles, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: profile).write(to: profiles.appendingPathComponent("42.json"))
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
         func openSettings() {
-            let open = app.buttons["game-compatibility-553850"]
+            let open = app.buttons["game-compatibility-42"]
             XCTAssertTrue(open.waitForExistence(timeout: 20))
             revealRecoveryButton(open, in: app); open.click()
             XCTAssertTrue(app.staticTexts["game-capture-setting"].waitForExistence(timeout: 15))
@@ -138,6 +148,7 @@ final class GamekitUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [value], timeout: 15), .completed)
         }
         openSettings()
+        XCTAssertTrue(app.staticTexts["Capture guidance from the downloaded JSON fixture."].exists)
         XCTAssertTrue(app.sheets.firstMatch.popUpButtons["game-graphics-backend-picker"].exists)
         change("enable-game-capture", expected: "Enabled for this game")
         change("disable-game-capture", expected: "Disabled for this game")
@@ -161,6 +172,9 @@ final class GamekitUITests: XCTestCase {
         desktop.click()
         let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Fullscreen on the desktop"), object: space)
         XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
+        let registry = try String(contentsOf: prefix.appendingPathComponent("user.reg"), encoding: .utf8)
+        XCTAssertTrue(registry.contains("custom.exe"))
+        XCTAssertFalse(registry.contains("helldivers2.exe"))
     }
 
     func testEmptyLauncherCacheCleanup() async throws {

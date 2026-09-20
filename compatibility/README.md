@@ -93,7 +93,7 @@ output, escaping, internal links, evidence references and public-data fields.
 
 Every generated game page links to `profiles/<AppID>.json`. Configured sources in
 `Sources/GamekitCore/GameProfiles/` are bundled in Gamekit and published unchanged;
-other catalog entries get empty revision-1 profiles. Gamekit downloads matching
+other catalog entries get empty schema-2/revision-2 profiles. Gamekit downloads matching
 profiles for installed games automatically. See [the profile contract and authoring
 guide](../docs/game-profiles.md) before changing rules, and increment the profile
 revision whenever content changes.

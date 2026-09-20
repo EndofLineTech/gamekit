@@ -10,6 +10,9 @@
 #include <d3dcommon.h>
 #include <stdio.h>
 #include <wchar.h>
+#ifdef GAMEKIT_PROFILE_DRIVER
+#include "profile_parameters.h"
+#endif
 
 typedef HRESULT (WINAPI *CheckVersion)(IDXGIAdapter *, REFIID, LARGE_INTEGER *);
 static INIT_ONCE moduleOnce = INIT_ONCE_STATIC_INIT;
@@ -35,11 +38,15 @@ static BOOL CALLBACK loadOriginal(PINIT_ONCE once, PVOID parameter, PVOID *conte
         originalModule = LoadLibraryW(original);
     length = GetModuleFileNameW(NULL, path, MAX_PATH);
     if (length && length < MAX_PATH) {
+#ifdef GAMEKIT_PROFILE_DRIVER
+        target = readProfileParameters(path);
+#else
         const WCHAR *name = wcsrchr(path, L'\\');
         name = name ? name + 1 : path;
         target = !lstrcmpiW(name, L"helldivers2.exe");
 #ifdef GAMEKIT_DRIVER_DIAGNOSTICS
         target = target || !lstrcmpiW(name, L"gamekit-dxgi-probe.exe");
+#endif
 #endif
     }
     return TRUE;
@@ -55,8 +62,13 @@ static HRESULT WINAPI substituteVersion(IDXGIAdapter *adapter, REFIID iid, LARGE
 {
     HRESULT result = originalCheck(adapter, iid, version);
     DWORD error = GetLastError();
+#ifdef GAMEKIT_PROFILE_DRIVER
+    if (SUCCEEDED(result) && version && (ULONGLONG)version->QuadPart == profileMatch) {
+        version->QuadPart = (LONGLONG)profileReplacement;
+#else
     if (SUCCEEDED(result) && version && version->QuadPart == -1) {
-        version->QuadPart = (LONGLONG)0x00230000000f17ceULL; /* 35.0.15.6094 */
+        version->QuadPart = (LONGLONG)0x00230000000f17ceULL; /* Legacy pinned runtime only. */
+#endif
 #ifdef GAMEKIT_DRIVER_DIAGNOSTICS
         if (InterlockedIncrement(&records) <= 16) {
             FILE *log = fopen("C:\\gamekit-driver-trial.log", "a");

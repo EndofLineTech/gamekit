@@ -21,6 +21,7 @@ Environments/
 *.pkg
 *.exe
 *.dll
+!Sources/GamekitCore/ExecutionAdapters/dxgi-version-v1.dll
 *.dylib
 *.app/
 *.framework/
