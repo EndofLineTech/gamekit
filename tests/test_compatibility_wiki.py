@@ -53,6 +53,17 @@ class WikiTests(unittest.TestCase):
         self.assertIn("--flag=&lt;untrusted&gt;", html)
         self.assertIn("No &lt;guarantee&gt;", html)
 
+    def test_caveated_playability_supports_recommendations_and_has_its_own_filter(self):
+        report = self.reports["games"]["1"]
+        report["results"][0]["status"] = "caveats"
+        report["recommended_backend"] = "dxvk"
+        report["recommendation"] = "Use windowed mode"
+        WIKI.validate(self.games, self.reports)
+        self.assertIn('<option value="caveats">Playable with caveats</option>', WIKI.matrix(self.games, self.reports))
+        page = WIKI.game_page(self.games[0], self.reports)
+        self.assertIn("Playable with caveats", page)
+        self.assertIn("Use windowed mode", page)
+
     def test_no_private_inventory_fields(self):
         for mutation in ({"steam_id": "PRIVATE"}, {"playtime": 123}, {"token": "SECRET"}):
             games = copy.deepcopy(self.games)

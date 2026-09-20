@@ -14,7 +14,7 @@ struct GameEvaluationLaunchTests {
         let env = ProcessInfo.processInfo.environment
         let rawID = try #require(env["GAMEKIT_E6_APPID"])
         let appID = try #require(UInt32(rawID))
-        try #require([553850, 413150, 526870].contains(appID))
+        try #require([553850, 413150, 526870, 16030].contains(appID))
         let satisfactoryD3D11 = env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1"
         try #require(!satisfactoryD3D11 || appID == 526870)
         let sandbox = env["GAMEKIT_E6_SATISFACTORY_USER_DIR"]

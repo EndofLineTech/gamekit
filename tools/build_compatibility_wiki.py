@@ -15,6 +15,7 @@ STATUSES = {
     "startup": ("Startup only", "Menu or ship reached; gameplay and save/reload are not established."),
     "gameplay": ("Gameplay observed", "Interactive play observed; the complete functional checklist is not established."),
     "verified": ("Playable", "Gameplay, rendering, audio, controls and save/reload accepted for the recorded setup."),
+    "caveats": ("Playable with caveats", "Functional checks passed with a required workaround or known limitation. Read the game report before choosing settings."),
     "fails": ("Unplayable", "The tested launch failed before usable gameplay."),
     "unplayable": ("Unplayable", "Startup fails or gameplay is unusable. Read the game report for the failure details."),
 }
@@ -67,7 +68,7 @@ def validate(games, reports, root=ROOT):
                 target = (root / path).resolve()
                 require(target.is_relative_to((root / "docs").resolve()) and target.is_file(), f"Missing evidence: {path}")
         recommended = report["recommended_backend"]
-        require(recommended is None or seen.get(recommended) in {"startup", "gameplay", "verified"}, "Recommendation lacks positive evidence")
+        require(recommended is None or seen.get(recommended) in {"startup", "gameplay", "verified", "caveats"}, "Recommendation lacks positive evidence")
 
 
 def badge(status):

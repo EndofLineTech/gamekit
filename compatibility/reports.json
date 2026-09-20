@@ -16,6 +16,21 @@
     }
   },
   "games": {
+    "16030": {
+      "recommendation": "Use windowed mode: turn off Fullscreen in the game's Options. The accepted saved configuration is 1024×768 with FullScreen=False.",
+      "recommended_backend": "other",
+      "summary": "Playable with caveats: use windowed mode. User confirms gameplay, audio, controls and saving/resuming work. Fullscreen startup produced D3DERR_INVALIDCALL.",
+      "issues": [],
+      "results": [
+        {
+          "backend": "other", "status": "caveats", "version": "Wine 10 legacy Direct3D 8 / WineD3D",
+          "api": "Direct3D 8 / WineD3D OpenGL (windowed)", "api_evidence": "confirmed", "build": "286184 (product 1.0)", "date": "2026-09-20", "environment": "m4-driver-version-1",
+          "launch_options": [],
+          "notes": "Startup initially displayed D3DERR_INVALIDCALL; the capture later reached the name-entry menu. Wine logged rejected display-mode changes. With the saved profile in windowed 1024×768 mode, the next launch rendered normally without an observed error dialog or logged display-mode-change failure. User then confirmed all functional checks. Residual OpenGL diagnostics did not prevent this acceptance; no measured FPS or full-screen compatibility is claimed. Shared Metal 3 is the launcher default, not the game's rendering API; DXMT/DXVK were not tested.",
+          "evidence": ["docs/treasures-of-seven-acceptance.md"]
+        }
+      ]
+    },
     "15900": {
       "recommendation": "No working configuration established for the current setup.",
       "recommended_backend": null,
