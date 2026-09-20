@@ -3,6 +3,7 @@ import argparse
 from datetime import date
 from html import escape
 import json
+import re
 from pathlib import Path
 import shutil
 from urllib.parse import quote
@@ -28,6 +29,45 @@ def require(condition, message):
 
 def text(value, limit=4096):
     return isinstance(value, str) and 0 < len(value.strip()) <= limit and not any(ord(c) < 32 for c in value)
+
+
+def validate_profile(profile, app_id):
+    require(isinstance(profile, dict) and set(profile) == {
+        "schemaVersion", "revision", "appId", "name", "runtime", "launchArguments", "notes"
+    }, "Invalid profile fields")
+    require(type(profile["schemaVersion"]) is int and profile["schemaVersion"] == 1, "Unsupported profile schema")
+    require(type(profile["appId"]) is int and profile["appId"] == app_id and 0 < app_id < 2**32, "Profile AppID mismatch")
+    require(type(profile["revision"]) is int and 0 < profile["revision"] <= 1000000, "Invalid profile revision")
+    require(profile["runtime"] == "sikarugir-10.0_6", "Unknown profile runtime")
+    for key, limit in (("name", 256), ("notes", 4096)):
+        require(text(profile[key]) and len(profile[key].encode("utf-8")) <= limit
+                and not any(127 <= ord(c) <= 159 for c in profile[key]), "Invalid profile description")
+    arguments = profile["launchArguments"]
+    require(isinstance(arguments, dict) and set(arguments) <= {"automatic", "metal3", "dxmt", "dxvk"}, "Unknown profile backend")
+    for values in arguments.values():
+        require(isinstance(values, list) and len(values) <= 16 and all(
+            isinstance(value, str) and re.fullmatch(r"-[A-Za-z0-9_:.\[\]=,+/\-]{1,511}", value) for value in values
+        ), "Invalid profile launch arguments")
+    require(len((json.dumps(profile, ensure_ascii=False, indent=2) + "\n").encode("utf-8")) <= 32768, "Profile too large")
+
+
+def game_profiles(games, root=ROOT):
+    directory = root / "Sources/GamekitCore/GameProfiles"
+    for path in directory.glob("*.json"):
+        require(path.stem.isdigit() and str(int(path.stem)) == path.stem, "Invalid profile filename")
+        validate_profile(json.loads(path.read_text(encoding="utf-8")), int(path.stem))
+    profiles = {}
+    for game in games:
+        app_id = game["app_id"]
+        source = directory / f"{app_id}.json"
+        profile = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {
+            "schemaVersion": 1, "revision": 1, "appId": app_id, "name": game["name"],
+            "runtime": "sikarugir-10.0_6", "launchArguments": {},
+            "notes": "No automatic launch adjustments are supplied. Your saved backend and game settings apply. Consult the compatibility wiki for test evidence and manual guidance."
+        }
+        validate_profile(profile, app_id)
+        profiles[app_id] = profile
+    return profiles
 
 
 def validate(games, reports, root=ROOT):
@@ -127,6 +167,7 @@ def matrix(games, reports):
 def game_page(game, reports):
     report = reports["games"].get(str(game["app_id"]))
     body = f'<p><a href="../index.html">← All games</a></p><h1>{escape(game["name"])}</h1><p class="muted">Steam AppID {game["app_id"]} · <a href="https://store.steampowered.com/app/{game["app_id"]}/">Steam store</a></p>'
+    body += f'<p><a href="../profiles/{game["app_id"]}.json" download>Download Gamekit profile JSON</a> · Gamekit downloads matching profiles automatically. Empty launch arguments preserve existing defaults; a profile does not certify compatibility.</p>'
     if not report:
         body += f'<section class="panel">{badge("untested")}<h2>No compatibility report yet</h2><p>This game is in the catalog, but its graphics API and behavior on Gamekit have not been evaluated. No backend is recommended yet.</p><p><a href="../contributing.html">Contribute a test result</a></p></section>'
     else:
@@ -152,7 +193,11 @@ def game_page(game, reports):
 
 def build(games, reports, output, root=ROOT):
     validate(games, reports, root)
+    profiles = game_profiles(games, root)
     output.mkdir(parents=True, exist_ok=False)
+    (output / "profiles").mkdir()
+    for app_id, profile in profiles.items():
+        (output / "profiles" / f"{app_id}.json").write_text(json.dumps(profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "games").mkdir()
     (output / "assets").mkdir()
     for name in ("site.css", "site.js"):
@@ -190,6 +235,7 @@ def main():
     games = json.loads((ROOT / "compatibility/games.json").read_text())
     reports = json.loads((ROOT / "compatibility/reports.json").read_text())
     validate(games, reports)
+    game_profiles(games)
     if args.output:
         build(games, reports, args.output)
     print(f"Validated {len(games)} games; {len(reports['games'])} have evidence; {len(games) - len(reports['games'])} untested")

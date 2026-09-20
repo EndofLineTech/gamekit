@@ -85,10 +85,10 @@ public enum GraphicsBackend: String, Codable, Sendable, CaseIterable {
 
     /// Validated, one-request options for Gamekit Play. These never overwrite
     /// the game's saved settings or Steam's user-authored launch options.
-    public func launchOptions(appID: UInt32) -> [String] {
-        guard appID == 526870, self == .dxmt || self == .dxvk else { return [] }
-        return ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] +
-            (self == .dxvk ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : [])
+    public func launchOptions(appID: UInt32, root: URL? = nil) -> [String] {
+        let profile = root.flatMap { GameProfileStore.resolved(appID: appID, root: $0)?.profile }
+            ?? GameProfileStore.bundled(appID: appID)
+        return profile?.arguments(for: self) ?? []
     }
 
     public var title: String {

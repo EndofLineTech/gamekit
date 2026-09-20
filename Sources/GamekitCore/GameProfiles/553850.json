@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "appId": 553850,
+  "name": "HELLDIVERS 2",
+  "runtime": "sikarugir-10.0_6",
+  "launchArguments": {},
+  "notes": "Build 24826606: use the Apple Metal 3 path. The DX11 flag failed startup on the tested DXMT/DXVK paths and is not applied. Driver-version, fullscreen capture and Space controls require Gamekit's qualified native implementation and remain explicit saved settings."
+}
