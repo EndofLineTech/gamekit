@@ -40,7 +40,9 @@ struct GraphicsPayloadQualificationTests {
         let workload = env["GAMEKIT_QUERY_WORKLOAD"] == "1"
         let selected = env["GAMEKIT_PROBE_BACKEND"].flatMap(GameGraphicsOverride.init(rawValue:))
         try #require(env["GAMEKIT_PROBE_BACKEND"] == nil || [.dxmt, .dxvk, .metal3].contains(selected))
-        let backends: [GameGraphicsOverride] = selected.map { [$0] } ?? [.dxmt, .dxvk, .metal3]
+        let appleOnly = env["GAMEKIT_PROBE_ONLY_APPLE"] == "1"
+        try #require(!appleOnly || selected == nil || selected == .metal3)
+        let backends: [GameGraphicsOverride] = selected.map { [$0] } ?? (appleOnly ? [.metal3] : [.dxmt, .dxvk, .metal3])
         for backend in backends {
             _ = try await preferences.setGraphicsBackend(backend, appID: game.appID)
             for index in probes.indices {

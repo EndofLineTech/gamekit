@@ -5,7 +5,8 @@ Gamekit supports independently selected **Automatic**, **Metal 3**, **DXMT** and
 can override it. Stop managed Steam and games before changing a selection.
 
 DXMT and DXVK are **Direct3D 10/11 paths, not Direct3D 12 backends**. Keep an
-Apple backend for Helldivers 2 and other D3D12 games. A renderer choice does not
+Apple backend for D3D12 games and for Helldivers 2, whose tested DX11 startup
+also rejects these alternatives (see below). A renderer choice does not
 automatically change an arbitrary game's selected graphics API.
 
 ## Installation and scope
@@ -61,7 +62,11 @@ normal library path for children such as Steam. It re-executes the identical
 owned loader when necessary because dyld captures library paths at startup.
 
 The Helldivers driver-version preference is retained but its Apple-DXGI shim is
-not combined with DXMT or DXVK. These backends do not supply Helldivers' D3D12 API.
+not combined with DXMT or DXVK. These backends do not supply D3D12. Helldivers also
+has a historically supported `--use-d3d11` flag, but the tested build still fails
+startup with both installed alternatives: its D3D11 feature-level `12_0` request
+is rejected. Keep the Apple backend for this game. See the
+[DX11 investigation](helldivers-dx11-backends.md) for evidence and limitations.
 
 ## Satisfactory
 
