@@ -174,6 +174,49 @@ public actor SteamLifecycle {
         guard snapshot.processes.allSatisfy({ $0.sessionID == receipt.token.uuidString }) else { throw SteamLifecycleError.foreignActivity }
         return snapshot
     }
+
+    private func waitForClient(_ record: EnvironmentRecord, lease: EnvironmentExecutionLease,
+                               receipt: SteamLaunchReceipt) async throws {
+        for _ in 0..<120 {
+            try Task.checkCancellation()
+            let snapshot = try await ownedSnapshot(record, lease: lease, receipt: receipt)
+            if snapshot.processes.contains(where: { $0.role == .steam || $0.role == .steamUI }) { return }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        throw SteamLifecycleError.observationUnavailable
+    }
+
+    /// Open Steam's uninstall flow for a freshly validated managed-library AppID.
+    /// Return means the request was delivered, not that files were removed.
+    /// Steam owns confirmation, running-game handling and removal/save policy.
+    public func requestGameUninstall(appID: UInt32) async throws {
+        let initial = try await installed()
+        guard try SteamGameLibrary.scan(prefix: store.prefixURL(for: id), steamExecutable: initial.steamExecutable)
+            .games.contains(where: { $0.id == appID }) else { throw SteamGameLibraryError.notInstalled }
+        _ = try await launch()
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: id)
+        defer { withExtendedLifetime(lease) {} }
+        guard let receipt = try receipt() else { throw SteamLifecycleError.foreignActivity }
+        try await driver.preflight()
+        try await waitForClient(record, lease: lease, receipt: receipt)
+        // Partial downloads and missing-file receipts can also be removed by
+        // Steam. Never trust a stale tile or require a launchable game binary.
+        guard try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable)
+            .games.contains(where: { $0.id == appID }) else { throw SteamGameLibraryError.notInstalled }
+        try Task.checkCancellation(); try lease.validate()
+        let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
+        let result = try await driver.execute(.init(executable: layout.wine,
+            arguments: [steam.path, "steam://uninstall/\(appID)"],
+            environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
+            workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
+        guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
+    }
+
     public func show() async throws {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
@@ -214,14 +257,7 @@ public actor SteamLifecycle {
         defer { withExtendedLifetime(lease) {} }
         guard let receipt = try receipt() else { throw SteamLifecycleError.foreignActivity }
         try await driver.preflight()
-        var clientReady = false
-        for _ in 0..<120 {
-            try Task.checkCancellation()
-            let snapshot = try await ownedSnapshot(record, lease: lease, receipt: receipt)
-            if snapshot.processes.contains(where: { $0.role == .steam || $0.role == .steamUI }) { clientReady = true; break }
-            try await Task.sleep(for: .milliseconds(250))
-        }
-        guard clientReady else { throw SteamLifecycleError.observationUnavailable }
+        try await waitForClient(record, lease: lease, receipt: receipt)
         guard try SteamGameLibrary.scan(prefix: lease.prefix, steamExecutable: record.steamExecutable)
             .games.contains(where: { $0.id == appID && $0.state == .ready }) else { throw SteamGameLibraryError.notInstalled }
         try await publishGameNames(record: record, lease: lease, receipt: receipt)

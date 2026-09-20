@@ -312,9 +312,57 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(game.waitForExistence(timeout: 20))
         XCTAssertEqual(game.label, "Launch Stardew Valley")
         XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")
+        let uninstall = app.buttons["uninstall-game-413150"]
+        XCTAssertTrue(uninstall.exists)
+        XCTAssertFalse(uninstall.isEnabled, "Unavailable runtime must also disable Steam uninstall requests")
         try FileManager.default.removeItem(at: manifest)
         XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 15))
         XCTAssertFalse(game.exists, "Uninstalled games must disappear after polling")
+    }
+
+    func testUninstallConfirmationCancelBusyGateAndLibraryRefresh() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(EnvironmentRecord(id: id, name: "Uninstall UI fixture", runtime: RuntimeProfile.sikarugir.identity,
+            installation: .installed, installationRecipeVersion: 1))
+        let layout = RuntimeLayout(dataRoot: root)
+        for file in [layout.wine, layout.wineserver] {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("non-executable fixture".utf8).write(to: file)
+        }
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        let apps = steam.appendingPathComponent("steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let manifest = apps.appendingPathComponent("appmanifest_42.acf")
+        let original = Data(#""AppState" { "appid" "42" "name" "Uninstall Fixture" "installdir" "Fixture" "StateFlags" "1026" }"#.utf8)
+        try original.write(to: manifest)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-with-delay"]
+        app.launch()
+        defer { app.terminate() }
+        let uninstall = app.buttons["uninstall-game-42"]
+        XCTAssertTrue(uninstall.waitForExistence(timeout: 20))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: uninstall)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
+        XCTAssertFalse(app.buttons["launch-game-42"].isEnabled, "Incomplete installs can be uninstalled but not played")
+        revealRecoveryButton(uninstall, in: app)
+        uninstall.click()
+        let dialog = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(dialog.waitForExistence(timeout: 5))
+        XCTAssertTrue(dialog.staticTexts["Uninstall Uninstall Fixture?"].exists)
+        XCTAssertTrue(dialog.buttons["Continue in Windows Steam"].exists)
+        dialog.buttons["Cancel"].click()
+        XCTAssertEqual(try Data(contentsOf: manifest), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path), "Cancel must not launch Steam or send a request")
+        app.typeKey("r", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.staticTexts["Checking prerequisites"].waitForExistence(timeout: 5))
+        XCTAssertFalse(uninstall.isEnabled)
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
+        try FileManager.default.removeItem(at: manifest)
+        XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 15))
+        XCTAssertFalse(uninstall.exists)
     }
 
     func testOptInPackagedAppLaunchQuitReopenStop() async throws {

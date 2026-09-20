@@ -1,11 +1,11 @@
 import Foundation
 
 public enum DiagnosticStage: String, Codable, CaseIterable, Sendable {
-    case runtimeProbe, download, installation, bootstrap, rendering, launch, shutdown, performanceCapture
+    case runtimeProbe, download, installation, uninstallation, bootstrap, rendering, launch, shutdown, performanceCapture
     public var failureCategory: DiagnosticCategory {
         switch self {
         case .download: .download
-        case .installation: .installation
+        case .installation, .uninstallation: .installation
         case .bootstrap: .bootstrap
         case .rendering: .rendering
         case .runtimeProbe, .launch, .shutdown, .performanceCapture: .runtime

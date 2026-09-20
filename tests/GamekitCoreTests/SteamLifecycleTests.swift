@@ -62,10 +62,140 @@ private struct LifecycleFixture {
         try Data("fixture".utf8).write(to: exe)
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
+    func game(state: SteamGameInstallState = .ready) throws -> URL {
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        let apps = steam.appendingPathComponent("steamapps")
+        try FileManager.default.createDirectory(at: apps, withIntermediateDirectories: true)
+        if state != .missingFiles {
+            try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
+            try Data("game content".utf8).write(to: apps.appendingPathComponent("common/Fixture/game.bin"))
+        }
+        let manifest = apps.appendingPathComponent("appmanifest_42.acf")
+        try Data("\"AppState\" { \"appid\" \"42\" \"name\" \"Fixture\" \"installdir\" \"Fixture\" \"StateFlags\" \"\(state == .updating ? 1026 : 4)\" }".utf8).write(to: manifest)
+        return manifest
+    }
 }
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Uninstall requests use owned Windows Steam for ready, partial and missing-file installations",
+          arguments: [SteamGameInstallState.ready, .updating, .missingFiles], [false, true])
+    func requestUninstall(state: SteamGameInstallState, alreadyRunning: Bool) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let manifest = try fixture.game(state: state)
+        let before = try Data(contentsOf: manifest)
+        let save = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("save.sav")
+        try Data("saved progress".utf8).write(to: save)
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        let layout = RuntimeLayout(dataRoot: fixture.store.root)
+        let driver = SteamLifecycleDriver(preflight: base.preflight, observe: base.observe, spawn: base.spawn, execute: { request in
+            #expect(request.executable == layout.wine)
+            #expect(request.arguments == [fixture.store.prefixURL(for: fixture.id).appendingPathComponent(RelativePath.steamDefault.rawValue).path, "steam://uninstall/42"])
+            #expect(request.timeout == 10 && request.outputLimit == 8192)
+            return try await base.execute(request)
+        })
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        if alreadyRunning { _ = try await lifecycle.launch() }
+        try await lifecycle.requestGameUninstall(appID: 42)
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.commands.count == 1)
+        #expect(try Data(contentsOf: manifest) == before, "A delivered request is not completed removal")
+        #expect(try Data(contentsOf: save) == Data("saved progress".utf8))
+        if state != .missingFiles {
+            #expect(try Data(contentsOf: manifest.deletingLastPathComponent().appendingPathComponent("common/Fixture/game.bin")) == Data("game content".utf8))
+        }
+    }
+
+    @Test("Uninstall rejects unknown, malformed and removed-during-startup targets", arguments: ["unknown", "malformed", "removed"])
+    func uninstallRevalidatesTarget(_ scenario: String) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let manifest = try fixture.game()
+        if scenario == "malformed" { try Data("invalid".utf8).write(to: manifest) }
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        let driver = SteamLifecycleDriver(preflight: base.preflight, observe: base.observe, spawn: { request in
+            await runtime.spawn(request)
+            if scenario == "removed" { try FileManager.default.removeItem(at: manifest) }
+        }, execute: base.execute)
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        await #expect(throws: SteamGameLibraryError.notInstalled) {
+            try await lifecycle.requestGameUninstall(appID: scenario == "unknown" ? 0 : 42)
+        }
+        #expect(await runtime.commands.isEmpty)
+        #expect(await runtime.launches == (scenario == "removed" ? 1 : 0))
+    }
+
+    @Test("Uninstall refuses changed ownership, uncertain observation and cancellation before dispatch", arguments: ["foreign", "incomplete", "cancelled"])
+    func uninstallOwnership(_ scenario: String) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        _ = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        _ = try await SteamLifecycle(store: fixture.store, driver: base).launch()
+        let driver = SteamLifecycleDriver(preflight: {
+            if scenario == "foreign" { await runtime.foreign() }
+            if scenario == "incomplete" { await runtime.observeCompleteness([false]) }
+            if scenario == "cancelled" { throw CancellationError() }
+        }, observe: base.observe, spawn: base.spawn, execute: base.execute)
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        if scenario == "cancelled" {
+            await #expect(throws: CancellationError.self) { try await lifecycle.requestGameUninstall(appID: 42) }
+        } else {
+            await #expect(throws: scenario == "foreign" ? SteamLifecycleError.foreignActivity : .observationUnavailable) {
+                try await lifecycle.requestGameUninstall(appID: 42)
+            }
+        }
+        #expect(await runtime.commands.isEmpty)
+    }
+
+    @Test("Failed uninstall dispatch reports failure and retains the installation")
+    func uninstallDispatchFailure() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let manifest = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        let driver = SteamLifecycleDriver(preflight: base.preflight, observe: base.observe, spawn: base.spawn, execute: { request in
+            _ = try await base.execute(request)
+            return try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/false")))
+        })
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: driver)
+        await #expect(throws: SteamLifecycleError.observationUnavailable) { try await lifecycle.requestGameUninstall(appID: 42) }
+        #expect(await runtime.commands.count == 1)
+        #expect(FileManager.default.fileExists(atPath: manifest.path))
+    }
+
+    @Test("Uninstall refuses a conflicting execution lease")
+    func uninstallBusyLease() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        _ = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        let lease = try await fixture.store.executionLease(for: fixture.id)
+        defer { withExtendedLifetime(lease) {} }
+        await #expect(throws: EnvironmentStoreError.busy) { try await lifecycle.requestGameUninstall(appID: 42) }
+        #expect(await runtime.launches == 0)
+        #expect(await runtime.commands.isEmpty)
+    }
+
+    @Test("Uninstall refuses prefix replacement before dispatch")
+    func uninstallChangedPrefix() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        _ = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let base = await runtime.driver
+        _ = try await SteamLifecycle(store: fixture.store, driver: base).launch()
+        let prefix = fixture.store.prefixURL(for: fixture.id)
+        let driver = SteamLifecycleDriver(preflight: {
+            try FileManager.default.moveItem(at: prefix, to: fixture.parent.appendingPathComponent("retained-prefix"))
+            try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: false)
+        }, observe: base.observe, spawn: base.spawn, execute: base.execute)
+        await #expect(throws: EnvironmentStoreError.unsafePath) {
+            try await SteamLifecycle(store: fixture.store, driver: driver).requestGameUninstall(appID: 42)
+        }
+        #expect(await runtime.commands.isEmpty)
+    }
+
     @Test("Satisfactory backend options are scoped to one owned Play request", arguments: ["dxmt", "dxvk", "metal3"])
     func backendLaunchOptions(_ backend: String) async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }
