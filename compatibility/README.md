@@ -12,7 +12,9 @@ with Python's standard library; no hosted database, account, or API key is neede
 3. Use `verified` only for gameplay, audio, controls and save/reload acceptance.
    `gameplay` means interactive play was observed but that full checklist was
    not completed. `startup` means menu/ship startup only. `fails` and `unplayable`
-   are different outcomes. Absence of a report always means **Untested**.
+   retain different failure reasons in the data, but both display **Unplayable**
+   in red. `verified` displays **Playable** in green. Absence of a report always
+   means **Untested**.
 4. Record a new environment when hardware, OS, runtime or backend versions
    change. Preserve older results in the linked investigation report; update
    the public summary only when newer evidence supports it.
