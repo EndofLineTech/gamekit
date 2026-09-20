@@ -16,6 +16,21 @@
     }
   },
   "games": {
+    "15900": {
+      "recommendation": "No working configuration established for the current setup.",
+      "recommended_backend": null,
+      "summary": "Unplayable: startup reports unsupported color depth or display resolution and requires at least 16-bit color and 800×600. A scoped virtual-desktop preference trial did not resolve the Steam launch.",
+      "issues": ["gamekit-0wm"],
+      "results": [
+        {
+          "backend": "other", "status": "fails", "version": "Wine 10 legacy display path; DirectDraw and D3D8 imports",
+          "api": "DirectDraw / Direct3D 8 imports; gameplay rendering not reached", "api_evidence": "reported", "build": "210749", "date": "2026-09-20", "environment": "m4-driver-version-1",
+          "launch_options": [],
+          "notes": "Normal Steam launch reproduces the minimum-display-requirements error. A fresh-prefix probe using the selected runtime reports 1800×1169 at 32-bit color but no 800×600 mode in Win32, DirectDraw or D3D8 enumeration. Virtual-desktop probes expose the missing modes, but a per-executable registry trial did not fix the real Steam launch and was reverted. An isolated explicit-desktop game attempt did not establish startup. This is not a DXMT/DXVK qualification or a proven sole root cause.",
+          "evidence": ["docs/seven-wonders-display.md"]
+        }
+      ]
+    },
     "2379780": {
       "recommendation": "Use the normal Windows launch with the shared runtime. No game-specific override was needed for the reported functional pass.",
       "recommended_backend": "other",
