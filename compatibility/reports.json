@@ -16,6 +16,21 @@
     }
   },
   "games": {
+    "2379780": {
+      "recommendation": "Use the normal Windows launch with the shared runtime. No game-specific override was needed for the reported functional pass.",
+      "recommended_backend": "other",
+      "summary": "User reports Balatro works great and confirms saving/resuming a run, audio and controls all work.",
+      "issues": [],
+      "results": [
+        {
+          "backend": "other", "status": "verified", "version": "Bundled LÖVE / SDL2; framework versions not independently verified",
+          "api": "LÖVE framework; active graphics API not traced", "api_evidence": "unknown", "build": "17459173", "date": "2026-09-20", "environment": "m4-driver-version-1",
+          "launch_options": [],
+          "notes": "User-confirmed gameplay, save/resume, audio and controls. Managed Steam lists build 17459173; the installed files include love.dll and SDL2.dll and the bundled readme identifies LÖVE. The configured shared default is Metal 3 with no per-game override, which does not establish the actual rendering API. No measured FPS, exact session duration, or DXMT/DXVK qualification is claimed.",
+          "evidence": ["docs/balatro-acceptance.md"]
+        }
+      ]
+    },
     "526870": {
       "recommendation": "Apple backend / shared Metal 3 default. DXMT is a functionally tested alternative with temporary stuttering. Avoid the tested DXVK payload for this game.",
       "recommended_backend": "apple",
