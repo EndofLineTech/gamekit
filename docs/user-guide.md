@@ -111,6 +111,10 @@ The dropdown also lists optional **DXVK** and **DXMT** Direct3D 10/11 backends.
 They are disabled when their qualified payloads are unavailable. See
 [graphics backends](graphics-backends.md) for installation, tested Satisfactory
 launch options and rollback. Keep an Apple backend for Direct3D 12 games.
+For Helldivers 2, keep **Metal 3 compatibility**: testing `--use-d3d11` with both
+installed alternatives still ended in startup crashes, with logs showing a
+rejected D3D11 feature-level `12_0` request. See the
+[Helldivers DX11 findings](helldivers-dx11-backends.md).
 
 ### Steam controls
 

@@ -37,7 +37,8 @@ struct GraphicsPayloadQualificationTests {
         for (index, probe) in probes.enumerated() {
             try FileManager.default.copyItem(at: URL(fileURLWithPath: probe), to: directory.appendingPathComponent("probe\(index).exe"))
         }
-        for backend in [GameGraphicsOverride.dxmt, .dxvk, .metal3] {
+        let backends: [GameGraphicsOverride] = env["GAMEKIT_PROBE_ONLY_APPLE"] == "1" ? [.metal3] : [.dxmt, .dxvk, .metal3]
+        for backend in backends {
             _ = try await preferences.setGraphicsBackend(backend, appID: game.appID)
             for index in probes.indices {
                 if backend == .metal3 && index == 1 { continue } // Apple payload is x64 only.
