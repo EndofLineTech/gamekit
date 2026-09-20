@@ -38,7 +38,7 @@ small { display:block; font-size:.75rem; font-weight:400; }
 .badge { display:inline-block; padding:.2rem .55rem; border:1px solid rgba(255,255,255,.3); border-radius:4px; font-size:.78rem; font-weight:700; white-space:nowrap; background:#475569; color:#fff; }
 .verified { background:#15803d; }
 .gameplay { background:#1d4ed8; }
-.startup { background:#b45309; }
+.startup, .caveats { background:#b45309; }
 .fails, .unplayable { background:#b91c1c; }
 .panel { padding:1.3rem 1.5rem; margin:1.5rem 0; border:1px solid var(--line); border-radius:8px; background:var(--panel); max-width:1000px; }
 .panel h2 { margin-top:0; display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }

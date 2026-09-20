@@ -14,7 +14,9 @@ with Python's standard library; no hosted database, account, or API key is neede
    not completed. `startup` means menu/ship startup only. `fails` and `unplayable`
    retain different failure reasons in the data, but both display **Unplayable**
    in red. `verified` displays **Playable** in green. Absence of a report always
-   means **Untested**.
+   means **Untested**. Use `caveats` for the same functional acceptance with a
+   required workaround or known limitation; it displays **Playable with caveats**
+   in orange. Describe that condition explicitly in the recommendation and notes.
 4. Record a new environment when hardware, OS, runtime or backend versions
    change. Preserve older results in the linked investigation report; update
    the public summary only when newer evidence supports it.
