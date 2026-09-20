@@ -65,6 +65,11 @@ not combined with DXMT or DXVK. These backends do not supply Helldivers' D3D12 A
 
 ## Satisfactory
 
+Later hands-on testing passed DXMT functional checks with temporary stuttering,
+but found the tested DXVK payload unplayable. Subsequent performance trials did
+not establish a fix. Keep the accepted Apple/Metal 3 default; see the
+[performance investigation](satisfactory-performance-investigation.md).
+
 For build 24656030 (game 1.2.4.0 / UE 5.6.1), **Gamekit Play** adds these transient
 options when selecting DXMT or DXVK:
 

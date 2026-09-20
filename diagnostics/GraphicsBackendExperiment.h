@@ -3,12 +3,15 @@
 // GAMEKIT_RENDERER_LOG_PATH (a pre-created Windows Z:/ path).
 #import <Foundation/Foundation.h>
 #include <stdlib.h>
-static void GamekitRendererExperiment(NSString *backend, NSString *appID) {
+static inline void GamekitRendererExperiment(NSString *backend, NSString *appID) {
     // Windows children inherit Steam's Windows environment, not the later
     // native constructor's getenv state. Publish the private log directory
     // at owned Steam startup too; MVK options below remain native/game-scoped.
     setenv("DXVK_LOG_PATH", GAMEKIT_RENDERER_LOG_PATH, 1);
     setenv("DXVK_LOG_LEVEL", "info", 1);
+#ifdef GAMEKIT_DXVK_HUD
+    setenv("DXVK_HUD", GAMEKIT_DXVK_HUD, 1);
+#endif
     setenv("DXVK_STATE_CACHE_PATH", GAMEKIT_RENDERER_LOG_PATH, 1);
     setenv("DXMT_LOG_PATH", GAMEKIT_RENDERER_LOG_PATH, 1);
     setenv("DXMT_LOG_LEVEL", "info", 1);

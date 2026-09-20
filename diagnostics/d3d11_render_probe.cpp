@@ -6,6 +6,57 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
+
+// A separate workload probe: the startup calibration above does not exercise
+// occlusion queries, pooled timestamps, or reuse across rendering submissions.
+static int workloadQueries(ID3D11Device *device, ID3D11DeviceContext *context,
+                           ID3D11RenderTargetView *view) {
+    const D3D11_QUERY kinds[] = {D3D11_QUERY_OCCLUSION, D3D11_QUERY_TIMESTAMP};
+    for (auto kind : kinds) {
+        std::vector<ID3D11Query *> queries(1100, nullptr);
+        D3D11_QUERY_DESC desc{kind, 0};
+        for (auto &query : queries) {
+            HRESULT hr = device->CreateQuery(&desc, &query);
+            if (FAILED(hr)) { std::printf("FAIL workload CreateQuery type=%u hr=%08lx\n", kind, (unsigned long)hr); return 4; }
+        }
+        for (int round = 0; round < 3; ++round) {
+            const ULONGLONG start = GetTickCount64();
+            context->OMSetRenderTargets(1, &view, nullptr);
+            for (size_t i = 0; i < queries.size(); ++i) {
+                if (kind == D3D11_QUERY_OCCLUSION) context->Begin(queries[i]);
+                context->Draw(3, 0);
+                context->End(queries[i]);
+                // Force queries across submission/render-pass boundaries too.
+                if (round == 2 && i % 100 == 0) context->Flush();
+            }
+            if (round != 0) context->Flush();
+            const ULONGLONG deadline = GetTickCount64() + 5000;
+            size_t ready = 0, invalid = 0;
+            UINT64 previous = 0;
+            for (auto query : queries) {
+                UINT64 value = 0;
+                HRESULT hr;
+                do {
+                    hr = context->GetData(query, &value, sizeof(value), 0);
+                } while (hr == S_FALSE && GetTickCount64() < deadline);
+                if (hr != S_OK) break;
+                ++ready;
+                if (kind == D3D11_QUERY_OCCLUSION ? value != 4096 : (!value || value < previous)) ++invalid;
+                previous = value;
+            }
+            std::printf("workload type=%u round=%d ready=%zu/%zu invalid=%zu elapsed_ms=%llu\n",
+                kind, round, ready, queries.size(), invalid, (unsigned long long)(GetTickCount64() - start));
+            if (ready != queries.size() || invalid) {
+                for (auto query : queries) query->Release();
+                return 4;
+            }
+        }
+        for (auto query : queries) query->Release();
+    }
+    std::puts("PASS pooled rendering queries and reuse");
+    return 0;
+}
 
 static void check(HRESULT result, const char *step) {
     if (FAILED(result)) { std::printf("FAIL %s hr=%08lx\n", step, (unsigned long)result); std::exit(2); }
@@ -81,6 +132,17 @@ static int foreignSharedHandle(const char *text) {
 int main(int argc, char **argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     AddVectoredExceptionHandler(1, reportProbeFault);
+#ifdef GAMEKIT_SAVE_GUARD_PROBE_DIRECTORY
+    char guardPath[4096];
+    std::snprintf(guardPath, sizeof(guardPath), "%s/.gamekit-win32-guard-%lu-%llu.tmp",
+        GAMEKIT_SAVE_GUARD_PROBE_DIRECTORY, (unsigned long)GetCurrentProcessId(), (unsigned long long)GetTickCount64());
+    HANDLE guardFile = CreateFileA(guardPath, GENERIC_WRITE | DELETE, 0, nullptr, CREATE_NEW,
+        FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+    DWORD guardError = GetLastError();
+    if (guardFile != INVALID_HANDLE_VALUE) CloseHandle(guardFile);
+    std::printf("Win32 save guard: creation_denied=%d error=%lu\n", guardFile == INVALID_HANDLE_VALUE, (unsigned long)guardError);
+    if (guardFile != INVALID_HANDLE_VALUE || guardError != ERROR_ACCESS_DENIED) return 7;
+#endif
     if (argc == 3 && std::strcmp(argv[1], "--foreign-shared") == 0) return foreignSharedHandle(argv[2]);
     HWND window = CreateWindowA("STATIC", "Gamekit D3D11 qualification", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                 40, 40, 160, 160, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
@@ -191,6 +253,10 @@ int main(int argc, char **argv) {
     context->RSSetViewports(1, &viewport);
     context->VSSetShader(vs, nullptr, 0); context->PSSetShader(ps, nullptr, 0);
     context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    if (argc == 2 && std::strcmp(argv[1], "--query-workload") == 0) {
+        int result = workloadQueries(device, context, view);
+        if (result) return result;
+    }
     for (int frame = 0; frame < 3; ++frame) {
         const float black[] = {0, 0, 0, 1};
         context->OMSetRenderTargets(1, &view, nullptr); context->ClearRenderTargetView(view, black);
