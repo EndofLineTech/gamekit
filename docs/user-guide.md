@@ -111,6 +111,11 @@ The dropdown also lists optional **DXVK** and **DXMT** Direct3D 10/11 backends.
 They are disabled when their qualified payloads are unavailable. See
 [graphics backends](graphics-backends.md) for installation, tested Satisfactory
 launch options and rollback. Keep an Apple backend for Direct3D 12 games.
+For Satisfactory, DXMT passed hands-on gameplay and save/reload testing with
+temporary stuttering reported; the tested DXVK payload was unplayable and is
+not recommended. The Apple/Metal 3 path remains the accepted default. See
+[Satisfactory gameplay results](satisfactory-backend-gameplay.md).
+
 For Helldivers 2, keep **Metal 3 compatibility**: testing `--use-d3d11` with both
 installed alternatives still ended in startup crashes, with logs showing a
 rejected D3D11 feature-level `12_0` request. See the

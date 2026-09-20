@@ -70,6 +70,15 @@ is rejected. Keep the Apple backend for this game. See the
 
 ## Satisfactory
 
+**Gameplay update (2026-09-19, `gamekit-9ay`):** DXMT passed user-controlled
+gameplay, audio, controls and manual save/reload checks. Temporary choppiness
+settled during play; the user also observed that symptom in the default mode.
+DXVK was **unplayable**: very slow loading, severe choppiness and poor
+responsiveness. **Do not recommend this DXVK payload for Satisfactory** based
+on the earlier menu-only result. Keep the accepted Apple/Metal 3 path as the
+default; DXMT is a functionally tested alternative with the stuttering caveat.
+See [hands-on results](satisfactory-backend-gameplay.md) for scope and restoration.
+
 For build 24656030 (game 1.2.4.0 / UE 5.6.1), **Gamekit Play** adds these transient
 options when selecting DXMT or DXVK:
 
@@ -107,8 +116,9 @@ Apple-backend launches receive none of these additional options.
   presentation. The timestamp comparison uses 100 tight-poll attempts, including
   initial/empty event handling. Apple rollback also passes.
 - Satisfactory reached a visibly rendered 3D menu under both backends and the
-  bounded sessions stopped gracefully. This establishes startup/rendering scope,
-  not full gameplay, save/reload acceptance or a performance ranking.
+  bounded sessions stopped gracefully. Those initial observations established
+  startup/rendering scope only. Subsequent hands-on testing passed DXMT functional
+  checks but found DXVK unplayable; see the Satisfactory section above.
 - The packaged app's actual Play button was exercised for both backends. Game
   logs confirmed the transient options, and DXVK's module map confirmed the
   paired MoltenVK library. Its final run exited through the game's normal Exit
