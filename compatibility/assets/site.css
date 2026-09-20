@@ -34,11 +34,12 @@ thead th { background:var(--accent); white-space:nowrap; }
 tbody th { min-width:220px; font-weight:650; }
 small { display:block; font-size:.75rem; font-weight:400; }
 .api { min-width:210px; max-width:310px; }
-.badge { display:inline-block; padding:.2rem .55rem; border-radius:4px; font-size:.78rem; font-weight:700; white-space:nowrap; background:#edf1f5; color:#435367; }
-.verified { background:#dff4e5; color:#145b30; }
-.gameplay { background:#dceffc; color:#174f75; }
-.startup { background:#fff0cb; color:#705100; }
-.fails, .unplayable { background:#ffe3e0; color:#94291f; }
+/* Solid status colors keep outcomes distinct; white text meets WCAG AA. */
+.badge { display:inline-block; padding:.2rem .55rem; border:1px solid rgba(255,255,255,.3); border-radius:4px; font-size:.78rem; font-weight:700; white-space:nowrap; background:#475569; color:#fff; }
+.verified { background:#15803d; }
+.gameplay { background:#1d4ed8; }
+.startup { background:#b45309; }
+.fails, .unplayable { background:#b91c1c; }
 .panel { padding:1.3rem 1.5rem; margin:1.5rem 0; border:1px solid var(--line); border-radius:8px; background:var(--panel); max-width:1000px; }
 .panel h2 { margin-top:0; display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }
 dl { display:grid; grid-template-columns:160px 1fr; gap:.4rem 1rem; }
