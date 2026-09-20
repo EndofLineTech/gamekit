@@ -14,9 +14,9 @@ STATUSES = {
     "untested": ("Untested", "No recorded test on this backend. Not a failure or a recommendation."),
     "startup": ("Startup only", "Menu or ship reached; gameplay and save/reload are not established."),
     "gameplay": ("Gameplay observed", "Interactive play observed; the complete functional checklist is not established."),
-    "verified": ("Checks passed", "Gameplay, rendering, audio, controls and save/reload accepted for the recorded setup."),
-    "fails": ("Startup fails", "The tested launch failed before usable gameplay."),
-    "unplayable": ("Unplayable", "The game starts, but the recorded gameplay experience is unusable."),
+    "verified": ("Playable", "Gameplay, rendering, audio, controls and save/reload accepted for the recorded setup."),
+    "fails": ("Unplayable", "The tested launch failed before usable gameplay."),
+    "unplayable": ("Unplayable", "Startup fails or gameplay is unusable. Read the game report for the failure details."),
 }
 
 
@@ -103,7 +103,7 @@ def matrix(games, reports):
         rows.append(f'<tr data-name="{escape(game["name"].lower(), quote=True)}" data-id="{app_id}" {attrs}><th scope="row"><a href="games/{app_id}.html">{escape(game["name"])}</a><small>AppID {app_id}</small></th><td>{escape(recommendation)}</td>{cells}<td class="api">{escape(api)}</td><td>{tested}</td></tr>')
     tested_count = len(reports["games"])
     highlights = " · ".join(f'<a href="games/{g["app_id"]}.html">{escape(g["name"])}</a>' for g in games if str(g["app_id"]) in reports["games"])
-    options = "".join(f'<option value="{key}">{value[0]}</option>' for key, value in STATUSES.items())
+    options = "".join(f'<option value="{key}">{value[0]}</option>' for key, value in STATUSES.items() if key != "fails")
     backends = "".join(f'<option value="{key}">{value}</option>' for key, value in BACKENDS.items())
     return layout("Compatibility matrix", f'''
 <section class="intro"><p class="eyebrow">Windows games · Apple silicon · Evidence first</p><h1>Choose a backend with evidence.</h1>
@@ -159,7 +159,7 @@ def build(games, reports, output, root=ROOT):
     (output / "index.html").write_text(matrix(games, reports), encoding="utf-8")
     for game in games:
         (output / "games" / f'{game["app_id"]}.html').write_text(game_page(game, reports), encoding="utf-8")
-    legend = "".join(f'<tr><th scope="row">{badge(key)}</th><td>{escape(value[1])}</td></tr>' for key, value in STATUSES.items())
+    legend = "".join(f'<tr><th scope="row">{badge(key)}</th><td>{escape(value[1])}</td></tr>' for key, value in STATUSES.items() if key != "fails")
     guide = f'''<h1>Choosing a graphics backend</h1><p>Find your game in the matrix and read its exact tested setup. Untested means unknown, not incompatible.</p>
 <h2>Backend and API are different</h2><p>Apple/D3DMetal supplies the D3D11/D3D12 paths used by the accepted runtime. The installed DXMT and DXVK payloads are D3D10/11 backends, not D3D12 implementations. Some games use other APIs, such as OpenGL.</p>
 <p>A game can offer more than one API. A DX11 flag can still lead to an unsupported feature-level request. Device creation and loaded DLLs alone do not prove which API renders gameplay.</p>

@@ -9,7 +9,8 @@
   const params = new URLSearchParams(window.location.search);
   search.value = params.get("q") || "";
   for (const select of [backend, status]) {
-    const value = params.get(select.id);
+    const raw = params.get(select.id);
+    const value = select.id === "status" && raw === "fails" ? "unplayable" : raw;
     if (Array.from(select.options).some(option => option.value === value)) select.value = value;
   }
   function update() {
@@ -24,6 +25,7 @@
       const matches = status.value === "all" || (status.value === "tested"
         ? states.some(value => value !== "untested")
         : status.value === "untested" ? states.every(value => value === "untested")
+        : status.value === "unplayable" ? states.some(value => value === "fails" || value === "unplayable")
         : states.includes(status.value));
       row.hidden = !(matches && (!query || row.dataset.name.includes(query) || row.dataset.id.includes(query)));
       if (!row.hidden) count++;
