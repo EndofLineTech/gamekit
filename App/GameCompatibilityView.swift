@@ -8,11 +8,48 @@ struct GameCompatibilityView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var snapshot: GameCompatibilitySnapshot?
     @State private var graphics: GameGraphicsSnapshot?
+    @State private var profile: ResolvedGameProfile?
+    @State private var profileStatus: String?
+    @State private var fetchingProfile = false
     @State private var status = "Reading saved compatibility settings…"
 
     var body: some View {
+        ScrollView { settingsContent }
+            .frame(maxHeight: 780)
+            .task {
+                profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
+                while setup.isBusy && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
+                if !Task.isCancelled { run() }
+                try? await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id)
+                if !Task.isCancelled { profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata) }
+            }
+    }
+
+    private var settingsContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Compatibility · \(game.name)").font(.title2)
+            if let profile {
+                Text("Profile revision \(profile.profile.revision) · \(profile.source)").font(.caption)
+                    .accessibilityIdentifier("game-profile-source")
+                Text(profile.profile.notes).font(.caption)
+            } else {
+                Text("No matching profile cached. Existing defaults apply.").font(.caption)
+            }
+            HStack {
+                Link("Profile JSON", destination: GameProfileStore.url(appID: game.id))
+                Button("Update profile") {
+                    fetchingProfile = true
+                    Task {
+                        defer { fetchingProfile = false }
+                        do {
+                            try await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id, force: true)
+                            profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
+                            profileStatus = profile == nil ? "No published profile found." : "Profile checked. Applies to the next Gamekit Play request."
+                        } catch { profileStatus = "Profile update unavailable. The last valid cached or bundled profile remains in use." }
+                    }
+                }.disabled(fetchingProfile)
+            }.font(.caption)
+            if let profileStatus { Text(profileStatus).font(.caption) }
             Text("Graphics backend — this game").font(.headline)
             if let graphics {
                 GameGraphicsBackendPicker(selection: Binding(get: { graphics.override }, set: { run(backend: $0) }))
@@ -20,10 +57,10 @@ struct GameCompatibilityView: View {
                 Text("Effective next launch: \(graphics.effectiveBackend.title)")
                     .accessibilityIdentifier("game-effective-backend")
                 Text("Shared default: \(graphics.sharedBackend.title)").font(.caption)
-                if !graphics.effectiveBackend.launchOptions(appID: game.id).isEmpty {
-                    Text("Gamekit Play applies the tested Direct3D 11 launch options. For launches directly from Steam, add these to its Launch Options:")
+                if let arguments = profile?.profile.arguments(for: graphics.effectiveBackend), !arguments.isEmpty {
+                    Text("Gamekit Play applies these profile options for the selected backend. For launches directly from Steam, add these to its Launch Options:")
                         .font(.caption)
-                    Text(graphics.effectiveBackend.launchOptions(appID: game.id).joined(separator: " "))
+                    Text(arguments.joined(separator: " "))
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }
             }
@@ -80,10 +117,6 @@ struct GameCompatibilityView: View {
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(24).frame(width: 580)
-        .task {
-            while setup.isBusy && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
-            if !Task.isCancelled { run() }
-        }
     }
 
     private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil) {

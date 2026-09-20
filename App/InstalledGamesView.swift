@@ -12,6 +12,8 @@ private final class InstalledGamesModel: ObservableObject {
     private var launchObservation: Task<Void, Never>?
     private var namesNeedRefresh = true
     private var requestedUninstall: (id: UInt32, name: String)?
+    private let profiles = GameProfileStore(root: AppStorageLocations.metadata)
+    private var profileRefresh: Task<Void, Never>?
 
     func refresh(setup: SetupModel) async {
         guard !refreshing, !setup.isBusy else { return }
@@ -28,6 +30,16 @@ private final class InstalledGamesModel: ObservableObject {
             }.value
             guard !setup.isBusy, !Task.isCancelled else { return }
             if games != result.games { games = result.games; namesNeedRefresh = true }
+            if profileRefresh == nil {
+                let ids = result.games.map(\.id)
+                profileRefresh = Task { [weak self, profiles] in
+                    for id in ids {
+                        if Task.isCancelled { break }
+                        try? await profiles.refresh(appID: id)
+                    }
+                    self?.profileRefresh = nil
+                }
+            }
             if result.unreadableManifests == 0, let requested = requestedUninstall,
                !result.games.contains(where: { $0.id == requested.id }) {
                 message = "\(requested.name) is no longer listed as installed in Windows Steam."

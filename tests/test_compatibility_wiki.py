@@ -95,7 +95,8 @@ class WikiTests(unittest.TestCase):
                 WIKI.build(self.games, self.reports, output)
             files = {str(path.relative_to(left)) for path in left.rglob("*") if path.is_file()}
             self.assertEqual(files, {"index.html", "guide.html", "contributing.html", "games/1.html", "games/2.html",
-                "assets/site.css", "assets/site.js", "games.json", "reports.json", ".nojekyll"})
+                "assets/site.css", "assets/site.js", "games.json", "reports.json", ".nojekyll",
+                "profiles/1.json", "profiles/2.json"})
             for name in files:
                 self.assertEqual((left / name).read_bytes(), (right / name).read_bytes())
             for page in left.rglob("*.html"):

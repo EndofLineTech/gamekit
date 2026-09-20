@@ -218,6 +218,14 @@ struct SteamLifecycleTests {
         #expect(args.contains("-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1") == (backend == "dxvk"))
         #expect(GraphicsBackend.dxvk.launchOptions(appID: 553850).isEmpty)
         #expect(try Data(contentsOf: settings) == original)
+        let updated = Data("""
+        {"schemaVersion":1,"revision":2,"appId":526870,"name":"Satisfactory","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["-dx11"],"dxvk":["-dx11"]},"notes":"Updated profile fixture"}
+        """.utf8)
+        try await GameProfileStore(root: fixture.store.root).accept(updated, appID: 526870)
+        _ = try await lifecycle.launchGame(appID: 526870)
+        let updatedCommand = try #require(await runtime.commands.last)
+        #expect(Array(updatedCommand.dropFirst(3)) == (backend == "metal3" ? [] : ["-dx11"]))
+        #expect(try Data(contentsOf: settings) == original)
         _ = try await lifecycle.stop()
     }
     @Test("Cloud-blocked launch feedback observes without sending a second Play request")

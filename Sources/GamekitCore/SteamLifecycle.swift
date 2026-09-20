@@ -266,7 +266,7 @@ public actor SteamLifecycle {
         let backend = try (GameCompatibilityPreferences.read(root: store.root).graphicsBackends[String(appID)] ?? .inherit)
             .effectiveBackend(shared: layout.graphicsBackend)
         let result = try await driver.execute(.init(executable: layout.wine,
-            arguments: [steam.path, "-applaunch", String(appID)] + backend.launchOptions(appID: appID),
+            arguments: [steam.path, "-applaunch", String(appID)] + backend.launchOptions(appID: appID, root: store.root),
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
         guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }
