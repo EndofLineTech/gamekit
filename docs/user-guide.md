@@ -167,6 +167,10 @@ Install games using **Windows Steam**, in its default managed library. Gamekit's
 each title with artwork and a play button. The list refreshes every three seconds,
 when Gamekit becomes active, or with **Refresh games**. Uninstalled titles disappear.
 
+**Open steamapps folder**, beside **Refresh games**, opens the managed Windows
+Steam library directory in Finder. Installed game files are under its `common`
+subfolder. Windows Steam does not need to be running to use this button.
+
 To uninstall, click the **trash button beside the game's gear**, then choose
 **Continue in Windows Steam**. Steam opens its uninstall flow; review and confirm
 or cancel there. Gamekit starts managed Windows Steam if needed and updates the
