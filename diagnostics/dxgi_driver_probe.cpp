@@ -3,6 +3,8 @@
 #include <d3d12.h>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <cctype>
 
 int main(int argc, char **argv) {
     if (argc == 2 && !std::strcmp(argv[1], "configure")) {
@@ -21,7 +23,11 @@ int main(int argc, char **argv) {
         return 0;
     }
     const bool substituted = argc >= 2 && !std::strcmp(argv[1], "substituted");
-    const ULONGLONG expected = substituted ? 0x00230000000f17ceULL : ~0ULL;
+    ULONGLONG expected = substituted ? 0x00230000000f17ceULL : ~0ULL;
+    if (argc >= 2 && std::strlen(argv[1]) == 16) {
+        for (const char *c = argv[1]; *c; ++c) if (!std::isxdigit((unsigned char)*c)) return 12;
+        expected = std::strtoull(argv[1], nullptr, 16);
+    }
     HMODULE dxgi = argc >= 3 ? LoadLibraryA(argv[2]) : LoadLibraryW(L"dxgi.dll");
     if (!dxgi) return 1;
     auto create = reinterpret_cast<HRESULT (WINAPI *)(REFIID, void **)>(GetProcAddress(dxgi, "CreateDXGIFactory1"));

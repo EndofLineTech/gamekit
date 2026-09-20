@@ -13,7 +13,7 @@ public enum RuntimeRevision: String, Codable, Sendable, CaseIterable {
         switch self {
         case .original: "Sikarugir 10.0 revision 6 (original)"
         case .textInput1: "Sikarugir 10.0 revision 6 + Gamekit text-input 1"
-        case .driverVersion1: "Sikarugir 10.0 revision 6 + text-input 1 + Helldivers driver compatibility"
+        case .driverVersion1: "Sikarugir 10.0 revision 6 + text-input 1 + driver compatibility"
         }
     }
     public var profile: RuntimeProfile {
@@ -164,6 +164,8 @@ public struct RuntimeLayout: Sendable {
         if let prefix, session != nil, hasGameIdentityHelper, let identityHelper {
             result["DYLD_INSERT_LIBRARIES"] = identityHelper.path
             result["GAMEKIT_GAME_NAMES_FILE"] = GameDockNames.url(root: dataRoot, prefix: prefix).path
+            let parameters = dataRoot.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent)-drivers.ini")
+            result["GAMEKIT_DXGI_PARAMETERS_FILE"] = "Z:" + parameters.path.replacingOccurrences(of: "/", with: "\\")
         }
         return result
     }

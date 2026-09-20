@@ -32,10 +32,14 @@ def text(value, limit=4096):
 
 
 def validate_profile(profile, app_id):
-    require(isinstance(profile, dict) and set(profile) == {
+    require(isinstance(profile, dict), "Invalid profile")
+    fields = {
         "schemaVersion", "revision", "appId", "name", "runtime", "launchArguments", "notes"
-    }, "Invalid profile fields")
-    require(type(profile["schemaVersion"]) is int and profile["schemaVersion"] == 1, "Unsupported profile schema")
+    }
+    if profile.get("schemaVersion") == 2:
+        fields.add("execution")
+    require(set(profile) == fields, "Invalid profile fields")
+    require(type(profile["schemaVersion"]) is int and profile["schemaVersion"] in (1, 2), "Unsupported profile schema")
     require(type(profile["appId"]) is int and profile["appId"] == app_id and 0 < app_id < 2**32, "Profile AppID mismatch")
     require(type(profile["revision"]) is int and 0 < profile["revision"] <= 1000000, "Invalid profile revision")
     require(profile["runtime"] == "sikarugir-10.0_6", "Unknown profile runtime")
@@ -49,6 +53,35 @@ def validate_profile(profile, app_id):
             isinstance(value, str) and re.fullmatch(r"-[A-Za-z0-9_:.\[\]=,+/\-]{1,511}", value) for value in values
         ), "Invalid profile launch arguments")
     require(len((json.dumps(profile, ensure_ascii=False, indent=2) + "\n").encode("utf-8")) <= 32768, "Profile too large")
+    if profile["schemaVersion"] == 2:
+        execution = profile["execution"]
+        require(isinstance(execution, dict) and set(execution) <= {"executable", "driver", "capture", "fullscreenSpace"}, "Invalid execution fields")
+        if execution:
+            require(isinstance(execution.get("executable"), str) and
+                    re.fullmatch(r"[a-z0-9][a-z0-9 ._()'-]{0,200}\.exe", execution["executable"]), "Invalid target executable")
+            require(set(execution) != {"executable"}, "Executable needs an execution mechanism")
+        expected = {
+            "driver": {"runtimeRevisions", "backends", "defaultEnabled", "matchVersion", "replacementVersion", "guidance"},
+            "capture": {"inheritedDefault", "guidance"},
+            "fullscreenSpace": {"defaultEnabled", "guidance"},
+        }
+        for key, fields in expected.items():
+            if key not in execution:
+                continue
+            value = execution[key]
+            require(isinstance(value, dict) and set(value) == fields and text(value.get("guidance"), 2048), "Invalid execution mechanism")
+            require(len(value["guidance"].encode("utf-8")) <= 2048, "Execution guidance too large")
+            require(type(value["inheritedDefault" if key == "capture" else "defaultEnabled"]) is bool, "Invalid execution default")
+            if key == "capture":
+                require(value["inheritedDefault"] is False, "Unsupported Wine inherited default")
+            if key == "driver":
+                require(isinstance(value["runtimeRevisions"], list) and 0 < len(value["runtimeRevisions"]) <= 3
+                        and all(v == "driver-version-1" for v in value["runtimeRevisions"]), "Unqualified driver runtime")
+                require(isinstance(value["backends"], list) and 0 < len(value["backends"]) <= 2
+                        and all(v in ("automatic", "metal3") for v in value["backends"]), "Unqualified driver backend")
+                for field in ("matchVersion", "replacementVersion"):
+                    require(isinstance(value[field], list) and len(value[field]) == 4
+                            and all(type(v) is int and 0 <= v <= 65535 for v in value[field]), "Invalid driver version")
 
 
 def game_profiles(games, root=ROOT):
@@ -61,8 +94,9 @@ def game_profiles(games, root=ROOT):
         app_id = game["app_id"]
         source = directory / f"{app_id}.json"
         profile = json.loads(source.read_text(encoding="utf-8")) if source.exists() else {
-            "schemaVersion": 1, "revision": 1, "appId": app_id, "name": game["name"],
+            "schemaVersion": 2, "revision": 2, "appId": app_id, "name": game["name"],
             "runtime": "sikarugir-10.0_6", "launchArguments": {},
+            "execution": {},
             "notes": "No automatic launch adjustments are supplied. Your saved backend and game settings apply. Consult the compatibility wiki for test evidence and manual guidance."
         }
         validate_profile(profile, app_id)

@@ -23,25 +23,35 @@ struct SteamApplicationBundle: Sendable {
     let game: GameApplicationIdentity?
     private let driverCompatibilityEnabled: Bool
     private let graphicsPayload: GraphicsPayload?
+    private let driverParameters: GameExecutionParameters.Driver?
+    private let selectedBackend: GraphicsBackend
     var hasAlternativeGraphics: Bool { graphicsPayload != nil }
-    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool = true,
+    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool? = nil,
          graphicsBackend: GraphicsBackend? = nil) {
-        self.layout = layout; self.game = game; self.driverCompatibilityEnabled = driverCompatibilityEnabled
+        self.layout = layout; self.game = game
+        driverParameters = game.flatMap { gameExecution(appID: $0.appID, root: layout.dataRoot).driver }
+        self.driverCompatibilityEnabled = driverCompatibilityEnabled ?? driverParameters?.defaultEnabled ?? false
+        selectedBackend = graphicsBackend ?? layout.graphicsBackend
         graphicsPayload = game == nil ? nil : GraphicsPayload(backend: graphicsBackend ?? layout.graphicsBackend)
     }
     static func configured(layout: RuntimeLayout, game: GameApplicationIdentity) throws -> Self {
         let preferences = try GameCompatibilityPreferences.read(root: layout.dataRoot)
-        return Self(layout: layout, game: game, driverCompatibilityEnabled: preferences.driverEnabled(appID: game.appID, revision: layout.profile.revision),
+        return Self(layout: layout, game: game, driverCompatibilityEnabled: preferences.driverEnabled(appID: game.appID, revision: layout.profile.revision, root: layout.dataRoot),
                     graphicsBackend: (preferences.graphicsBackends[String(game.appID)] ?? .inherit).effectiveBackend(shared: layout.graphicsBackend))
     }
     static let identifier = "tech.endofline.gamekit.windows-steam"
     static let displayName = "Windows Steam"
     private var executableName: String { game?.filename ?? Self.displayName }
-    private var driverCompatibility: Bool { graphicsPayload == nil && layout.profile.revision == .driverVersion1 && game?.appID == 553850 && driverCompatibilityEnabled }
+    var driverCompatibility: Bool {
+        driverCompatibilityEnabled && driverParameters?.available(revision: layout.profile.revision) == true &&
+            driverParameters?.backends.contains(selectedBackend) == true
+    }
     private var gameCacheFormat: String {
         if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision }
-        return layout.profile.revision == .driverVersion1 && game?.appID == 553850 && !driverCompatibilityEnabled
-            ? "shared-pe-v2-driver-off" : "shared-pe-v2"
+        if driverParameters?.available(revision: layout.profile.revision) == true {
+            return "shared-pe-v4-driver-" + DriverVersionAdapter.sha256.prefix(12) + (driverCompatibility ? "-on" : "-off")
+        }
+        return "shared-pe-v4-base"
     }
     private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
     private var bundleName: String { executableName + ".app" }
@@ -87,8 +97,8 @@ struct SteamApplicationBundle: Sendable {
             guard let copy = copiedPath(path) else { continue }
             if let graphicsPayload, path.hasPrefix("Contents/SharedSupport/wine/lib/wine/"),
                graphicsPayload.hashes[String(path.dropFirst("Contents/SharedSupport/wine/lib/wine/".count))] != nil { continue }
-            let expected = driverCompatibility && path == dxgiRelative ? layout.profile.hashes[RuntimeProfile.driverShimRelative] : hash
-            guard let expected, RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: expected) else { throw SteamApplicationError.invalidBundle }
+            let expected = driverCompatibility && path == dxgiRelative ? DriverVersionAdapter.sha256 : hash
+            guard RuntimeDetector.matches(bundle.appendingPathComponent(copy), root: bundle, hash: expected) else { throw SteamApplicationError.invalidBundle }
         }
         if let graphicsPayload {
             try graphicsPayload.validate(layout: layout)
@@ -175,10 +185,10 @@ struct SteamApplicationBundle: Sendable {
             }
         }
         if driverCompatibility {
-            guard let shimHash = layout.profile.hashes[RuntimeProfile.driverShimRelative],
-                  RuntimeDetector.matches(layout.bundle.appendingPathComponent(RuntimeProfile.driverShimRelative), root: layout.bundle, hash: shimHash),
-                  let payload = try contents.directory("lib")?.directory("gamekit")?.read("helldivers-dxgi.dll"),
-                  let modules = try contents.directory("lib")?.directory("wine")?.directory("x86_64-windows")
+            let payload = try DriverVersionAdapter.data()
+            guard let originalHash = layout.profile.hashes[RuntimeProfile.driverOriginalRelative],
+                   RuntimeDetector.matches(layout.bundle.appendingPathComponent(RuntimeProfile.driverOriginalRelative), root: layout.bundle, hash: originalHash),
+                   let modules = try contents.directory("lib")?.directory("wine")?.directory("x86_64-windows")
             else { throw SteamApplicationError.invalidRuntime }
             // Remove only the newly staged hard link, never overwrite its inode.
             try modules.removeRegularFile("dxgi.dll")

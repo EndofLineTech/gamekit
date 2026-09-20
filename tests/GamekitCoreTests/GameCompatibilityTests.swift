@@ -165,7 +165,7 @@ struct GameCompatibilityTests {
         await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setDriverCompatibility(false, appID: 553850) }
         await #expect(throws: GameCompatibilityError.unsupportedGame) { try await fixture.settings().setDriverCompatibility(true, appID: 413150) }
         let preferences = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
-        for invalid in [#"{"schemaVersion":9,"driverVersions":{}}"#, #"{"schemaVersion":1,"driverVersions":{"553850":1}}"#, #"{"schemaVersion":1,"driverVersions":{"413150":true}}"#] {
+        for invalid in [#"{"schemaVersion":9,"driverVersions":{}}"#, #"{"schemaVersion":1,"driverVersions":{"553850":1}}"#, #"{"schemaVersion":1,"driverVersions":{"0413150":true}}"#] {
             try Data(invalid.utf8).write(to: preferences)
             await #expect(throws: (any Error).self) { try await fixture.settings().setDriverCompatibility(false, appID: 553850) }
             #expect(try String(contentsOf: preferences, encoding: .utf8) == invalid)
@@ -202,7 +202,7 @@ struct GameCompatibilityTests {
         await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setFullscreenSpace(true, appID: 553850) }
         await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setFullscreenSpace(true, appID: 553850) }
         let file = fixture.store.root.appendingPathComponent("Metadata/GamePresentation.json")
-        for invalid in [#"{"schemaVersion":9,"fullscreenSpaces":{"553850":true}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"553850":1}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"413150":true}}"#] {
+        for invalid in [#"{"schemaVersion":9,"fullscreenSpaces":{"553850":true}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"553850":1}}"#, #"{"schemaVersion":1,"fullscreenSpaces":{"0413150":true}}"#] {
             try Data(invalid.utf8).write(to: file)
             await #expect(throws: (any Error).self) { try await fixture.settings().setFullscreenSpace(true, appID: 553850) }
             #expect(try String(contentsOf: file, encoding: .utf8) == invalid)
@@ -256,12 +256,12 @@ struct GameCompatibilityTests {
     @Test("Missing app section can be created; Wine default capture is disabled")
     func newOverride() throws {
         let data = Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8)
-        let registry = try GameCaptureRegistry(data)
+        let registry = try GameCaptureRegistry(data, executable: "helldivers2.exe")
         #expect(try registry.capture == .inherit)
         #expect(try !registry.inheritedCapture)
-        let enabled = try GameCaptureRegistry(registry.setting(.enabled))
+        let enabled = try GameCaptureRegistry(registry.setting(.enabled), executable: "helldivers2.exe")
         #expect(try enabled.capture == .enabled)
-        let restored = try GameCaptureRegistry(enabled.setting(.inherit))
+        let restored = try GameCaptureRegistry(enabled.setting(.inherit), executable: "helldivers2.exe")
         #expect(try restored.capture == .inherit)
     }
 
@@ -272,7 +272,7 @@ struct GameCompatibilityTests {
         "not a Wine registry"
     ])
     func malformedRegistry(text: String) {
-        #expect(throws: (any Error).self) { _ = try GameCaptureRegistry(Data(text.utf8)).setting(.enabled) }
+        #expect(throws: (any Error).self) { _ = try GameCaptureRegistry(Data(text.utf8), executable: "helldivers2.exe").setting(.enabled) }
     }
 
     @Test("Live or incomplete observations block changes without altering registry bytes", arguments: [true, false])

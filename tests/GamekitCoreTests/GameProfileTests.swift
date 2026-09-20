@@ -5,6 +5,63 @@ import Synchronization
 
 @Suite("Downloadable game profiles")
 struct GameProfileTests {
+    @Test("Execution profiles reject registry injection, unqualified adapters and unknown actions")
+    func invalidExecution() throws {
+        let source = try #require(GameProfileStore.bundled(appID: 553850))
+        let original = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(source)) as? [String: Any])
+        for invalid in ["../fixture.exe", "fixture.exe\\Mac Driver", "fixture.exe\nInjected=1"] {
+            var document = original
+            var execution = try #require(document["execution"] as? [String: Any])
+            execution["executable"] = invalid; document["execution"] = execution
+            #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: 553850) }
+        }
+        for (key, value): (String, Any) in [("runtimeRevisions", ["original"]), ("backends", ["dxvk"]),
+                                          ("replacementVersion", [65536, 0, 0, 0]), ("script", "run") ] {
+            var document = original
+            var execution = try #require(document["execution"] as? [String: Any])
+            var driver = try #require(execution["driver"] as? [String: Any])
+            driver[key] = value; execution["driver"] = driver; document["execution"] = execution
+            #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: 553850) }
+        }
+    }
+
+    @Test("Execution capabilities belong to profiles, not known AppIDs")
+    func executionIsDataDriven() async throws {
+        let source = try #require(GameProfileStore.bundled(appID: 553850))
+        var document = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(source)) as? [String: Any])
+        document["appId"] = 42
+        document["revision"] = 99
+        document["name"] = "Unrecognized fixture game"
+        var execution = try #require(document["execution"] as? [String: Any])
+        execution["executable"] = "fixture.exe"
+        document["execution"] = execution
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await GameProfileStore(root: root).accept(JSONSerialization.data(withJSONObject: document), appID: 42)
+        #expect(GameCompatibilityStore.supports(42, root: root))
+        #expect(GameCompatibilityPreferences().driverEnabled(appID: 42, revision: .driverVersion1, root: root))
+        let profile = try #require(GameProfileStore.resolved(appID: 42, root: root)?.profile)
+        #expect(profile.execution.executable == "fixture.exe")
+        let registry = try GameCaptureRegistry(Data("WINE REGISTRY Version 2\n".utf8), executable: "fixture.exe")
+        let captured = try #require(String(data: registry.setting(.enabled), encoding: .utf8))
+        #expect(captured.contains("fixture.exe"))
+        #expect(!captured.contains("helldivers2.exe"))
+        let metadataRoot = try ManagedDirectory.canonicalRoot(root)
+        let layout = RuntimeLayout(dataRoot: metadataRoot, profile: .sikarugirDriverVersion1, graphicsBackend: .metal3)
+        #expect(try SteamApplicationBundle.configured(layout: layout, game: .init(appID: 42, name: "Fixture")).driverCompatibility)
+        let prefix = metadataRoot.appendingPathComponent("Environments/steam")
+        try GameDockNames.publish(root: metadataRoot, prefix: prefix, session: UUID(),
+            games: [.init(id: 42, name: "Fixture", installDirectory: "Fixture", buildID: nil, state: .ready, artwork: nil)],
+            graphicsBackend: .metal3, libraryLayout: layout, validate: {})
+        let projection = try Data(contentsOf: metadataRoot.appendingPathComponent("Metadata/GameDock/steam-drivers.ini"))
+        let ini = try #require(String(data: projection, encoding: .utf16))
+        #expect(ini.contains("Executable=fixture.exe") && ini.contains("Replacement=00230000000f17ce"))
+        let mapping = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: GameDockNames.url(root: metadataRoot, prefix: prefix)))
+        #expect(mapping.fullscreenExecutables?["42"] == "fixture.exe")
+        try GameDockNames.publish(root: metadataRoot, prefix: prefix, session: UUID(), games: [], libraryLayout: layout, validate: {})
+        #expect(try Data(contentsOf: metadataRoot.appendingPathComponent("Metadata/GameDock/steam-drivers.ini")).count == 2)
+    }
     @Test("Published profiles round-trip through the production HTTPS client",
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_VERIFY_PUBLISHED_PROFILES"] == "1"))
     func publishedProfiles() async throws {
@@ -20,7 +77,7 @@ struct GameProfileTests {
         }
     }
 
-    private func data(id: UInt32 = 526870, revision: Int = 2, arguments: [String] = ["-dx11"]) throws -> Data {
+    private func data(id: UInt32 = 526870, revision: Int = 3, arguments: [String] = ["-dx11"]) throws -> Data {
         try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "revision": revision,
             "appId": id, "name": "Satisfactory", "runtime": "sikarugir-10.0_6",
             "launchArguments": ["dxmt": arguments], "notes": "Test profile"])
@@ -53,10 +110,10 @@ struct GameProfileTests {
         let canonical = try ManagedDirectory.canonicalRoot(root)
         let store = GameProfileStore(root: canonical)
         try await store.accept(data(), appID: 526870)
-        #expect(GameProfileStore.resolved(appID: 526870, root: canonical)?.profile.revision == 2)
+        #expect(GameProfileStore.resolved(appID: 526870, root: canonical)?.profile.revision == 3)
         await #expect(throws: (any Error).self) { try await store.accept(data(revision: 1), appID: 526870) }
         await #expect(throws: (any Error).self) { try await store.accept(Data("<html>error</html>".utf8), appID: 526870) }
-        #expect(GameProfileStore.resolved(appID: 526870, root: canonical)?.profile.revision == 2)
+        #expect(GameProfileStore.resolved(appID: 526870, root: canonical)?.profile.revision == 3)
         #expect(GraphicsBackend.dxmt.launchOptions(appID: 526870, root: canonical) == ["-dx11"])
         #expect(GraphicsBackend.automatic.launchOptions(appID: 526870, root: canonical).isEmpty)
     }
@@ -105,7 +162,7 @@ struct GameProfileTests {
         try FileManager.default.removeItem(at: root.appendingPathComponent("Metadata/GameProfiles"))
         try await GameProfileStore(root: root).accept(data(), appID: 526870)
         try Data("broken".utf8).write(to: root.appendingPathComponent("Metadata/GameProfiles/526870.json"))
-        #expect(GameProfileStore.resolved(appID: 526870, root: root)?.profile.revision == 1)
+        #expect(GameProfileStore.resolved(appID: 526870, root: root)?.profile.revision == 2)
     }
 }
 

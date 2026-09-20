@@ -20,8 +20,13 @@ struct GameCompatibilityView: View {
                 profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
                 while setup.isBusy && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
                 if !Task.isCancelled { run() }
-                try? await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id)
-                if !Task.isCancelled { profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata) }
+                if (try? await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id)) == true {
+                    await refreshExecutionParameters()
+                }
+                if !Task.isCancelled {
+                    profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
+                    if !setup.isBusy { run() }
+                }
             }
     }
 
@@ -42,8 +47,11 @@ struct GameCompatibilityView: View {
                     Task {
                         defer { fetchingProfile = false }
                         do {
-                            try await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id, force: true)
+                            if try await GameProfileStore(root: AppStorageLocations.metadata).refresh(appID: game.id, force: true) {
+                                await refreshExecutionParameters()
+                            }
                             profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
+                            if !setup.isBusy { run() }
                             profileStatus = profile == nil ? "No published profile found." : "Profile checked. Applies to the next Gamekit Play request."
                         } catch { profileStatus = "Profile update unavailable. The last valid cached or bundled profile remains in use." }
                     }
@@ -68,21 +76,22 @@ struct GameCompatibilityView: View {
                 .font(.caption).foregroundStyle(.secondary)
             if let problem = setup.problem { Text(problem).font(.callout).foregroundStyle(.secondary) }
             Divider()
-            if GameCompatibilityStore.supports(game.id) {
+            if let execution = profile?.profile.execution, execution.hasSettings {
                 if let snapshot {
+                    if let driver = execution.driver {
                     Text("Driver version compatibility — this game only").font(.headline)
                     Toggle("Avoid the virtual-GPU driver warning", isOn: Binding(
                         get: { snapshot.driverCompatibility },
                         set: { run(driver: $0) }))
                         .accessibilityIdentifier("game-driver-compatibility")
                         .disabled(setup.isBusy || snapshot.sessionLocked || !snapshot.driverCompatibilityAvailable || !setup.actions.reset)
-                    Text(snapshot.driverCompatibilityAvailable
-                         ? "With an Apple backend, reports compatibility version 35.0.15.6094 to Helldivers instead of the invalid all-65535 value. This is not an actual driver update. The preference is retained but inactive with DXMT/DXVK."
-                         : "Requires the updated runtime. Choose Use updated runtime under Setup and prerequisites, then return to this game's settings.")
+                    Text(driver.guidance)
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
+                    }
+                    if let capture = execution.capture {
                     Text("Fullscreen display capture — this game only").font(.headline)
-                    Text("Validated for Helldivers 2 to prevent Dock-edge cursor exposure. Select Fullscreen inside the game; this option does not change the game's resolution or create a macOS Space.")
+                    Text(capture.guidance)
                         .font(.caption)
                     Text("\(snapshot.capture.title) · Effective: \(snapshot.effectiveCapture ? "enabled" : "disabled")")
                         .accessibilityIdentifier("game-capture-setting")
@@ -94,6 +103,8 @@ struct GameCompatibilityView: View {
                     }
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
                     Divider()
+                    }
+                    if let space = execution.fullscreenSpace {
                     Text("Fullscreen presentation — this game only").font(.headline)
                     Text(snapshot.fullscreenSpace ? "Dedicated fullscreen Space" : "Fullscreen on the desktop")
                         .accessibilityIdentifier("game-fullscreen-presentation")
@@ -104,8 +115,9 @@ struct GameCompatibilityView: View {
                             .disabled(!snapshot.fullscreenSpace).accessibilityIdentifier("disable-fullscreen-space")
                     }
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
-                    Text("Select Fullscreen inside Helldivers. The optional Space keeps the full display area, including behind the notch, and closes when the game window closes. Changes apply at the next launch.")
+                    Text(space.guidance)
                         .font(.caption)
+                    }
                 }
                 Text("Stop Windows Steam and its games before changing settings. Restore capture default removes only the capture override; fullscreen presentation and the shared graphics backend are separate settings.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -141,7 +153,7 @@ struct GameCompatibilityView: View {
                     snapshot = try await settings.setCapture(capture, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else {
-                    if GameCompatibilityStore.supports(game.id) { snapshot = try await settings.inspect(appID: game.id) }
+                    if GameCompatibilityStore.supports(game.id, root: AppStorageLocations.metadata) { snapshot = try await settings.inspect(appID: game.id) }
                     status = graphics?.sessionLocked == true ? "Stop Windows Steam to unlock changes, then refresh saved settings." : "Saved settings loaded."
                 }
             } catch {
@@ -149,5 +161,10 @@ struct GameCompatibilityView: View {
                 status = AppFailure.message(error)
             }
         }
+    }
+
+    private func refreshExecutionParameters() async {
+        guard !setup.isBusy, let store = try? EnvironmentStore(root: AppStorageLocations.metadata) else { return }
+        try? await SteamLifecycle(store: store, layout: setup.layout).refreshGameNames()
     }
 }

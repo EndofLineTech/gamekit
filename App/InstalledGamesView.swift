@@ -35,7 +35,7 @@ private final class InstalledGamesModel: ObservableObject {
                 profileRefresh = Task { [weak self, profiles] in
                     for id in ids {
                         if Task.isCancelled { break }
-                        try? await profiles.refresh(appID: id)
+                        if (try? await profiles.refresh(appID: id)) == true { self?.namesNeedRefresh = true }
                     }
                     self?.profileRefresh = nil
                 }

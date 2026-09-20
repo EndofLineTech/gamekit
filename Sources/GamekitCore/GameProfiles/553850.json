@@ -1,9 +1,28 @@
 {
-  "schemaVersion": 1,
-  "revision": 1,
+  "schemaVersion": 2,
+  "revision": 2,
   "appId": 553850,
   "name": "HELLDIVERS 2",
   "runtime": "sikarugir-10.0_6",
   "launchArguments": {},
-  "notes": "Build 24826606: use the Apple Metal 3 path. The DX11 flag failed startup on the tested DXMT/DXVK paths and is not applied. Driver-version, fullscreen capture and Space controls require Gamekit's qualified native implementation and remain explicit saved settings."
+  "notes": "Build 24826606: use the Apple Metal 3 path. No extra launch arguments are required. The DX11 flag failed startup on the tested DXMT/DXVK paths and is not applied.",
+  "execution": {
+    "executable": "helldivers2.exe",
+    "driver": {
+      "runtimeRevisions": ["driver-version-1"],
+      "backends": ["automatic", "metal3"],
+      "defaultEnabled": true,
+      "matchVersion": [65535, 65535, 65535, 65535],
+      "replacementVersion": [35, 0, 15, 6094],
+      "guidance": "With an Apple backend, reports compatibility version 35.0.15.6094 instead of the invalid all-65535 value. This is not an actual driver update. Requires the driver-compatible runtime; the preference is inactive with DXMT/DXVK."
+    },
+    "capture": {
+      "inheritedDefault": false,
+      "guidance": "Validated for Helldivers 2 to prevent Dock-edge cursor exposure. Select Fullscreen inside the game; capture does not change resolution or create a macOS Space."
+    },
+    "fullscreenSpace": {
+      "defaultEnabled": false,
+      "guidance": "Select Fullscreen inside Helldivers. The optional Space keeps the full display area, including behind the notch, and closes when the game window closes. Changes apply at the next launch."
+    }
+  }
 }

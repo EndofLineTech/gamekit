@@ -11,6 +11,24 @@ spec.loader.exec_module(wiki)
 
 
 class GameProfilesTests(unittest.TestCase):
+    def test_execution_config_is_validated_and_generic_adapter_has_no_game_identity(self):
+        profile = json.loads((ROOT / "Sources/GamekitCore/GameProfiles/553850.json").read_text())
+        wiki.validate_profile(profile, 553850)
+        self.assertEqual(profile["execution"]["driver"]["replacementVersion"], [35, 0, 15, 6094])
+        for invalid in ("../game.exe", "game.exe\\Mac Driver", "game.exe\nInjected=1"):
+            profile["execution"]["executable"] = invalid
+            with self.assertRaises(ValueError):
+                wiki.validate_profile(profile, 553850)
+        payload = (ROOT / "Sources/GamekitCore/ExecutionAdapters/dxgi-version-v1.dll").read_bytes()
+        for name in ("helldivers2.exe", "553850", "526870"):
+            self.assertNotIn(name.encode(), payload)
+            self.assertNotIn(name.encode("utf-16le"), payload)
+        for name in ("GameCompatibilityStore.swift", "SteamApplicationBundle.swift", "SteamLifecycle.swift"):
+            source = (ROOT / "Sources/GamekitCore" / name).read_text()
+            self.assertNotIn("553850", source)
+            self.assertNotIn("526870", source)
+            self.assertNotIn("helldivers2.exe", source)
+
     def test_every_catalog_game_gets_matching_profile_and_link(self):
         games = json.loads((ROOT / "compatibility/games.json").read_text())
         reports = json.loads((ROOT / "compatibility/reports.json").read_text())
