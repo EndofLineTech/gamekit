@@ -218,6 +218,15 @@ public actor SteamLifecycle {
     }
 
     public func show() async throws {
+        try await openClientPage("steam://open/main", waitForReady: false)
+    }
+
+    public func openControllerSettings() async throws {
+        _ = try await launch()
+        try await openClientPage("steam://settings/controller", waitForReady: true)
+    }
+
+    private func openClientPage(_ page: String, waitForReady: Bool) async throws {
         guard !busy else { throw EnvironmentStoreError.busy }
         busy = true; defer { busy = false }
         let installation = try await store.installationLease()
@@ -227,9 +236,13 @@ public actor SteamLifecycle {
         defer { withExtendedLifetime(lease) {} }
         guard let receipt = try receipt() else { throw SteamLifecycleError.foreignActivity }
         try await driver.preflight()
-        guard try await !ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty else { throw SteamLifecycleError.notInstalled }
+        if waitForReady { try await waitForClient(record, lease: lease, receipt: receipt) }
+        else {
+            guard try await !ownedSnapshot(record, lease: lease, receipt: receipt).processes.isEmpty else { throw SteamLifecycleError.notInstalled }
+        }
+        try Task.checkCancellation(); try lease.validate()
         let steam = lease.prefix.appendingPathComponent(record.steamExecutable.rawValue)
-        let result = try await driver.execute(.init(executable: layout.wine, arguments: [steam.path, "steam://open/main"],
+        let result = try await driver.execute(.init(executable: layout.wine, arguments: [steam.path, page],
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
         guard result.termination == .exited(0) else { throw SteamLifecycleError.observationUnavailable }

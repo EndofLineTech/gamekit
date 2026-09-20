@@ -78,6 +78,21 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("Controller settings start or reuse only the owned Windows Steam client", arguments: [false, true])
+    func controllerSettings(alreadyRunning: Bool) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        if alreadyRunning { _ = try await lifecycle.launch() }
+        try await lifecycle.openControllerSettings()
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.commands.count == 1)
+        #expect(await runtime.commands.first == [fixture.store.prefixURL(for: fixture.id).appendingPathComponent(RelativePath.steamDefault.rawValue).path, "steam://settings/controller"])
+        await runtime.foreign()
+        await #expect(throws: SteamLifecycleError.foreignActivity) { try await lifecycle.openControllerSettings() }
+        #expect(await runtime.commands.count == 1)
+    }
+
     @Test("Uninstall requests use owned Windows Steam for ready, partial and missing-file installations",
           arguments: [SteamGameInstallState.ready, .updating, .missingFiles], [false, true])
     func requestUninstall(state: SteamGameInstallState, alreadyRunning: Bool) async throws {
