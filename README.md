@@ -3,6 +3,13 @@
 A native macOS launcher for installing and running Windows Steam through
 Apple's Game Porting Toolkit 4.
 
+## Game compatibility
+
+Browse the **[compatibility wiki](https://endoflinetech.github.io/gamekit/)** for
+backend recommendations, exact tested setups, known failures and untested games
+from the initial Steam library inventory. Results distinguish startup from
+gameplay and save/reload acceptance. See [how to contribute](compatibility/README.md).
+
 ## Build the native foundation
 
 With Xcode 27 and XcodeGen 2.46.0 or later installed:
