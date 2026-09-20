@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "catalog_date": "2026-09-20",
+  "environments": {
+    "m4-original": {
+      "hardware": "Apple M4 Pro, 24 GB RAM",
+      "os": "macOS 27.0 (26A428)",
+      "runtime": "Sikarugir Wine 10 rev6; original runtime; D3DMetal 4.0b2",
+      "note": "Original E6 baseline. Later runtime revisions are recorded separately."
+    },
+    "m4-driver-version-1": {
+      "hardware": "Apple M4 Pro, 24 GB RAM",
+      "os": "macOS 27.0 (26A428)",
+      "runtime": "Sikarugir Wine 10 rev6; driver-version-1 runtime",
+      "note": "Accepted runtime with text-input backport and optional Helldivers driver-version compatibility."
+    }
+  },
+  "games": {
+    "526870": {
+      "recommendation": "Apple backend / shared Metal 3 default. DXMT is a functionally tested alternative with temporary stuttering. Avoid the tested DXVK payload for this game.",
+      "recommended_backend": "apple",
+      "summary": "DXMT passed gameplay and save/reload. DXVK was unplayable in hands-on testing; subsequent experiments did not establish a fix.",
+      "issues": ["gamekit-7j9", "gamekit-gi0"],
+      "results": [
+        {
+          "backend": "apple", "status": "verified", "version": "D3DMetal 4.0b2 (Apple default baseline)",
+          "api": "D3D12 / SM6", "api_evidence": "confirmed", "build": "24656030", "date": "2026-09-17", "environment": "m4-original",
+          "launch_options": [],
+          "notes": "User confirmed the 15-minute gameplay, rendering, audio, controls and save/reload checklist at Medium, saved 1800×1169. No measured FPS. Metal 3 is the subsequently retained shared default; this baseline is not a new timed Metal 3 run.",
+          "evidence": ["docs/e6-game-results.md", "docs/satisfactory-backend-gameplay.md"]
+        },
+        {
+          "backend": "dxmt", "status": "verified", "version": "dxmt-0.80-compat2",
+          "api": "D3D11 / SM5", "api_evidence": "confirmed", "build": "24656030", "date": "2026-09-19", "environment": "m4-driver-version-1",
+          "launch_options": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"],
+          "notes": "User confirmed gameplay, audio, controls, manual test save and reload. Movement was initially choppy and settled; similar temporary stuttering was reported in the default mode. No measured performance ranking.",
+          "evidence": ["docs/satisfactory-backend-gameplay.md", "docs/satisfactory-performance-investigation.md"]
+        },
+        {
+          "backend": "dxvk", "status": "unplayable", "version": "dxvk-macos-1.10.3-compat2 / paired MoltenVK 1.2.10",
+          "api": "D3D11 / SM5", "api_evidence": "confirmed", "build": "24656030", "date": "2026-09-20", "environment": "m4-driver-version-1",
+          "launch_options": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0", "-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"],
+          "notes": "Rendered-menu qualification passed, but hands-on gameplay had very slow loading, severe choppiness and poor responsiveness. GPU-query timeouts occurred in some runs. Newer MoltenVK and an occlusion-culling trial did not establish a fix. Save/reload acceptance was not completed.",
+          "evidence": ["docs/satisfactory-backend-gameplay.md", "docs/satisfactory-performance-investigation.md"]
+        }
+      ]
+    },
+    "553850": {
+      "recommendation": "Metal 3 compatibility with the accepted runtime and Helldivers-specific settings.",
+      "recommended_backend": "apple",
+      "summary": "The Apple path reaches the ship and has user-confirmed control. Both optional backends crash during the tested DX11 startup path.",
+      "issues": ["gamekit-zl5"],
+      "results": [
+        {
+          "backend": "apple", "status": "gameplay", "version": "D3DMetal 4.0b2 / Metal 3 compatibility",
+          "api": "Gameplay rendering API unresolved in the same-flag comparison", "api_evidence": "unknown", "build": "24826606", "date": "2026-09-19", "environment": "m4-driver-version-1",
+          "launch_options": [],
+          "notes": "Ship rendering and user control were accepted. The diagnostic --use-d3d11 control also reached the ship but created both D3D11 and D3D12 devices; that does not identify the rendering API. No full mission, measured FPS, or save/reload acceptance is claimed. Use the normal Apple launch; the flag is not a required workaround.",
+          "evidence": ["docs/helldivers-dx11-backends.md", "docs/helldivers-stalls-and-cursor.md", "docs/helldivers-driver-runtime.md"]
+        },
+        {
+          "backend": "dxmt", "status": "fails", "version": "dxmt-0.80-compat2",
+          "api": "D3D11 requested; gameplay rendering not reached", "api_evidence": "requested", "build": "24826606", "date": "2026-09-19", "environment": "m4-driver-version-1",
+          "launch_options": ["--use-d3d11"],
+          "notes": "Startup crash, including a fresh shader-cache trial. Renderer logs reject requested feature level 12_0 and report maximum 11_1. The rejected request is established, not proven to be the sole crash cause.",
+          "evidence": ["docs/helldivers-dx11-backends.md"]
+        },
+        {
+          "backend": "dxvk", "status": "fails", "version": "dxvk-macos-1.10.3-compat2",
+          "api": "D3D11 requested; gameplay rendering not reached", "api_evidence": "requested", "build": "24826606", "date": "2026-09-19", "environment": "m4-driver-version-1",
+          "launch_options": ["--use-d3d11"],
+          "notes": "Startup crash, including a fresh shader-cache trial. D3D11 feature-level 12_0 probing is rejected. Do not infer that the historical DX11 flag is nonexistent, or that these results cover other DXVK versions/platforms.",
+          "evidence": ["docs/helldivers-dx11-backends.md"]
+        }
+      ]
+    },
+    "413150": {
+      "recommendation": "No gameplay-qualified recommendation yet. The Windows OpenGL path reached the menu using the shared runtime.",
+      "recommended_backend": null,
+      "summary": "Startup only. User-controlled gameplay, audio/input and save/reload remain deferred.",
+      "issues": ["gamekit-ec8.2"],
+      "results": [
+        {
+          "backend": "other", "status": "startup", "version": ".NET 6.0.32 / MonoGame DesktopGL 3.8.0.1641",
+          "api": "OpenGL / MonoGame DesktopGL runtime family", "api_evidence": "reported", "build": "16826371 (1.6.15.24356)", "date": "2026-09-17", "environment": "m4-original",
+          "launch_options": [],
+          "notes": "The Windows build rendered the New/Load/Co-op/Exit menu. This is not a DX11/DX12 backend test or gameplay/save-reload acceptance. Subsequent revised-runtime menu regressions are documented in the E6 report.",
+          "evidence": ["docs/e6-game-results.md", "docs/runtime-text-input-delivery.md"]
+        }
+      ]
+    }
+  }
+}

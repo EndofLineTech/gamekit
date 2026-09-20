@@ -1,0 +1,52 @@
+:root { color-scheme: light dark; --bg:#f5f7fa; --panel:#fff; --ink:#172b3a; --muted:#506575; --line:#cbd5df; --link:#075e69; --accent:#e7f4f4; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 system-ui,-apple-system,sans-serif; }
+a { color:var(--link); text-underline-offset:.18em; }
+a:hover { text-decoration-thickness:2px; }
+:focus-visible { outline:3px solid #b96500; outline-offset:3px; }
+.skip { position:absolute; left:1rem; top:-5rem; padding:.5rem 1rem; background:var(--panel); z-index:2; }
+.skip:focus { top:.5rem; }
+header { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:1rem max(1rem,calc((100vw - 1440px)/2)); background:var(--panel); border-bottom:1px solid var(--line); }
+.brand { font-weight:800; font-size:1.25rem; text-decoration:none; }
+.brand span { display:block; color:var(--muted); font-size:.85rem; font-weight:500; }
+nav { display:flex; gap:1.5rem; flex-wrap:wrap; }
+main { max-width:1440px; margin:0 auto; padding:2rem 1rem 4rem; }
+h1 { line-height:1.15; font-size:clamp(2rem,4vw,3.1rem); letter-spacing:-.04em; margin:.4rem 0 1rem; }
+h2 { line-height:1.3; margin-top:1.6rem; }
+.intro { max-width:950px; }
+.eyebrow { color:var(--link); font-weight:700; font-size:.85rem; letter-spacing:.06em; text-transform:uppercase; }
+.muted, small { color:var(--muted); }
+.stats { display:flex; flex-wrap:wrap; gap:.75rem 2rem; font-size:1.1rem; padding:.75rem 0; }
+.notice { background:var(--accent); border-left:4px solid var(--link); border-radius:4px; padding:1rem 1.25rem; margin:1.5rem 0; }
+.notice h2 { margin:0; font-size:1.15rem; }
+.notice p:last-child { margin-bottom:0; }
+#filters { display:flex; align-items:end; gap:1rem; flex-wrap:wrap; padding:1rem; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+label { display:flex; flex-direction:column; gap:.25rem; font-size:.9rem; font-weight:650; }
+label:first-child { flex:1; min-width:220px; }
+input, select, button { font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:.65rem .8rem; min-height:44px; }
+button { cursor:pointer; font-weight:650; }
+button:hover { background:var(--accent); }
+.table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+table { width:100%; border-collapse:collapse; text-align:left; font-size:.9rem; }
+caption { text-align:left; padding:.8rem 1rem; color:var(--muted); }
+th, td { padding:.8rem; border-bottom:1px solid var(--line); vertical-align:top; }
+thead th { background:var(--accent); white-space:nowrap; }
+tbody th { min-width:220px; font-weight:650; }
+small { display:block; font-size:.75rem; font-weight:400; }
+.api { min-width:210px; max-width:310px; }
+.badge { display:inline-block; padding:.2rem .55rem; border-radius:4px; font-size:.78rem; font-weight:700; white-space:nowrap; background:#edf1f5; color:#435367; }
+.verified { background:#dff4e5; color:#145b30; }
+.gameplay { background:#dceffc; color:#174f75; }
+.startup { background:#fff0cb; color:#705100; }
+.fails, .unplayable { background:#ffe3e0; color:#94291f; }
+.panel { padding:1.3rem 1.5rem; margin:1.5rem 0; border:1px solid var(--line); border-radius:8px; background:var(--panel); max-width:1000px; }
+.panel h2 { margin-top:0; display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }
+dl { display:grid; grid-template-columns:160px 1fr; gap:.4rem 1rem; }
+dt { font-weight:650; } dd { margin:0; overflow-wrap:anywhere; }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--bg); padding:1rem; border-radius:5px; }
+code { font-size:.88em; }
+footer { border-top:1px solid var(--line); padding:1.5rem; color:var(--muted); font-size:.85rem; text-align:center; }
+footer a:first-of-type { display:block; }
+[hidden] { display:none !important; }
+@media(max-width:600px) { nav { gap:.8rem; font-size:.9rem; } main { padding-top:1.4rem; } label, label:first-child { min-width:100%; } dl { grid-template-columns:1fr; } dd { margin-bottom:.6rem; } .panel { padding:1rem; } }
+@media(prefers-color-scheme:dark) { :root { --bg:#101a24; --panel:#182632; --ink:#e4edf5; --muted:#abbccc; --line:#415467; --link:#8cdbde; --accent:#203b44; } }
