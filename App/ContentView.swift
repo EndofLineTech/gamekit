@@ -78,6 +78,7 @@ struct ContentView: View {
             }
             SteamLifecycleView()
             InstalledGamesView()
+            ControllersView()
             SetupView()
             EnvironmentSummaryView()
             SteamInstallationView()

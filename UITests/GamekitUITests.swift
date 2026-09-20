@@ -320,6 +320,22 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(game.exists, "Uninstalled games must disappear after polling")
     }
 
+    func testControllersPanelExplainsHostInputAndRequiresSteamSetup() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "ready"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
+        let disclosure = app.disclosureTriangles.firstMatch
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        revealRecoveryButton(disclosure, in: app)
+        disclosure.click()
+        let settings = app.buttons["steam-controller-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertFalse(settings.isEnabled, "A host controller does not replace managed Steam setup")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "does not yet prove input reaches a Windows game")).firstMatch.exists)
+    }
+
     func testUninstallConfirmationCancelBusyGateAndLibraryRefresh() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
