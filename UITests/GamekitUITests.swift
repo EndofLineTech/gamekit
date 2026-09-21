@@ -343,6 +343,65 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(game.exists, "Uninstalled games must disappear after polling")
     }
 
+    func testProfileJSONImportExportAndAutomaticRestore() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let game = GameFixtures.other
+        _ = try await store.create(.init(id: SteamInstallationRecipe.environmentID, name: "Profile transfer fixture",
+            runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: SteamInstallationRecipe.environmentID).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/" + game.name), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try game.manifest.write(to: steam.appendingPathComponent("steamapps/appmanifest_\(game.appId).acf"))
+        let profiles = GameProfileStore(root: store.root)
+        let template = try await profiles.exportProfile(appID: game.appId, name: game.name)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: template) as? [String: Any])
+        object["notes"] = "Manually imported UI fixture."
+        let input = root.appendingPathComponent("manual.json")
+        try JSONSerialization.data(withJSONObject: object).write(to: input)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch()
+        defer { app.terminate() }
+        let gear = app.buttons["game-compatibility-\(game.appId)"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 20))
+        gear.click()
+        let importButton = app.buttons["import-game-profile"]
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: importButton)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        importButton.click()
+        let openPanel = app.sheets["open-panel"]
+        XCTAssertTrue(openPanel.waitForExistence(timeout: 10))
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        app.typeText(input.path)
+        app.typeKey(.return, modifierFlags: [])
+        openPanel.buttons["OKButton"].click()
+        let restored = app.buttons["restore-automatic-game-profile"]
+        XCTAssertTrue(restored.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Manually imported UI fixture."].exists)
+        app.buttons["export-game-profile"].click()
+        let savePanel = app.sheets["save-panel"]
+        XCTAssertTrue(savePanel.waitForExistence(timeout: 10))
+        let filename = savePanel.textFields.firstMatch
+        filename.click(); filename.typeKey("a", modifierFlags: .command); filename.typeText("exported.json")
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        app.typeText(root.path)
+        app.typeKey(.return, modifierFlags: [])
+        savePanel.buttons["OKButton"].click()
+        let output = root.appendingPathComponent("exported.json")
+        for _ in 0..<50 {
+            if FileManager.default.fileExists(atPath: output.path) { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let exported = try GameProfile.decode(Data(contentsOf: output), appID: game.appId)
+        XCTAssertEqual(exported.notes, "Manually imported UI fixture.")
+        restored.click()
+        let automatic = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: restored)
+        XCTAssertEqual(XCTWaiter.wait(for: [automatic], timeout: 15), .completed)
+        XCTAssertNotEqual(GameProfileStore.resolved(appID: game.appId, root: store.root)?.isLocal, true)
+    }
+
     func testUninstallConfirmationCancelBusyGateAndLibraryRefresh() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

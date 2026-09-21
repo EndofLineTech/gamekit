@@ -11,22 +11,38 @@ not a compatibility certification.
 
 Open a game's gear to see the profile revision, source, guidance and the exact
 arguments for the selected backend. **Update profile** checks the wiki immediately.
+**Import JSON…** selects a local profile for this game's AppID. **Export JSON…**
+saves the active profile through the macOS save dialog; when no profile exists,
+it exports an empty schema-2 template for that game. Exports contain portable
+profile parameters, not saved backend/capture preferences or session metadata.
 Normal library polling attempts each AppID at most once per day per app session;
 opening the gear also checks that game. Downloads do not block Play. A completed
 update applies to the next Gamekit Play request, not a running game.
 
 ## Resolution and offline use
 
-1. The game's explicit graphics override wins over the shared graphics default,
+1. A manually imported profile takes precedence over downloaded and bundled
+   profiles. Imports are validated against the selected AppID and the same schema
+   and 32 KiB limits as downloads. Local edits may retain or lower the revision;
+   they do not need an artificial version bump. Invalid imports preserve the
+   previous profile. The selected file is copied into managed metadata.
+2. **Use automatic profile** removes the managed import and restores the newest
+   available downloaded/bundled profile. It does not delete the original file.
+   Wiki checks continue updating the automatic cache while an import is active,
+   without replacing the imported profile.
+3. The game's explicit graphics override wins over the shared graphics default,
    exactly as before. Profiles do not select or install a backend.
-2. A valid downloaded profile supersedes the bundled profile when its revision is
+4. A valid downloaded profile supersedes the bundled profile when its revision is
    at least as new. Equal revisions must have identical content.
-3. Invalid, missing or unavailable downloads leave the last valid cache intact.
+5. Invalid, missing or unavailable downloads leave the last valid cache intact.
    Corrupt/unreadable caches fall back to bundled rules; without either, no extra
    arguments are supplied.
 
 Cache: `Metadata/GameProfiles/<AppID>.json` under Gamekit's application-support
-root. Downloads are bounded to 32 KiB and 15 seconds, from the fixed HTTPS wiki
+root. Imported overrides are stored in `Metadata/GameProfiles/Local/<AppID>.json`.
+Exported JSON can be edited and re-imported for the same game; choose **Use
+automatic profile** when finished with the local override. Downloads are bounded
+to 32 KiB and 15 seconds, from the fixed HTTPS wiki
 origin with redirects refused. Schema, AppID, runtime family, backend names,
 argument syntax and monotonic revision are checked before atomic publication.
 The cache uses the existing descriptor-relative, no-symlink storage implementation.
@@ -121,7 +137,7 @@ and at least one of:
 Use `553850.json` as the complete concrete example. For every mechanism, absence
 means unsupported/inactive, not an invitation to guess a game's configuration.
 
-Increment the revision for **every content change**, including names or notes.
+For wiki publication, increment the revision for **every content change**, including names or notes.
 To roll back a bad rule, publish the old content with a higher revision. Never
 silently reuse a revision. Keep profile guidance consistent with
 `compatibility/reports.json` and its sanitized evidence documents. Failed test

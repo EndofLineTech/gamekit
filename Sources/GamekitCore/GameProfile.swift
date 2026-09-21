@@ -112,6 +112,7 @@ public struct GameProfile: Codable, Equatable, Sendable {
 public struct ResolvedGameProfile: Sendable {
     public let profile: GameProfile
     public let source: String
+    public var isLocal: Bool = false
 }
 
 public actor GameProfileStore {
@@ -140,6 +141,15 @@ public actor GameProfileStore {
     }
 
     public static func resolved(appID: UInt32, root: URL) -> ResolvedGameProfile? {
+        if let directory = try? cache(root: root, create: false)?.directory("Local"),
+           let data = try? directory.read("\(appID).json", maximumBytes: GameProfile.maximumBytes),
+           let profile = try? GameProfile.decode(data, appID: appID) {
+            return .init(profile: profile, source: "Manually imported profile", isLocal: true)
+        }
+        return automatic(appID: appID, root: root)
+    }
+
+    private static func automatic(appID: UInt32, root: URL) -> ResolvedGameProfile? {
         let bundled = bundled(appID: appID)
         if let directory = try? cache(root: root, create: false),
            let data = try? directory.read("\(appID).json", maximumBytes: GameProfile.maximumBytes),
@@ -154,19 +164,70 @@ public actor GameProfileStore {
             .directory("GameProfiles", create: create)
     }
 
-    /// The only persistence boundary; validate completely before atomic replacement.
+    /// Explicit local edits are independent of wiki revisions. Downloads never
+    /// overwrite them; removing the import restores the latest automatic data.
+    public func importProfile(_ data: Data, appID: UInt32) throws {
+        _ = try GameProfile.decode(data, appID: appID)
+        guard let directory = try Self.cache(root: root, create: true) else { throw EnvironmentStoreError.notFound }
+        let lock = try directory.acquireLock("profiles.lock")
+        defer { withExtendedLifetime(lock) {} }
+        guard let local = try directory.directory("Local", create: true) else { throw EnvironmentStoreError.notFound }
+        try local.write(data, to: "\(appID).json", createOnly: false, beforeCommit: {})
+    }
+
+    public func importProfile(from file: URL, appID: UInt32) throws {
+        let file = try ManagedDirectory.canonicalRoot(file)
+        guard let directory = try ManagedDirectory.openRoot(file.deletingLastPathComponent(), create: false),
+              let data = try directory.read(file.lastPathComponent, maximumBytes: GameProfile.maximumBytes)
+        else { throw EnvironmentStoreError.notFound }
+        try importProfile(data, appID: appID)
+    }
+
+    public func removeImportedProfile(appID: UInt32) throws {
+        guard appID > 0 else { throw GameProfileError.invalid }
+        guard let directory = try Self.cache(root: root, create: false) else { return }
+        let lock = try directory.acquireLock("profiles.lock")
+        defer { withExtendedLifetime(lock) {} }
+        try directory.directory("Local")?.removeRegularFile("\(appID).json")
+    }
+
+    /// Export the effective profile, or an empty authoring template for a game
+    /// with no profile yet. User preferences and private runtime paths are not
+    /// part of the portable profile format.
+    public func exportProfile(appID: UInt32, name: String) throws -> Data {
+        let profile: GameProfile
+        if let resolved = Self.resolved(appID: appID, root: root) { profile = resolved.profile }
+        else {
+            profile = try GameProfile.decode(JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 2, "revision": 1, "appId": appID, "name": name,
+                "runtime": "sikarugir-10.0_6", "launchArguments": [String: [String]](),
+                "execution": [String: String](),
+                "notes": "No automatic launch adjustments are supplied. Saved user settings apply."
+            ]), appID: appID)
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let pretty = try encoder.encode(profile)
+        // Keep even maximally-sized imports re-importable after export.
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = pretty.count <= GameProfile.maximumBytes ? pretty : try encoder.encode(profile)
+        _ = try GameProfile.decode(data, appID: appID)
+        return data
+    }
+
+    /// Downloaded profiles retain monotonic revisions independently of local edits.
     @discardableResult func accept(_ data: Data, appID: UInt32) throws -> Bool {
         let profile = try GameProfile.decode(data, appID: appID)
         guard let directory = try Self.cache(root: root, create: true) else { throw EnvironmentStoreError.notFound }
         let lock = try directory.acquireLock("profiles.lock")
         defer { withExtendedLifetime(lock) {} }
-        let previous = Self.resolved(appID: appID, root: root)?.profile
+        let effectiveBefore = Self.resolved(appID: appID, root: root)?.profile
+        let previous = Self.automatic(appID: appID, root: root)?.profile
         if let previous {
             guard profile.revision >= previous.revision,
                   profile.revision != previous.revision || profile == previous else { throw GameProfileError.rollback }
         }
         try directory.write(data, to: "\(appID).json", createOnly: false, beforeCommit: {})
-        return previous != profile
+        return effectiveBefore != Self.resolved(appID: appID, root: root)?.profile
     }
 
     /// Library polling is cheap: each AppID gets at most one attempt per day in

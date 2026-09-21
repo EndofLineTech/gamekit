@@ -52,12 +52,20 @@ struct GameCompatibilityView: View {
                             }
                             profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
                             if !setup.isBusy { run() }
-                            profileStatus = profile == nil ? "No published profile found." : "Profile checked. Applies to the next Gamekit Play request."
-                        } catch { profileStatus = "Profile update unavailable. The last valid cached or bundled profile remains in use." }
+                            profileStatus = profile?.isLocal == true ? "Wiki checked. Your manually imported profile remains active."
+                                : profile == nil ? "No published profile found." : "Profile checked. Applies to the next Gamekit Play request."
+                        } catch { profileStatus = "Profile update unavailable. Your current profile or defaults remain in use." }
                     }
                 }.disabled(fetchingProfile)
             }.font(.caption)
-            if let profileStatus { Text(profileStatus).font(.caption) }
+            GameProfileTransferControls(game: game, isLocal: profile?.isLocal == true,
+                working: $fetchingProfile, status: $profileStatus) {
+                    await refreshExecutionParameters()
+                    profile = GameProfileStore.resolved(appID: game.id, root: AppStorageLocations.metadata)
+                    snapshot = nil
+                    if !setup.isBusy { run() }
+                }
+            if let profileStatus { Text(profileStatus).font(.caption).accessibilityIdentifier("game-profile-status") }
             Text("Graphics backend — this game").font(.headline)
             if let graphics {
                 GameGraphicsBackendPicker(selection: Binding(get: { graphics.override }, set: { run(backend: $0) }))
