@@ -74,6 +74,13 @@ Beads (`bd`).
 
 See [AGENTS.md](AGENTS.md) for agent workflow instructions.
 
+## License
+
+Gamekit-authored source code and documentation are licensed under the
+[GNU Affero General Public License, version 3 or later](LICENSE).
+Third-party derived compatibility revisions retain their original licenses;
+see [third-party notices](THIRD_PARTY_NOTICES.md).
+
 ## Phase 1: runtime contract
 
 - [GPTK 4.0 beta 2 package inspection](docs/gptk-package-inspection.md)
