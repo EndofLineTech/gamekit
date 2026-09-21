@@ -48,7 +48,7 @@ struct GameDockAcceptanceTests {
                     guard gk_arguments(process.identity.pid, &buffer, &length) == 0, let buffer else { continue }
                     let arguments = KernelArguments(bytes: Data(bytes: buffer, count: length))?.arguments ?? []
                     gk_free(buffer)
-                    if arguments.contains(where: { $0.lowercased().hasSuffix("factorygamesteam-win64-shipping.exe") }) { gamePIDs.insert(process.identity.pid) }
+                    if arguments.contains(where: { $0.lowercased().hasSuffix(GameFixtures.renderer.executable) }) { gamePIDs.insert(process.identity.pid) }
                 }
                 let identified = gamePIDs
                 let names = await MainActor.run {

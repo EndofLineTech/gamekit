@@ -160,6 +160,9 @@ static BOOL ValidLibraryPath(id value) {
     return YES;
 }
 
+#if defined(GAMEKIT_MVK_LIBRARY_DIRECTORY) || defined(GAMEKIT_SAVE_WRITE_GUARD) || defined(GAMEKIT_DEVICE_API_CAPTURE)
+#include "../../diagnostics/DiagnosticProfile.h"
+#endif
 static BOOL ApplyGraphicsBackend(void) {
     NSDictionary *document = ReadSessionDocument();
     id shared = document[@"sharedGraphicsBackend"];
@@ -187,7 +190,8 @@ static BOOL ApplyGraphicsBackend(void) {
     if (!ValidLibraryPath(base) || !ValidLibraryPath(cx)) return NO;
     NSString *desired = [backend isEqual:@"dxvk"] ? cx : base;
 #ifdef GAMEKIT_MVK_LIBRARY_DIRECTORY
-    if ([backend isEqual:@"dxvk"] && [imageID isEqual:@"526870"])
+    if ([backend isEqual:GamekitDiagnosticParameters(@"renderer")[@"backend"]] &&
+        GamekitDiagnosticMatches(@"renderer", imageID, WindowsImage()))
         desired = [[NSString stringWithUTF8String:GAMEKIT_MVK_LIBRARY_DIRECTORY] stringByAppendingFormat:@":%@", base];
 #endif
     if ([EnvironmentString("DYLD_FALLBACK_LIBRARY_PATH") isEqual:desired]) return NO;
@@ -266,8 +270,7 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
             extern void GamekitProtectSatisfactorySaves(void);
             NSString *appID = ImageAppID(ReadSessionDocument());
             NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-            if (([appID isEqual:@"526870"] && [image isEqual:@"factorygamesteam-win64-shipping.exe"]) ||
-                ([appID isEqual:@"900001"] && [image hasPrefix:@"probe"]))
+            if (GamekitDiagnosticMatches(@"renderer", appID, image) || GamekitDiagnosticMatches(@"probe", appID, image))
                 GamekitProtectSatisfactorySaves();
         };
 #endif
@@ -276,8 +279,8 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
         NSDictionary *captureDocument = ReadSessionDocument();
         NSString *captureID = ImageAppID(captureDocument);
         NSString *captureImage = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-        GamekitArmDeviceAPICapture(([captureID isEqual:@"553850"] && [captureImage isEqual:@"helldivers2.exe"]) ||
-                                  ([captureID isEqual:@"900001"] && [captureImage hasPrefix:@"probe"]));
+        GamekitArmDeviceAPICapture(GamekitDiagnosticMatches(@"primary", captureID, captureImage) ||
+                                  GamekitDiagnosticMatches(@"probe", captureID, captureImage));
 #endif
         BOOL libraryPathChanged = ApplyGraphicsBackend();
         if (!getenv("GAMEKIT_GAME_NAMES_FILE") || !getenv("GAMEKIT_SESSION_ID")) return;

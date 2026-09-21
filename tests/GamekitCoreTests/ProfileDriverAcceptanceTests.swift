@@ -25,26 +25,26 @@ struct ProfileDriverAcceptanceTests {
         try FileManager.default.copyItem(at: URL(fileURLWithPath: probe), to: game.appendingPathComponent("gamekit-dxgi-probe.exe"))
         try Data(#""AppState" { "appid" "42" "name" "Profile fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
             .write(to: apps.appendingPathComponent("appmanifest_42.acf"))
-        let profile = try #require(GameProfileStore.bundled(appID: 553850))
+        let profile = try #require(GameProfileStore.bundled(appID: GameFixtures.primary.appId))
         var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
         object["appId"] = 42; object["name"] = "Profile fixture"; object["revision"] = 99
         var execution = try #require(object["execution"] as? [String: Any])
         execution["executable"] = "gamekit-dxgi-probe.exe"
         var driver = try #require(execution["driver"] as? [String: Any])
-        driver["replacementVersion"] = [1, 2, 3, 4]
+        driver["replacementVersion"] = GameFixtures.syntheticVersion
         execution["driver"] = driver; object["execution"] = execution
         try await GameProfileStore(root: store.root).accept(JSONSerialization.data(withJSONObject: object), appID: 42)
         let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle,
                                    identityHelper: URL(fileURLWithPath: helper), graphicsBackend: .metal3)
         let session = try await RuntimeSession.startGameProbe(store: store, id: id, layout: layout,
             game: .init(appID: 42, name: "Profile fixture"),
-            arguments: [#"C:\Program Files (x86)\Steam\steamapps\common\Fixture\gamekit-dxgi-probe.exe"#, "0001000200030004"])
+            arguments: [#"C:\Program Files (x86)\Steam\steamapps\common\Fixture\gamekit-dxgi-probe.exe"#, GameFixtures.syntheticHex])
         do {
             _ = try await session.waitUntilStopped()
             let result = try await session.stop()
             print(result.stdoutText)
             #expect(result.termination == .exited(0))
-            #expect(result.stdoutText.contains("version=0001000200030004"))
+            #expect(result.stdoutText.contains("version=" + GameFixtures.syntheticHex))
             #expect(result.stdoutText.contains("D3D12CreateDevice hr=00000000"))
             try #require(try await session.snapshot().processes.isEmpty)
             try FileManager.default.removeItem(at: parent)

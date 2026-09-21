@@ -26,7 +26,7 @@ struct HelldiversGraphicsBackendTests {
             gk_free(buffer)
             let fields = bytes.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
             let image = KernelArguments(bytes: bytes)?.arguments.first { $0.lowercased().hasSuffix(".exe") }
-            let game = image?.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last?.lowercased() == "helldivers2.exe"
+            let game = image?.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last?.lowercased() == GameFixtures.primary.executable
             guard process.role == .steam || game else { continue }
             if expected == .metal3 { try #require(fields.contains("D3DM_MTL4=0")) }
             else { try #require(!fields.contains { $0.hasPrefix("D3DM_MTL4=") }) }
@@ -56,7 +56,7 @@ struct HelldiversGraphicsBackendTests {
         let lifecycle = SteamLifecycle(store: store, layout: layout)
         _ = try await lifecycle.stop()
         do {
-            try await lifecycle.launchGame(appID: 553850)
+            try await lifecycle.launchGame(appID: GameFixtures.primary.appId)
             for _ in 0..<60 {
                 let snapshot = await observer.inspect(record: record, prefix: prefix, layout: layout)
                 try #require(snapshot.complete)
@@ -69,7 +69,7 @@ struct HelldiversGraphicsBackendTests {
                     let fields = bytes.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
                     let arguments = KernelArguments(bytes: bytes)?.arguments ?? []
                     let image = arguments.first { $0.lowercased().hasSuffix(".exe") }
-                    let isGame = image?.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last?.lowercased() == "helldivers2.exe"
+                    let isGame = image?.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last?.lowercased() == GameFixtures.primary.executable
                     if process.role == .steam || isGame {
                         try #require(fields.contains("D3DM_MTL4=0"), "The managed process must actually inherit the comparison setting")
                         if isGame {

@@ -14,9 +14,9 @@ struct GameEvaluationLaunchTests {
         let env = ProcessInfo.processInfo.environment
         let rawID = try #require(env["GAMEKIT_E6_APPID"])
         let appID = try #require(UInt32(rawID))
-        try #require([553850, 413150, 526870, 16030].contains(appID))
+        try #require([GameFixtures.primary.appId, GameFixtures.other.appId, GameFixtures.renderer.appId, GameFixtures.trace.appId].contains(appID))
         let satisfactoryD3D11 = env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1"
-        try #require(!satisfactoryD3D11 || appID == 526870)
+        try #require(!satisfactoryD3D11 || appID == GameFixtures.renderer.appId)
         let sandbox = env["GAMEKIT_E6_SATISFACTORY_USER_DIR"]
         if let sandbox {
             try #require(satisfactoryD3D11 && sandbox.hasPrefix("/") && !sandbox.contains(where: { $0.isWhitespace }))
@@ -31,7 +31,7 @@ struct GameEvaluationLaunchTests {
         let disableOcclusion = env["GAMEKIT_E6_DISABLE_OCCLUSION"] == "1"
         try #require(!disableOcclusion || sandbox != nil)
         let helldiversD3D11 = env["GAMEKIT_E6_HELLDIVERS_D3D11"] == "1"
-        try #require(!helldiversD3D11 || (appID == 553850 && env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] == nil && !satisfactoryD3D11))
+        try #require(!helldiversD3D11 || (appID == GameFixtures.primary.appId && env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] == nil && !satisfactoryD3D11))
         let disableStreamline = env["GAMEKIT_E6_DISABLE_STREAMLINE"] == "1"
         try #require(!disableStreamline || satisfactoryD3D11)
         let preferComputePost = env["GAMEKIT_E6_PREFER_COMPUTE_POST"] == "1"
@@ -61,7 +61,7 @@ struct GameEvaluationLaunchTests {
             let counter = try #require(env["GAMEKIT_E6_COUNTER_TOOL"])
             try #require(counter.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: counter))
         }
-        try #require(!passiveAfterWarning || (appID == 553850 && continueDriverWarning))
+        try #require(!passiveAfterWarning || (appID == GameFixtures.primary.appId && continueDriverWarning))
         let confirmEnglish = env["GAMEKIT_E6_CONFIRM_ENGLISH"] == "1"
         let advanceTitle = env["GAMEKIT_E6_ADVANCE_TITLE"] == "1"
         let declineOptionalData = env["GAMEKIT_E6_DECLINE_OPTIONAL_DATA"] == "1"
@@ -75,12 +75,12 @@ struct GameEvaluationLaunchTests {
         try #require(!(passiveAfterWarning && expectNoSpaceHost))
         try #require(!expectNoSpaceHost || !spaceRoundTrip)
         try #require(!spaceHost || spaceRoundTrip)
-        try #require(!spaceRoundTrip || (appID == 553850 && seconds >= 90 && CGPreflightPostEventAccess()))
-        try #require(!continueDriverWarning || (appID == 553850 && CGPreflightPostEventAccess()))
-        try #require(!confirmEnglish || (appID == 553850 && CGPreflightPostEventAccess()))
-        try #require(!advanceTitle || (appID == 553850 && CGPreflightPostEventAccess()))
-        try #require(!declineOptionalData || (appID == 553850 && CGPreflightPostEventAccess()))
-        try #require(!advanceSetupDefaults || (appID == 553850 && CGPreflightPostEventAccess()))
+        try #require(!spaceRoundTrip || (appID == GameFixtures.primary.appId && seconds >= 90 && CGPreflightPostEventAccess()))
+        try #require(!continueDriverWarning || (appID == GameFixtures.primary.appId && CGPreflightPostEventAccess()))
+        try #require(!confirmEnglish || (appID == GameFixtures.primary.appId && CGPreflightPostEventAccess()))
+        try #require(!advanceTitle || (appID == GameFixtures.primary.appId && CGPreflightPostEventAccess()))
+        try #require(!declineOptionalData || (appID == GameFixtures.primary.appId && CGPreflightPostEventAccess()))
+        try #require(!advanceSetupDefaults || (appID == GameFixtures.primary.appId && CGPreflightPostEventAccess()))
         if confirmEnglish || advanceTitle || declineOptionalData || advanceSetupDefaults {
             let tool = try #require(env["GAMEKIT_E6_OCR_TOOL"])
             try #require(tool.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: tool))
@@ -92,9 +92,9 @@ struct GameEvaluationLaunchTests {
         let experiment = try HelldiversTextInputExperiment.root()
         let driverExperiment = try DriverVersionExperiment.root()
         let verifyDriverWarning = driverExperiment != nil || env["GAMEKIT_E6_VERIFY_DRIVER_WARNING_ABSENT"] == "1"
-        try #require(!verifyDriverWarning || (appID == 553850 && !continueDriverWarning))
-        try #require(driverExperiment == nil || (experiment == nil && appID == 553850 && !continueDriverWarning))
-        try #require(experiment == nil || appID == 553850)
+        try #require(!verifyDriverWarning || (appID == GameFixtures.primary.appId && !continueDriverWarning))
+        try #require(driverExperiment == nil || (experiment == nil && appID == GameFixtures.primary.appId && !continueDriverWarning))
+        try #require(experiment == nil || appID == GameFixtures.primary.appId)
         let store = try EnvironmentStore(root: (driverExperiment ?? experiment)?.appendingPathComponent("Gamekit") ?? EnvironmentStore.applicationSupportRoot)
         let helper = package.appendingPathComponent("Contents/Frameworks/WineGameIdentity.dylib")
         let layout: RuntimeLayout
@@ -186,7 +186,7 @@ struct GameEvaluationLaunchTests {
             print("E6 AppID=\(appID), build=\(game.buildID ?? "unknown"), observation=\(Int(seconds))s")
             if !observeExisting {
                 if let script = env["GAMEKIT_E6_UI_LAUNCH_SCRIPT"] {
-                    try #require(driverExperiment == nil && [553850, 526870].contains(appID) && script.hasPrefix("/"))
+                    try #require(driverExperiment == nil && [GameFixtures.primary.appId, GameFixtures.renderer.appId].contains(appID) && script.hasPrefix("/"))
                     let pressed = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/osascript"),
                         arguments: [script, "launch-game-\(appID)"], timeout: 40, outputLimit: 4096))
                     print(pressed.stdoutText)
@@ -200,11 +200,11 @@ struct GameEvaluationLaunchTests {
                     let session = try #require(sessions.first)
                     let steam = prefix.appendingPathComponent(record.steamExecutable.rawValue)
                     let launched = try await ProcessExecutor().run(.init(executable: layout.wine,
-                        arguments: helldiversD3D11 ? [steam.path, "-applaunch", String(appID), "--use-d3d11"] : satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), "-dx11"] +
-                            (disableStreamline ? ["-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"] : []) +
-                            (preferComputePost ? ["-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"] : []) +
-                            (disableOcclusion ? ["-ini:Engine:[SystemSettings]:r.AllowOcclusionQueries=0"] : []) +
-                            (sandbox.map { ["-UserDir=Z:" + $0] } ?? []) : [steam.path, "steam://rungameid/\(appID)"],
+                        arguments: helldiversD3D11 ? [steam.path, "-applaunch", String(appID), GameFixtures.primary.option("dx11")] : satisfactoryD3D11 ? [steam.path, "-applaunch", String(appID), GameFixtures.renderer.option("dx11")] +
+                            (disableStreamline ? [GameFixtures.renderer.option("disableStreamline")] : []) +
+                            (preferComputePost ? [GameFixtures.renderer.option("preferCompute")] : []) +
+                            (disableOcclusion ? [GameFixtures.renderer.option("disableOcclusion")] : []) +
+                            (sandbox.map { [GameFixtures.renderer.option("userDirectoryPrefix") + $0] } ?? []) : [steam.path, "steam://rungameid/\(appID)"],
                         environment: layout.environment(prefix: prefix, session: session),
                         workingDirectory: steam.deletingLastPathComponent(), timeout: 10, outputLimit: 8192))
                     try #require(launched.termination == .exited(0))

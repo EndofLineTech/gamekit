@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from game_fixtures import GAMES, ROOT
 
 
 class FileReadTimingTests(unittest.TestCase):
@@ -12,7 +13,7 @@ class FileReadTimingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp).resolve()
             helper = root / "trace.dylib"
-            program = root / "helldivers2.exe"
+            program = root / GAMES["primary"]["executable"]
             source = Path(__file__).resolve().parents[1] / "diagnostics/FileReadTiming.m"
             subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wall", "-Wextra", "-Werror", "-dynamiclib", "-framework", "Foundation",
                             '-DGAMEKIT_READ_TIMING_DIRECTORY="' + str(root) + '"', str(source), "-o", str(helper)], check=True, capture_output=True)
@@ -44,7 +45,8 @@ int main(int argc, char **argv) {
             secret = root / "private-data"
             secret.write_text("private-content-not-for-logs")
             env = dict(os.environ, DYLD_INSERT_LIBRARIES=str(helper), WINEPREFIX=str(root),
-                       GAMEKIT_SESSION_ID="59435B07-8324-4A5D-AD68-578E7AA813DB")
+                       GAMEKIT_SESSION_ID="59435B07-8324-4A5D-AD68-578E7AA813DB",
+                       GAMEKIT_DIAGNOSTIC_PROFILE=str(ROOT / "tests/fixtures/games.json"))
             subprocess.run([str(program), str(secret)], env=env, check=True, capture_output=True, timeout=10)
             log = (root / "reads.jsonl").read_text()
             records = [json.loads(line) for line in log.splitlines()]

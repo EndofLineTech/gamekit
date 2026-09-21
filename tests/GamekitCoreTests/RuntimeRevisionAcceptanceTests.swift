@@ -8,7 +8,7 @@ struct RuntimeRevisionAcceptanceTests {
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_REVISION_ACCEPTANCE"] == "1"))
     func driverSwitchAndRollback() async throws {
         let probe = try #require(ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_PROBE_PATH"])
-        try #require(URL(fileURLWithPath: probe).lastPathComponent == "helldivers2.exe")
+        try #require(URL(fileURLWithPath: probe).lastPathComponent == GameFixtures.primary.executable)
         let store = try EnvironmentStore()
         let settings = RuntimeSettingsStore(store: store)
         let old = try await settings.layout()
@@ -26,7 +26,7 @@ struct RuntimeRevisionAcceptanceTests {
         }
         func inspect(_ layout: RuntimeLayout, appID: UInt32, expected: String) async throws {
             let session = try await RuntimeSession.startGameProbe(store: store, id: SteamInstallationRecipe.environmentID,
-                layout: layout, game: .init(appID: appID, name: appID == 553850 ? "HELLDIVERS™ 2" : "Driver control"), arguments: [probe, expected])
+                layout: layout, game: .init(appID: appID, name: appID == GameFixtures.primary.appId ? GameFixtures.primary.name : "Driver control"), arguments: [probe, expected])
             let result = await session.command.result()
             print("Driver acceptance \(layout.profile.revision.rawValue) AppID=\(appID): \(result.stdoutText)")
             _ = try await session.stop()
@@ -35,11 +35,11 @@ struct RuntimeRevisionAcceptanceTests {
         }
         do {
             let driver = try await select(.driverVersion1)
-            let enabled = try GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: 553850, revision: driver.profile.revision)
-            try await inspect(driver, appID: 553850, expected: enabled ? "substituted" : "baseline")
-            try await inspect(driver, appID: 999998, expected: "baseline")
+            let enabled = try GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: GameFixtures.primary.appId, revision: driver.profile.revision)
+            try await inspect(driver, appID: GameFixtures.primary.appId, expected: enabled ? GameFixtures.primary.replacementHex : GameFixtures.primary.matchHex)
+            try await inspect(driver, appID: 999998, expected: GameFixtures.primary.matchHex)
             let rollback = try await select(.textInput1, bundle: old.bundle)
-            try await inspect(rollback, appID: 553850, expected: "baseline")
+            try await inspect(rollback, appID: GameFixtures.primary.appId, expected: GameFixtures.primary.matchHex)
             _ = try await select(.driverVersion1)
             print("Driver revision selected; real query, other-loader control, rollback, and unchanged prefix DLL/registry at selection verified")
         } catch {

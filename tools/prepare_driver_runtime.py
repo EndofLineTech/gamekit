@@ -10,6 +10,7 @@ import tempfile
 from package_local import digest, publish, validate_destination
 from prepare_text_input_runtime import BASE_HASHES, ARTIFACT_HASHES, DLL, require_digest
 from stage_driver_trial import renamed_dxgi, stamp_builtin
+from driver_profile import DEFAULT, driver_profile, header
 
 SHIM = "Contents/SharedSupport/wine/lib/gamekit/helldivers-dxgi.dll"
 ORIGINAL = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgm.dll"
@@ -22,7 +23,10 @@ def build(output):
     validate_destination(output)
     with tempfile.TemporaryDirectory(prefix=".driver-build-", dir=output.parent) as temporary:
         raw = Path(temporary) / "dxgi.dll"
+        parameters = Path(temporary) / "parameters.h"
+        header(parameters, driver_profile())
         subprocess.run(["x86_64-w64-mingw32-gcc", "-shared", "-O2", "-s", "-fno-strict-aliasing",
+                        "-include", str(parameters),
                         "-Wall", "-Wextra", "-Werror", "-Wno-cast-function-type", "-Wl,--no-insert-timestamp",
                         "-Wl,--image-base,0x22bf90000",  # Pin ld's otherwise output-path-dependent preferred base.
                         str(ROOT / "Sources/HelldiversDriverVersion/dxgi.c"),
@@ -69,9 +73,12 @@ def prepare(source, destination, shim):
         for name in ("dxgi.c", "dxgi.def"):
             shutil.copyfile(ROOT / "Sources/HelldiversDriverVersion" / name, materials / name)
         shutil.copyfile(ROOT / "tools/prepare_driver_runtime.py", materials / "prepare_driver_runtime.py")
+        shutil.copyfile(ROOT / "tools/driver_profile.py", materials / "driver_profile.py")
+        shutil.copyfile(DEFAULT, materials / "legacy-driver-version-1.json")
         shutil.copyfile(ROOT / "docs/helldivers-driver-runtime.md", materials / "BUILD.md")
-        manifest = {"schemaVersion": 1, "revision": "driver-version-1", "compatibilityVersion": "35.0.15.6094",
-                    "scope": "Helldivers 553850 only; derived loader DXGI; no prefix mutation",
+        parameters = driver_profile()
+        manifest = {"schemaVersion": 1, "revision": "driver-version-1", "compatibilityVersion": ".".join(map(str, parameters["replacementVersion"])),
+                    "scope": f"AppID {parameters['appId']} only; derived loader DXGI; no prefix mutation",
                     "shimSHA256": SHIM_HASH, "renamedOriginalSHA256": ORIGINAL_HASH,
                     "sourceFiles": {p.name: digest(p) for p in sorted(materials.iterdir())}}
         (materials / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

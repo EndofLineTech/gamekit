@@ -10,7 +10,7 @@ struct HelldiversDX11AcceptanceTests {
         let env = ProcessInfo.processInfo.environment
         let choice = try #require(env["GAMEKIT_HELLDIVERS_DX11_BACKEND"].flatMap(GameGraphicsOverride.init(rawValue:)))
         try #require([.dxmt, .dxvk, .metal3].contains(choice))
-        try #require(env["GAMEKIT_E6_HELLDIVERS_D3D11"] == "1" && env["GAMEKIT_E6_APPID"] == "553850")
+        try #require(env["GAMEKIT_E6_HELLDIVERS_D3D11"] == "1" && env["GAMEKIT_E6_APPID"] == String(GameFixtures.primary.appId))
         let settingsURL = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_WARNING_SETTINGS"]))
         let store = try EnvironmentStore()
         let layout = try await RuntimeSettingsStore(store: store).layout()
@@ -22,7 +22,7 @@ struct HelldiversDX11AcceptanceTests {
         try #require(snapshot.complete && !snapshot.processes.contains { $0.role == .other }, "Close games before validation")
         _ = try await lifecycle.stop()
         let preferences = GameCompatibilityStore(store: store)
-        let original = try await preferences.inspectGraphics(appID: 553850)
+        let original = try await preferences.inspectGraphics(appID: GameFixtures.primary.appId)
         let directory = try #require(try ManagedDirectory.openRoot(settingsURL.deletingLastPathComponent(), create: false))
         let settings = try #require(try directory.read(settingsURL.lastPathComponent))
         let freshCache = env["GAMEKIT_HD_DX11_FRESH_CACHE"] == "1"
@@ -77,16 +77,16 @@ struct HelldiversDX11AcceptanceTests {
         }
         do {
             try await isolateCache()
-            _ = try await preferences.setGraphicsBackend(choice, appID: 553850)
+            _ = try await preferences.setGraphicsBackend(choice, appID: GameFixtures.primary.appId)
             try await GameEvaluationLaunchTests().observeLaunch()
             try await restore()
-            _ = try await preferences.setGraphicsBackend(original.override, appID: 553850)
+            _ = try await preferences.setGraphicsBackend(original.override, appID: GameFixtures.primary.appId)
         } catch {
             try await restore()
-            _ = try await preferences.setGraphicsBackend(original.override, appID: 553850)
+            _ = try await preferences.setGraphicsBackend(original.override, appID: GameFixtures.primary.appId)
             throw error
         }
-        #expect(try await preferences.inspectGraphics(appID: 553850).override == original.override)
+        #expect(try await preferences.inspectGraphics(appID: GameFixtures.primary.appId).override == original.override)
         #expect(try directory.read(settingsURL.lastPathComponent) == settings)
         print("Helldivers DX11 \(choice.rawValue): session stopped; original backend and game settings restored")
         print("Observation/cleanup completed; inspect renderer logs and screenshots separately for game success and API selection")

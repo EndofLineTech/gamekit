@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Frozen parameters for reproducing the pinned driver-version-1 artifact; do not change in place.",
+  "primary": {
+    "appId": 553850,
+    "executable": "helldivers2.exe",
+    "probeExecutable": "gamekit-dxgi-probe.exe",
+    "matchVersion": [65535, 65535, 65535, 65535],
+    "replacementVersion": [35, 0, 15, 6094]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "primary": {"appId": 553850, "executable": "helldivers2.exe", "probeExecutable": "gamekit-dxgi-probe.exe", "installationSuffix": "/steamapps/common/Helldivers 2/", "matchVersion": [65535,65535,65535,65535], "replacementVersion": [35,0,15,6094], "options": {"dx11": "--use-d3d11"}},
+  "renderer": {"appId": 526870, "executable": "factorygamesteam-win64-shipping.exe", "backend": "dxvk", "environment": {"MVK_CONFIG_FAST_MATH_ENABLED": "0", "MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE": "1"}, "options": {"dx11": "-dx11", "disableStreamline": "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0", "preferCompute": "-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1", "disableOcclusion": "-ini:Engine:[SystemSettings]:r.AllowOcclusionQueries=0", "userDirectoryPrefix": "-UserDir=Z:"}, "launchArguments": {"dxmt": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0"], "dxvk": ["-dx11", "-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0", "-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1"]}},
+  "probe": {"appId": 900001, "executablePrefix": "probe"},
+  "legacyTrace": {"appId": 16030, "executable": "7 Wonders - Treasures of Seven.exe"},
+  "other": {"appId": 413150, "executable": "Stardew Valley.exe"},
+  "legacyDesktop": {"appId": 15900, "executable": "WondersII_1_13.exe", "desktop": "Gamekit15900", "size": "800x600", "candidateSizes": ["800x600", "1024x768"]}
+}

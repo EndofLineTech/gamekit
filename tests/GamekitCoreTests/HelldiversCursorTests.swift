@@ -16,7 +16,7 @@ struct HelldiversCursorTests {
         let store = try EnvironmentStore()
         let layout = try await RuntimeSettingsStore(store: store).layout()
         let session = try await RuntimeSession.start(store: store, id: SteamInstallationRecipe.environmentID,
-            layout: layout, arguments: [executable, action], timeout: 30)
+            layout: layout, arguments: [executable, action, GameFixtures.primary.executable], timeout: 30)
         do {
             let result = await session.command.result()
             print(result.stdoutText)

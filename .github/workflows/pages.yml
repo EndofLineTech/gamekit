@@ -28,6 +28,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_steam_catalog.py' -v
           python3 -m unittest discover -s tests -p 'test_compatibility_wiki.py' -v
           python3 -m unittest discover -s tests -p 'test_game_profiles.py' -v
+          python3 tools/check_game_configuration.py
       - name: Build public site only
         run: python3 tools/build_compatibility_wiki.py --output .build/compatibility-site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

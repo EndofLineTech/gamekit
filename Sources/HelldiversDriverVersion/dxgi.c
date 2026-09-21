@@ -1,8 +1,7 @@
 /* Game-scoped DXGI compatibility version, not a physical driver version.
  * Independently implemented after studying dappermint/winecx-gptk df88b180.
- * Only Helldivers and the explicit probe receive the substitution. Other
- * processes, HRESULTs and non-sentinel versions pass through unchanged.
- * Installed only in the Helldivers derived loader in driver-version-1.
+ * Targets and versions come from JSON: runtime parameters for current builds,
+ * a generated parameter header for historical pinned-artifact reproduction.
  */
 #define COBJMACROS
 #include <windows.h>
@@ -12,6 +11,8 @@
 #include <wchar.h>
 #ifdef GAMEKIT_PROFILE_DRIVER
 #include "profile_parameters.h"
+#elif !defined(GAMEKIT_LEGACY_PARAMETERS)
+#error "Supply runtime profile mode or a JSON-generated legacy parameter header"
 #endif
 
 typedef HRESULT (WINAPI *CheckVersion)(IDXGIAdapter *, REFIID, LARGE_INTEGER *);
@@ -43,9 +44,9 @@ static BOOL CALLBACK loadOriginal(PINIT_ONCE once, PVOID parameter, PVOID *conte
 #else
         const WCHAR *name = wcsrchr(path, L'\\');
         name = name ? name + 1 : path;
-        target = !lstrcmpiW(name, L"helldivers2.exe");
+        target = !lstrcmpiW(name, GAMEKIT_DRIVER_TARGET);
 #ifdef GAMEKIT_DRIVER_DIAGNOSTICS
-        target = target || !lstrcmpiW(name, L"gamekit-dxgi-probe.exe");
+        target = target || !lstrcmpiW(name, GAMEKIT_DRIVER_PROBE);
 #endif
 #endif
     }
@@ -66,14 +67,14 @@ static HRESULT WINAPI substituteVersion(IDXGIAdapter *adapter, REFIID iid, LARGE
     if (SUCCEEDED(result) && version && (ULONGLONG)version->QuadPart == profileMatch) {
         version->QuadPart = (LONGLONG)profileReplacement;
 #else
-    if (SUCCEEDED(result) && version && version->QuadPart == -1) {
-        version->QuadPart = (LONGLONG)0x00230000000f17ceULL; /* Legacy pinned runtime only. */
+    if (SUCCEEDED(result) && version && version->QuadPart == GAMEKIT_DRIVER_MATCH) {
+        version->QuadPart = GAMEKIT_DRIVER_REPLACEMENT;
 #endif
 #ifdef GAMEKIT_DRIVER_DIAGNOSTICS
         if (InterlockedIncrement(&records) <= 16) {
             FILE *log = fopen("C:\\gamekit-driver-trial.log", "a");
             if (log) {
-                fprintf(log, "pid=%lu sentinel=-1 substituted=35.0.15.6094\n", GetCurrentProcessId());
+                fprintf(log, "pid=%lu substituted=%016llx\n", GetCurrentProcessId(), (unsigned long long)version->QuadPart);
                 fclose(log);
             }
         }

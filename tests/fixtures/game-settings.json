@@ -1,0 +1,4 @@
+{
+  "registry": "WINE REGISTRY Version 2\n;; All keys relative to REGISTRY\\\\User\\\\fixture\n\n#arch=win64\n\n[Software\\\\Wine\\\\Mac Driver] 1\n\"CaptureDisplaysForFullscreen\"=\"y\"\n\n[Software\\\\Wine\\\\AppDefaults\\\\helldivers2.exe\\\\Mac Driver] 1\n\"OtherSetting\"=\"keep\"\n\"CaptureDisplaysForFullscreen\"=\"n\"\n\n[Software\\\\Other] 1\n\"CaptureDisplaysForFullscreen\"=\"unrelated\"\n",
+  "syntheticDriverVersion": [1,2,3,4]
+}

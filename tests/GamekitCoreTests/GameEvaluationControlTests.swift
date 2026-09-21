@@ -11,7 +11,7 @@ struct GameEvaluationControlTests {
     func showInstall() async throws {
         let rawID = try #require(ProcessInfo.processInfo.environment["GAMEKIT_E6_APPID"])
         let appID = try #require(UInt32(rawID))
-        try #require([553850, 413150].contains(appID))
+        try #require([GameFixtures.primary.appId, GameFixtures.other.appId].contains(appID))
         let store = try EnvironmentStore()
         let layout = try await RuntimeSettingsStore(store: store).layout()
         let lifecycle = SteamLifecycle(store: store, layout: layout)
