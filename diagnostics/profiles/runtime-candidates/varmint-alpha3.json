@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "candidate": "Varmint v0.2.0-alpha.3",
+  "releaseURL": "https://github.com/kisasexypantera94/varmint/releases/tag/v0.2.0-alpha.3",
+  "archive": "Varmint-0.2.0-alpha.3-macOS-arm64.zip",
+  "archiveSHA256": "9497af4cc1c17892805ebec9e32f980fa2f750b6dba04b0dcec42b110ecadf28",
+  "kind": "ARM64 Linux VM with FEX and native graphics paths; distinct from a Darwin Wine replacement"
+}
