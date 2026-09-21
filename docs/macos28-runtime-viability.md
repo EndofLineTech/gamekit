@@ -2,6 +2,11 @@
 
 Research date: **2026-09-18**. Issue: `gamekit-6v1`.
 
+**September 21 follow-up:** [Native runtime candidate qualification](native-runtime-candidate-qualification.md)
+records a newly evaluated public VKMT artifact, real native-host/x64 execution,
+failed graphics gates, and the expanded ARM64 alternative search. The artifact
+availability statements below describe the original September 18 investigation.
+
 ## Conclusion and support decision
 
 **Keep the accepted Gamekit runtime supported on macOS 27 only.** There is no

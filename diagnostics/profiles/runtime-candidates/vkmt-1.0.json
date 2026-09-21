@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "candidate": "VKMT-1.0",
+  "releaseURL": "https://github.com/metalsharp/VKMT-Wine/releases/tag/VKMT-1.0",
+  "documentationCommit": "184ceba465a5a0add6e4eb245360da67f2401655",
+  "archiveRoot": "MetalSharp-Wine-Runtime-COMPLETE-all-arch-2026-07-31",
+  "archiveSHA256": "5d0652cd89d9d9bf2d6f1d44e57cae9037ff5b16f4f29209fc40a15aa7905848",
+  "wine": "wine/build-ec/wine",
+  "wineserver": "wine/build-ec/server/wineserver",
+  "variants": {
+    "vkd3d-paired": {
+      "environment": {
+        "WINEDLLOVERRIDES": "winemenubuilder.exe,mscoree,mshtml=;d3d12,d3d12core,dxgi=n,b",
+        "DYLD_LIBRARY_PATH": "{runtime}/graphics/vkd3d-proton-macos-v1.0:{runtime}/wine/build-ec/runtime/gstreamer-arm64/lib:{runtime}/wine/build-ec/dlls/winecoreaudio.drv:{runtime}/wine/build-ec/dlls/secur32:{runtime}/wine/build-ec/dlls/ntdll:{runtime}/wine/build-ec/dlls/win32u",
+        "VK_ICD_FILENAMES": "{runtime}/graphics/vkd3d-proton-macos-v1.0/MoltenVK_icd.json",
+        "MVK_PRESENT_MODE": "1",
+        "VKD3D_DEBUG": "warn"
+      },
+      "prefixFiles": {
+        "drive_c/windows/system32/d3d12.dll": "graphics/vkd3d-proton-macos-v1.0/d3d12.dll",
+        "drive_c/windows/system32/d3d12core.dll": "graphics/vkd3d-proton-macos-v1.0/d3d12core.dll",
+        "drive_c/windows/system32/dxgi.dll": "graphics/vkd3d-proton-macos-v1.0/dxgi.dll"
+      }
+    },
+    "dxmt": {
+      "environment": {
+        "WINEDLLPATH": "{runtime}/wine/build-ec/dxmt-v0.80",
+        "WINEDLLOVERRIDES": "winemenubuilder.exe,mscoree,mshtml=;d3d11,dxgi=n,b"
+      },
+      "prefixFiles": {
+        "drive_c/windows/system32/d3d11.dll": "wine/build-ec/dxmt-v0.80/aarch64-windows/d3d11.dll",
+        "drive_c/windows/system32/dxgi.dll": "wine/build-ec/dxmt-v0.80/aarch64-windows/dxgi.dll"
+      }
+    },
+    "vkd3d": {
+      "environment": {
+        "WINEDLLOVERRIDES": "winemenubuilder.exe,mscoree,mshtml=;d3d12,d3d12core,dxgi=n,b",
+        "VKD3D_DEBUG": "warn"
+      },
+      "prefixFiles": {
+        "drive_c/windows/system32/d3d12.dll": "graphics/vkd3d-proton/x86_64/d3d12.dll",
+        "drive_c/windows/system32/d3d12core.dll": "graphics/vkd3d-proton/x86_64/d3d12core.dll",
+        "drive_c/windows/system32/dxgi.dll": "graphics/dxvk/x86_64/dxgi.dll"
+      }
+    }
+  },
+  "environment": {
+    "WINEBUILDDIR": "{runtime}/wine/build-ec",
+    "DYLD_LIBRARY_PATH": "{runtime}/wine/build-ec/runtime/gstreamer-arm64/lib:{runtime}/wine/build-ec/dlls/winecoreaudio.drv:{runtime}/wine/build-ec/dlls/secur32:{runtime}/wine/build-ec/dlls/ntdll:{runtime}/wine/build-ec/dlls/win32u",
+    "GI_TYPELIB_PATH": "{runtime}/wine/build-ec/runtime/gstreamer-arm64/girepository-1.0",
+    "GST_PLUGIN_PATH_1_0": "{runtime}/wine/build-ec/runtime/gstreamer-arm64/lib/gstreamer-1.0",
+    "GST_PLUGIN_SYSTEM_PATH_1_0": "{runtime}/wine/build-ec/runtime/gstreamer-arm64/lib/gstreamer-1.0",
+    "GST_PLUGIN_SCANNER_1_0": "{runtime}/wine/build-ec/runtime/gstreamer-arm64/libexec/gstreamer-1.0/gst-plugin-scanner",
+    "GST_REGISTRY": "{prefix}/.vkmt/gstreamer-registry.bin",
+    "FEX_TSOENABLED": "0",
+    "FEX_VECTORTSOENABLED": "0",
+    "FEX_MEMCPYSETTSOENABLED": "0",
+    "FEX_ENABLECODECACHINGWIP": "0",
+    "WINEDEBUG": "-all",
+    "WINEDEBUGGER": "none",
+    "WINEDLLOVERRIDES": "winemenubuilder.exe,mscoree,mshtml=",
+    "DXMT_CONFIG_FILE": "{runtime}/runtime/dxmt.conf"
+  },
+  "parts": [
+    {"name": "MetalSharp-Wine-Runtime-COMPLETE-all-arch-2026-07-31.tar.zst.part01", "sha256": "363a1144981a79123d5facf5714c7487849679c53335e1527f3821110bc7a65e"},
+    {"name": "MetalSharp-Wine-Runtime-COMPLETE-all-arch-2026-07-31.tar.zst.part02", "sha256": "5efab92c45f2e5276aa3e3bbb74253728ece283f25999ef677061d5c3d02161c"},
+    {"name": "MetalSharp-Wine-Runtime-COMPLETE-all-arch-2026-07-31.tar.zst.part03", "sha256": "aec384f5cafb2e6767e8abfe10ef4a577cd88b83950cfdfef1c8e55e7d65b2c6"},
+    {"name": "MetalSharp-Wine-Runtime-COMPLETE-all-arch-2026-07-31.tar.zst.part04", "sha256": "42bc0b08d165de54d3210e4ac08b3b82e22c848918b93404957f8a60fb5c7c78"}
+  ],
+  "inspectMembers": [
+    "wine/build-ec/wine", "wine/build-ec/tools/wine/wine", "wine/build-ec/server/wineserver",
+    "wine/build-ec/dlls/ntdll/*.so", "wine/build-ec/dlls/winemac.drv/*.so",
+    "wine/build-ec/dxmt-v0.80/aarch64-unix/*", "providers/*", "scripts/*", "runtime/*",
+    "source/SOURCE-PROVENANCE.txt", "source/LICENSE*", "metadata/*"
+  ]
+}
