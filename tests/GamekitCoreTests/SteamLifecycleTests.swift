@@ -201,10 +201,10 @@ struct SteamLifecycleTests {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }
         let apps = fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
         try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
-        try Data(#""AppState" { "appid" "526870" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
-            .write(to: apps.appendingPathComponent("appmanifest_526870.acf"))
+        try GameFixtures.renderer.manifest(directory: "Fixture")
+            .write(to: apps.appendingPathComponent("appmanifest_\(GameFixtures.renderer.appId).acf"))
         let settings = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
-        let original = Data("{\"schemaVersion\":2,\"driverVersions\":{},\"graphicsBackends\":{\"526870\":\"\(backend)\"}}".utf8)
+        let original = try GameFixtures.preferences(game: GameFixtures.renderer, backend: backend)
         try original.write(to: settings)
         let runtime = LifecycleFixtureRuntime()
         let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
@@ -213,18 +213,16 @@ struct SteamLifecycleTests {
         #expect(commands.count == 1)
         let args = try #require(commands.first)
         #expect(args.dropFirst().prefix(2) == ["-applaunch", "526870"])
-        #expect(args.contains("-dx11") == (backend != "metal3"))
-        #expect(args.contains("-ini:Engine:[SystemSettings]:r.Streamline.InitializePlugin=0") == (backend != "metal3"))
-        #expect(args.contains("-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1") == (backend == "dxvk"))
+        #expect(Array(args.dropFirst(3)) == (GameFixtures.renderer.launchArguments?[backend] ?? []))
         #expect(GraphicsBackend.dxvk.launchOptions(appID: 553850).isEmpty)
         #expect(try Data(contentsOf: settings) == original)
         let updated = Data("""
-        {"schemaVersion":1,"revision":3,"appId":526870,"name":"Satisfactory","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["-dx11"],"dxvk":["-dx11"]},"notes":"Updated profile fixture"}
+        {"schemaVersion":1,"revision":3,"appId":\(GameFixtures.renderer.appId),"name":"\(GameFixtures.renderer.name)","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["\(GameFixtures.renderer.option("dx11"))"],"dxvk":["\(GameFixtures.renderer.option("dx11"))"]},"notes":"Updated profile fixture"}
         """.utf8)
         try await GameProfileStore(root: fixture.store.root).accept(updated, appID: 526870)
         _ = try await lifecycle.launchGame(appID: 526870)
         let updatedCommand = try #require(await runtime.commands.last)
-        #expect(Array(updatedCommand.dropFirst(3)) == (backend == "metal3" ? [] : ["-dx11"]))
+        #expect(Array(updatedCommand.dropFirst(3)) == (backend == "metal3" ? [] : [GameFixtures.renderer.option("dx11")]))
         #expect(try Data(contentsOf: settings) == original)
         _ = try await lifecycle.stop()
     }

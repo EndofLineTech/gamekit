@@ -1,16 +1,21 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <wchar.h>
 
 /* Wine 10 winemac.drv documents this game-scoped alternative capture path.
  * Refuse to overwrite an existing preference or remove an unexpected value. */
-static const WCHAR key_path[] = L"Software\\Wine\\AppDefaults\\helldivers2.exe\\Mac Driver";
+static WCHAR key_path[512];
 
 int main(int argc, char **argv)
 {
-    if (argc != 2 || (strcmp(argv[1], "query") && strcmp(argv[1], "event-tap") && strcmp(argv[1], "restore-default")
+    if (argc != 3 || (strcmp(argv[1], "query") && strcmp(argv[1], "event-tap") && strcmp(argv[1], "restore-default")
         && strcmp(argv[1], "query-display") && strcmp(argv[1], "capture-display") && strcmp(argv[1], "restore-display")))
         return 2;
+    if (!strlen(argv[2]) || strlen(argv[2]) > 200 || strpbrk(argv[2], "\\/[]\r\n\t\"")) return 2;
+    WCHAR executable[256];
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[2], -1, executable, 256)) return 2;
+    swprintf(key_path, 512, L"Software\\Wine\\AppDefaults\\%ls\\Mac Driver", executable);
     BOOL display = strstr(argv[1], "display") != NULL;
     const WCHAR *value_name = display ? L"CaptureDisplaysForFullscreen" : L"UseConfinementCursorClipping";
     const WCHAR *requested = display ? L"y" : L"n";

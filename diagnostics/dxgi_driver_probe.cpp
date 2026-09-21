@@ -5,16 +5,21 @@
 #include <cstring>
 #include <cstdlib>
 #include <cctype>
+#include <cwchar>
 
 int main(int argc, char **argv) {
-    if (argc == 2 && !std::strcmp(argv[1], "configure")) {
-        const wchar_t *keys[] = {L"Software\\Wine\\DllOverrides",
-            L"Software\\Wine\\AppDefaults\\helldivers2.exe\\DllOverrides",
-            L"Software\\Wine\\AppDefaults\\gamekit-dxgi-probe.exe\\DllOverrides"};
-        for (unsigned i = 0; i < 3; ++i) {
+    if (argc >= 3 && !std::strcmp(argv[1], "configure")) {
+        for (int i = 1; i < argc; ++i) {
+            wchar_t path[512] = L"Software\\Wine\\DllOverrides";
+            if (i > 1) {
+                if (!std::strlen(argv[i]) || std::strlen(argv[i]) > 200 || std::strpbrk(argv[i], "\\/[]\r\n\t\"")) return 12;
+                wchar_t executable[256];
+                if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[i], -1, executable, 256)) return 12;
+                swprintf(path, 512, L"Software\\Wine\\AppDefaults\\%ls\\DllOverrides", executable);
+            }
             HKEY key;
-            if (RegCreateKeyExW(HKEY_CURRENT_USER, keys[i], 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr)) return 10;
-            const wchar_t *value = i ? L"native,builtin" : L"builtin";
+            if (RegCreateKeyExW(HKEY_CURRENT_USER, path, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr)) return 10;
+            const wchar_t *value = i > 1 ? L"native,builtin" : L"builtin";
             LONG result = RegSetValueExW(key, L"dxgi", 0, REG_SZ, (const BYTE *)value, (DWORD)((wcslen(value) + 1) * sizeof(wchar_t)));
             RegCloseKey(key);
             if (result) return 11;
@@ -22,9 +27,9 @@ int main(int argc, char **argv) {
         std::puts("Isolated per-app DXGI overrides configured");
         return 0;
     }
-    const bool substituted = argc >= 2 && !std::strcmp(argv[1], "substituted");
-    ULONGLONG expected = substituted ? 0x00230000000f17ceULL : ~0ULL;
-    if (argc >= 2 && std::strlen(argv[1]) == 16) {
+    if (argc < 2 || std::strlen(argv[1]) != 16) return 12;
+    ULONGLONG expected;
+    {
         for (const char *c = argv[1]; *c; ++c) if (!std::isxdigit((unsigned char)*c)) return 12;
         expected = std::strtoull(argv[1], nullptr, 16);
     }

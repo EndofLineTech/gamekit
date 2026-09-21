@@ -1,6 +1,7 @@
 // Diagnostic-only game-scoped HUD logging. No compiler interposition or
 // reflection serialization; link alongside the normal identity/Space helper.
 #import <Foundation/Foundation.h>
+#include "DiagnosticProfile.h"
 #include <crt_externs.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -19,7 +20,7 @@ __attribute__((constructor)) static void StartMetalHUDCapture(void) {
             NSString *argument = [NSString stringWithUTF8String:arguments[i]];
             if ([argument hasPrefix:@"-"]) continue;
             NSString *name = [[argument stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-            if ([name hasSuffix:@".exe"]) { target = [name isEqualToString:@"helldivers2.exe"]; break; }
+            if ([name hasSuffix:@".exe"]) { target = GamekitDiagnosticMatches(@"primary", nil, name); break; }
         }
         if (!target) return;
         int dir = open(GAMEKIT_METAL_HUD_LOG_DIRECTORY, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);

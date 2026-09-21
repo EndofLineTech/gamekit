@@ -5,6 +5,7 @@
 // Public opaque reflection API reference:
 // https://github.com/wmarti/metal-shader-converter/blob/main/include/metal_irconverter.h
 #import <Foundation/Foundation.h>
+#include "DiagnosticProfile.h"
 #include <crt_externs.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -146,7 +147,7 @@ __attribute__((constructor)) static void InitializeStageInTrace(void) {
             NSString *argument = [NSString stringWithUTF8String:arguments[i]];
             if ([argument hasPrefix:@"-"]) continue;
             NSString *name = [[argument stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-            if ([name hasSuffix:@".exe"]) { targetGame = [name isEqualToString:@"helldivers2.exe"]; break; }
+            if ([name hasSuffix:@".exe"]) { targetGame = GamekitDiagnosticMatches(@"primary", nil, name); break; }
         }
         if (targetGame) {
 #ifdef GAMEKIT_STAGEIN_HUD

@@ -9,7 +9,9 @@ struct LegacyDisplayProbeTests {
     func observe() async throws {
         let probe = try #require(ProcessInfo.processInfo.environment["GAMEKIT_LEGACY_DISPLAY_PROBE"])
         let desktop = ProcessInfo.processInfo.environment["GAMEKIT_LEGACY_DESKTOP"]
-        try #require(desktop == nil || ["800x600", "1024x768"].contains(desktop!))
+        let parameters = GameFixtures.desktop
+        let requestedSize = try #require(parameters.size)
+        try #require(desktop == nil || parameters.candidateSizes?.contains(desktop!) == true)
         let appDesktop = ProcessInfo.processInfo.environment["GAMEKIT_LEGACY_APP_DESKTOP"] == "1"
         try #require(!appDesktop || desktop == nil)
         let selected = try await RuntimeSettingsStore(store: EnvironmentStore()).layout()
@@ -22,7 +24,7 @@ struct LegacyDisplayProbeTests {
         if appDesktop {
             let name = URL(fileURLWithPath: probe).lastPathComponent
             for arguments in [
-                ["reg.exe", "add", "HKCU\\Software\\Wine\\Explorer\\Desktops", "/v", "GamekitLegacyProbe", "/t", "REG_SZ", "/d", "800x600", "/f"],
+                ["reg.exe", "add", "HKCU\\Software\\Wine\\Explorer\\Desktops", "/v", "GamekitLegacyProbe", "/t", "REG_SZ", "/d", requestedSize, "/f"],
                 ["reg.exe", "add", "HKCU\\Software\\Wine\\AppDefaults\\\(name)\\Explorer", "/v", "Desktop", "/t", "REG_SZ", "/d", "GamekitLegacyProbe", "/f"]
             ] {
                 let setting = try await RuntimeSession.start(store: store, id: id, layout: layout, arguments: arguments, timeout: 60)
@@ -33,7 +35,7 @@ struct LegacyDisplayProbeTests {
         }
         let windowsProbe = "Z:" + probe.replacingOccurrences(of: "/", with: "\\")
         let reportPath = "C:\\legacy-display-probe.txt"
-        let arguments = desktop.map { ["explorer.exe", "/desktop=GamekitLegacyProbe,\($0)", windowsProbe, reportPath] } ?? [probe, reportPath]
+        let arguments = desktop.map { ["explorer.exe", "/desktop=GamekitLegacyProbe,\($0)", windowsProbe, requestedSize, reportPath] } ?? [probe, requestedSize, reportPath]
         let session = try await RuntimeSession.start(store: store, id: id, layout: layout, arguments: arguments, timeout: 60)
         let result = await session.command.result()
         var report = ""

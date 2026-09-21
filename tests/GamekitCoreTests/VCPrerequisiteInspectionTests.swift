@@ -17,7 +17,7 @@ struct VCPrerequisiteInspectionTests {
             let receipt = try JSONDecoder().decode(Receipt.self, from: bytes)
             let lease = try await store.executionLease(for: SteamInstallationRecipe.environmentID)
             defer { withExtendedLifetime(lease) {} }
-            let game = SteamApplicationBundle(layout: layout, game: .init(appID: 526870, name: "Satisfactory"))
+            let game = SteamApplicationBundle(layout: layout, game: .init(appID: GameFixtures.renderer.appId, name: GameFixtures.renderer.name))
             _ = try await game.prepare()
             var images: [String: String] = [:]
             for (name, loader) in [("source", layout.wine), ("Steam", SteamApplicationBundle(layout: layout).executable), ("game", game.executable)] {

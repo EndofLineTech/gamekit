@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from game_fixtures import GAMES, ROOT
 
 
 class CompileTimingTests(unittest.TestCase):
@@ -55,10 +56,11 @@ int main() {
             source = Path(__file__).resolve().parents[1] / "diagnostics/MetalStageInTrace.mm"
             run(compiler + ["-dynamiclib", "-fobjc-arc", "-framework", "Foundation", "-DGAMEKIT_COMPILE_TIMING",
                            '-DGAMEKIT_STAGEIN_LOG_DIRECTORY="' + str(root) + '"', str(source), str(mock), "-o", str(helper)])
-            program = root / "helldivers2.exe"
+            program = root / GAMES["primary"]["executable"]
             run(compiler + [str(root / "main.cpp"), str(mock), "-o", str(program)])
             run([str(program)], env=dict(os.environ, DYLD_INSERT_LIBRARIES=str(helper),
-                                        GAMEKIT_SESSION_ID="test", WINEPREFIX=str(root)))
+                                        GAMEKIT_SESSION_ID="test", WINEPREFIX=str(root),
+                                        GAMEKIT_DIAGNOSTIC_PROFILE=str(ROOT / "tests/fixtures/games.json")))
             text = (root / "stage-in.jsonl").read_text()
             rows = [json.loads(line) for line in text.splitlines()]
             calls = [r for r in rows if r["event"] == "compile-link"]

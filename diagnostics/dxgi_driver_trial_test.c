@@ -15,13 +15,13 @@ int main(void)
 {
     LARGE_INTEGER version;
     originalCheck = fakeCheck;
-    answer = S_OK; bits = -1;
+    answer = S_OK; bits = GAMEKIT_DRIVER_MATCH;
     if (substituteVersion(NULL, &IID_IDXGIDevice, &version) != S_OK ||
-        version.QuadPart != 0x00230000000f17ceLL || GetLastError() != ERROR_BUSY) return 1;
-    bits = 0x001f0000000a03e8LL;
+        version.QuadPart != GAMEKIT_DRIVER_REPLACEMENT || GetLastError() != ERROR_BUSY) return 1;
+    bits = GAMEKIT_DRIVER_MATCH ^ 1;
     if (substituteVersion(NULL, &IID_IDXGIDevice, &version) != S_OK || version.QuadPart != bits) return 2;
-    answer = E_NOINTERFACE; bits = -1;
-    if (substituteVersion(NULL, &IID_IDXGIDevice, &version) != E_NOINTERFACE || version.QuadPart != -1) return 3;
+    answer = E_NOINTERFACE; bits = GAMEKIT_DRIVER_MATCH;
+    if (substituteVersion(NULL, &IID_IDXGIDevice, &version) != E_NOINTERFACE || version.QuadPart != bits) return 3;
     answer = S_OK;
     if (substituteVersion(NULL, &IID_IDXGIDevice, NULL) != S_OK || GetLastError() != ERROR_BUSY) return 4;
     if (calls != 4) return 5;

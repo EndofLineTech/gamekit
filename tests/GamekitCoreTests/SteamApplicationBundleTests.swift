@@ -22,8 +22,9 @@ private struct ApplicationBundleFixture {
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
     func legacyGame() async throws -> URL {
-        let current = try await SteamApplicationBundle(layout: layout, game: .init(appID: 526870, name: "Satisfactory")).prepare()
-        let legacy = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Satisfactory.app")
+        let game = GameFixtures.renderer
+        let current = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.appId, name: game.name)).prepare()
+        let legacy = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(game.name + ".app")
         try FileManager.default.copyItem(at: current, to: legacy)
         let manifest = legacy.appendingPathComponent("Contents/Gamekit-runtime.json")
         var value = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
@@ -70,14 +71,14 @@ struct SteamApplicationBundleTests {
         let metadata = layout.dataRoot.appendingPathComponent("Metadata")
         try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
         let preferences = metadata.appendingPathComponent("GameCompatibility.json")
-        try Data(#"{"schemaVersion":1,"driverVersions":{"553850":false}}"#.utf8).write(to: preferences)
+        try GameFixtures.preferences(game: GameFixtures.primary, driver: false, schema: 1).write(to: preferences)
         let offBuilder = try SteamApplicationBundle.configured(layout: layout, game: .init(appID: 553850, name: "Helldivers"))
         let off = try await offBuilder.prepare()
         #expect(off != game)
         #expect(try Data(contentsOf: off.appendingPathComponent(relative + "dxgi.dll")) == original)
         #expect(try inode(steam, "dxgi.dll") == inode(off, "dxgi.dll"))
         #expect(try Data(contentsOf: game.appendingPathComponent(relative + "dxgi.dll")) == replacement)
-        try Data(#"{"schemaVersion":1,"driverVersions":{"553850":true}}"#.utf8).write(to: preferences)
+        try GameFixtures.preferences(game: GameFixtures.primary, driver: true, schema: 1).write(to: preferences)
         #expect(try await SteamApplicationBundle.configured(layout: layout, game: .init(appID: 553850, name: "Helldivers")).prepare() == game)
         try Data(#"{"schemaVersion":1,"driverVersions":{"553850":1}}"#.utf8).write(to: preferences)
         #expect(throws: (any Error).self) { try SteamApplicationBundle.configured(layout: layout, game: .init(appID: 553850, name: "Helldivers")) }

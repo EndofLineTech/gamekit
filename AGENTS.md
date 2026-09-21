@@ -1,5 +1,19 @@
 # Agent Instructions
 
+## Game configuration policy
+
+- JSON profiles are the source of all game-specific execution parameters. Do not
+  add game-specific settings, executable selectors, driver values or launch
+  workarounds to Swift, native code, diagnostic code or test setup code.
+- Production profiles live in `Sources/GamekitCore/GameProfiles/`; diagnostic
+  parameters live in `diagnostics/profiles/`; test baselines live in
+  `tests/fixtures/`. Tests load their game parameters through shared fixture
+  readers. Deliberately invalid test inputs and assertions are test logic.
+- Native mechanisms are generic. Historical artifact reproduction must generate
+  its parameter header from frozen JSON rather than retain literal game rules.
+- Update parameter JSON and evidence together, preserve explicit user overrides,
+  and run the configuration regression checks before delivery.
+
 ## Branch and Pull Request Policy
 
 - `dev` is the default integration branch. Start all implementation from an

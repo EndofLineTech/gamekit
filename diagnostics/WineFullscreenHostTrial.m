@@ -41,6 +41,7 @@
 }
 @end
 
+#include "DiagnosticProfile.h"
 static const char associationKey;
 __attribute__((constructor)) static void StartFullscreenHostTrial(void) {
     @autoreleasepool {
@@ -52,7 +53,7 @@ __attribute__((constructor)) static void StartFullscreenHostTrial(void) {
             if ([argument hasPrefix:@"-"]) continue;
             NSString *name = [[argument stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent];
             if ([name.lowercaseString hasSuffix:@".exe"]) {
-                helldivers = [name.lowercaseString isEqualToString:@"helldivers2.exe"];
+                helldivers = GamekitDiagnosticMatches(@"primary", nil, name);
                 break;
             }
         }

@@ -7,7 +7,8 @@ projection. No game-specific constants are compiled into this artifact.
 
 Source: `Sources/HelldiversDriverVersion/dxgi.c` with
 `GAMEKIT_PROFILE_DRIVER` and `profile_parameters.h`. The source retains a legacy
-build mode solely to reproduce the previously pinned external runtime payload;
+build mode, parameterized by a header generated from frozen JSON, solely to
+reproduce the previously pinned external runtime payload;
 Gamekit's new derived game loaders use this generic build instead.
 
 Rebuild with `tools/build_profile_adapter.py` and LLVM-MinGW. The app verifies the

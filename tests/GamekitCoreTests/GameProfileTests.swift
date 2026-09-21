@@ -46,7 +46,7 @@ struct GameProfileTests {
         let registry = try GameCaptureRegistry(Data("WINE REGISTRY Version 2\n".utf8), executable: "fixture.exe")
         let captured = try #require(String(data: registry.setting(.enabled), encoding: .utf8))
         #expect(captured.contains("fixture.exe"))
-        #expect(!captured.contains("helldivers2.exe"))
+        #expect(!captured.contains(GameFixtures.primary.executable))
         let metadataRoot = try ManagedDirectory.canonicalRoot(root)
         let layout = RuntimeLayout(dataRoot: metadataRoot, profile: .sikarugirDriverVersion1, graphicsBackend: .metal3)
         #expect(try SteamApplicationBundle.configured(layout: layout, game: .init(appID: 42, name: "Fixture")).driverCompatibility)
@@ -56,7 +56,7 @@ struct GameProfileTests {
             graphicsBackend: .metal3, libraryLayout: layout, validate: {})
         let projection = try Data(contentsOf: metadataRoot.appendingPathComponent("Metadata/GameDock/steam-drivers.ini"))
         let ini = try #require(String(data: projection, encoding: .utf16))
-        #expect(ini.contains("Executable=fixture.exe") && ini.contains("Replacement=00230000000f17ce"))
+        #expect(ini.contains("Executable=fixture.exe") && ini.contains("Replacement=" + GameFixtures.primary.replacementHex))
         let mapping = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: GameDockNames.url(root: metadataRoot, prefix: prefix)))
         #expect(mapping.fullscreenExecutables?["42"] == "fixture.exe")
         try GameDockNames.publish(root: metadataRoot, prefix: prefix, session: UUID(), games: [], libraryLayout: layout, validate: {})
@@ -77,7 +77,8 @@ struct GameProfileTests {
         }
     }
 
-    private func data(id: UInt32 = 526870, revision: Int = 3, arguments: [String] = ["-dx11"]) throws -> Data {
+    private func data(id: UInt32 = GameFixtures.renderer.appId, revision: Int = 3,
+                      arguments: [String] = [GameFixtures.renderer.option("dx11")]) throws -> Data {
         try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "revision": revision,
             "appId": id, "name": "Satisfactory", "runtime": "sikarugir-10.0_6",
             "launchArguments": ["dxmt": arguments], "notes": "Test profile"])
@@ -86,7 +87,7 @@ struct GameProfileTests {
     @Test func bundledRulesPreserveExistingBehavior() throws {
         let profile = try #require(GameProfileStore.bundled(appID: 526870))
         #expect(profile.arguments(for: .dxmt).count == 2)
-        #expect(profile.arguments(for: .dxvk).last == "-ini:Engine:[SystemSettings]:r.PostProcessing.PreferCompute=1")
+        #expect(profile.arguments(for: .dxvk) == GameFixtures.renderer.launchArguments?["dxvk"])
         #expect(profile.arguments(for: .metal3).isEmpty)
         #expect(GameProfileStore.bundled(appID: 42) == nil)
     }
@@ -114,7 +115,7 @@ struct GameProfileTests {
         await #expect(throws: (any Error).self) { try await store.accept(data(revision: 1), appID: 526870) }
         await #expect(throws: (any Error).self) { try await store.accept(Data("<html>error</html>".utf8), appID: 526870) }
         #expect(GameProfileStore.resolved(appID: 526870, root: canonical)?.profile.revision == 3)
-        #expect(GraphicsBackend.dxmt.launchOptions(appID: 526870, root: canonical) == ["-dx11"])
+        #expect(GraphicsBackend.dxmt.launchOptions(appID: GameFixtures.renderer.appId, root: canonical) == [GameFixtures.renderer.option("dx11")])
         #expect(GraphicsBackend.automatic.launchOptions(appID: 526870, root: canonical).isEmpty)
     }
 
@@ -128,7 +129,7 @@ struct GameProfileTests {
         defer { session.invalidateAndCancel() }
         let store = GameProfileStore(root: root, session: session)
         try await store.refresh(appID: 31)
-        #expect(GameProfileStore.resolved(appID: 31, root: root)?.profile.arguments(for: .dxmt) == ["-dx11"])
+        #expect(GameProfileStore.resolved(appID: 31, root: root)?.profile.arguments(for: .dxmt) == [GameFixtures.renderer.option("dx11")])
         let before = ProfileHTTPFixture.requests.withLock { $0 }
         try await store.refresh(appID: 31)
         #expect(ProfileHTTPFixture.requests.withLock { $0 } == before)
@@ -145,7 +146,7 @@ struct GameProfileTests {
         await #expect(throws: (any Error).self) {
             try await GameProfileStore(root: root, session: offlineSession).refresh(appID: 31)
         }
-        #expect(GameProfileStore.resolved(appID: 31, root: root)?.profile.arguments(for: .dxmt) == ["-dx11"])
+        #expect(GameProfileStore.resolved(appID: 31, root: root)?.profile.arguments(for: .dxmt) == [GameFixtures.renderer.option("dx11")])
     }
 
     @Test func corruptCacheFallsBackAndSymlinkCacheIsNotWritten() async throws {
@@ -179,7 +180,7 @@ private final class ProfileHTTPFixture: URLProtocol, @unchecked Sendable {
             headerFields: ["Content-Type": id == 33 ? "text/html" : "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         let data = id == 35 ? Data(repeating: 32, count: 32769) : Data("""
-        {"schemaVersion":1,"revision":1,"appId":\(id == 34 ? 99 : id),"name":"Fixture","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["-dx11"]},"notes":"Fixture"}
+        {"schemaVersion":1,"revision":1,"appId":\(id == 34 ? 99 : id),"name":"Fixture","runtime":"sikarugir-10.0_6","launchArguments":{"dxmt":["\(GameFixtures.renderer.option("dx11"))"]},"notes":"Fixture"}
         """.utf8)
         client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)

@@ -51,6 +51,7 @@ static void Record(NSDictionary *record) {
     recording = previous;
 }
 
+#include "DiagnosticProfile.h"
 static void Observe(int fd, size_t requested, ssize_t result, uint64_t duration, const char *operation) {
     atomic_fetch_add(&calls, 1);
     if (result > 0) atomic_fetch_add(&returnedBytes, (uint64_t)result);
@@ -70,7 +71,8 @@ static void Observe(int fd, size_t requested, ssize_t result, uint64_t duration,
         if (fcntl(fd, F_GETPATH, path) == 0) {
             if (atomic_fetch_add(&fileRecords, 1) >= 128) return;
             NSString *name = [NSString stringWithUTF8String:path];
-            if ([name containsString:@"/steamapps/common/Helldivers 2/"]) category = @"game-installation";
+            id installation = GamekitDiagnosticParameters(@"primary")[@"installationSuffix"];
+            if ([installation isKindOfClass:NSString.class] && [installation length] && [name containsString:installation]) category = @"game-installation";
             else if ([name containsString:@"/d3dm/"] || [name containsString:@"/Caches/"]) category = @"cache";
             else category = @"other-file";
         } else if (duration < 500000000 || atomic_fetch_add(&otherRecords, 1) >= 16) return;
@@ -112,7 +114,7 @@ __attribute__((constructor)) static void StartReadTiming(void) {
             NSString *argument = [NSString stringWithUTF8String:arguments[i]];
             if ([argument hasPrefix:@"-"]) continue;
             NSString *name = [[argument stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
-            if ([name hasSuffix:@".exe"]) { target = [name isEqualToString:@"helldivers2.exe"]; break; }
+            if ([name hasSuffix:@".exe"]) { target = GamekitDiagnosticMatches(@"primary", nil, name); break; }
         }
         if (!target) return;
         __block unsigned samples = 0;

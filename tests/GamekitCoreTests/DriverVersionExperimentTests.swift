@@ -89,8 +89,14 @@ struct DriverVersionExperimentTests {
         let exe = try #require(ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_PROBE_PATH"])
         let expected = ProcessInfo.processInfo.environment["GAMEKIT_DRIVER_EXPECT"] ?? "baseline"
         try #require(["baseline", "substituted", "configure", "contract"].contains(expected))
+        let parameters: [String]
+        switch expected {
+        case "configure": parameters = [expected, GameFixtures.primary.executable, try #require(GameFixtures.primary.probeExecutable)]
+        case "contract": parameters = [expected]
+        default: parameters = [expected == "substituted" ? GameFixtures.primary.replacementHex : GameFixtures.primary.matchHex]
+        }
         let session = try await RuntimeSession.start(store: store, id: SteamInstallationRecipe.environmentID,
-            layout: layout, arguments: [exe, expected], timeout: 60)
+            layout: layout, arguments: [exe] + parameters, timeout: 60)
         let result = await session.command.result()
         print(result.stdoutText); print(result.stderrText)
         _ = try await session.stop()

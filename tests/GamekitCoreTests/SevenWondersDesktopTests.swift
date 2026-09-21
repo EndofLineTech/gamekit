@@ -16,7 +16,7 @@ struct SevenWondersDesktopTests {
         let selected = try await RuntimeSettingsStore(store: primary).layout()
         let record = try #require(await primary.load(SteamInstallationRecipe.environmentID))
         let prefix = primary.prefixURL(for: record.id)
-        let game = try #require(try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable).games.first { $0.id == 15900 && $0.state == .ready })
+        let game = try #require(try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable).games.first { $0.id == GameFixtures.desktop.appId && $0.state == .ready })
         let source = prefix.appendingPathComponent(record.steamExecutable.rawValue).deletingLastPathComponent()
             .appendingPathComponent("steamapps/common").appendingPathComponent(game.installDirectory)
         let root = try ManagedDirectory.canonicalRoot(FileManager.default.temporaryDirectory.appendingPathComponent("Gamekit legacy game " + UUID().uuidString))
@@ -28,9 +28,10 @@ struct SevenWondersDesktopTests {
         let copy = try directory.createExclusiveDirectory("Game")
         try copy.copyContents(from: #require(try ManagedDirectory.openRoot(source, create: false)))
         try FileManager.default.createDirectory(at: store.prefixURL(for: id), withIntermediateDirectories: true)
-        let executable = root.appendingPathComponent("Game/WondersII_1_13.exe")
+        let parameters = GameFixtures.desktop
+        let executable = root.appendingPathComponent("Game/" + parameters.executable)
         let session = try await RuntimeSession.start(store: store, id: id, layout: layout,
-            arguments: ["explorer.exe", "/desktop=Gamekit15900Trial,800x600", "Z:" + executable.path.replacingOccurrences(of: "/", with: "\\")],
+            arguments: ["explorer.exe", "/desktop=\(try #require(parameters.desktop))Trial,\(try #require(parameters.size))", "Z:" + executable.path.replacingOccurrences(of: "/", with: "\\")],
             workingDirectory: executable.deletingLastPathComponent(), timeout: 60)
         func cleanup() async throws {
             _ = try await session.stop()
@@ -76,7 +77,9 @@ struct SevenWondersDesktopTests {
         let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: id), layout: layout)
         try #require(snapshot.complete && !snapshot.processes.contains { $0.role == .other }, "Close games before changing desktop settings")
         _ = try await SteamLifecycle(store: store, layout: layout).stop()
-        let session = try await RuntimeSession.start(store: store, id: id, layout: layout, arguments: [tool, mode], timeout: 30)
+        let parameters = GameFixtures.desktop
+        let session = try await RuntimeSession.start(store: store, id: id, layout: layout,
+            arguments: [tool, mode, parameters.executable, try #require(parameters.desktop), try #require(parameters.size)], timeout: 30)
         let result = await session.command.result()
         _ = try await session.stop()
         let stopped = try await session.snapshot()

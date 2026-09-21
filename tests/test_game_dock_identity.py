@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from game_fixtures import GAMES
 
 
 class GameDockIdentityTests(unittest.TestCase):
@@ -132,9 +133,9 @@ int main(void) {
         self.document["games"]["553850"] = "Helldivers"
         self.document["directories"]["553850"] = "c:\\games\\"
         self.document["fullscreenSpaces"] = {"553850": True, "526870": True}
-        self.document["fullscreenExecutables"] = {"553850": "helldivers2.exe"}
+        self.document["fullscreenExecutables"] = {str(GAMES["primary"]["appId"]): GAMES["primary"]["executable"]}
         self.write()
-        flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=r"C:\games\helldivers2.exe")
+        flags = dict(GAMEKIT_TEST_SPACE_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE="C:\\games\\" + GAMES["primary"]["executable"])
         self.assertEqual(self.run_reader("553850", **flags), "enabled")
         self.assertEqual(self.run_reader("553850", **(flags | {"GAMEKIT_SESSION_ID": "foreign"})), "disabled")
         self.assertEqual(self.run_reader("553850", **(flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\games\crs-handler.exe"})), "disabled")
@@ -159,7 +160,8 @@ int main(void) {
 
     def test_matches_actual_windows_image_when_native_appid_is_absent(self):
         self.write()
-        image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\FactoryGame\\Binaries\\Win64\\FactoryGameSteam-Win64-Shipping.exe"
+        game = GAMES["renderer"]
+        image = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\" + game["name"] + "\\" + game["relativeExecutable"]
         self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image), "Satisfactory")
         self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image.replace("Satisfactory\\", "Satisfactory-other\\")), "")
         self.assertEqual(self.run_reader("", GAMEKIT_TEST_WINDOWS_IMAGE=image.replace("FactoryGame\\", "..\\Other\\")), "")

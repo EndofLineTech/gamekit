@@ -10,7 +10,7 @@ struct SatisfactoryPerformanceTests {
           .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_SATISFACTORY_PERFORMANCE"] == "1"))
     func observe() async throws {
         let env = ProcessInfo.processInfo.environment
-        try #require(env["GAMEKIT_E6_APPID"] == "526870" && env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1")
+        try #require(env["GAMEKIT_E6_APPID"] == String(GameFixtures.renderer.appId) && env["GAMEKIT_E6_SATISFACTORY_D3D11"] == "1")
         let backend = try #require(env["GAMEKIT_PROBE_BACKEND"].flatMap(GameGraphicsOverride.init(rawValue:)))
         try #require([.dxvk, .dxmt].contains(backend))
         let sandbox = URL(fileURLWithPath: try #require(env["GAMEKIT_E6_SATISFACTORY_USER_DIR"]))
@@ -23,7 +23,7 @@ struct SatisfactoryPerformanceTests {
         try #require(initial.complete && !initial.processes.contains { $0.role == .other })
         _ = try await lifecycle.stop()
         let settings = GameCompatibilityStore(store: store)
-        let original = try await settings.inspectGraphics(appID: 526870)
+        let original = try await settings.inspectGraphics(appID: GameFixtures.renderer.appId)
         let sourceURL = URL(fileURLWithPath: try #require(env["GAMEKIT_SATISFACTORY_SAVED"]))
         try #require(sourceURL.path.hasPrefix(prefix.path + "/drive_c/users/") && sourceURL.lastPathComponent == "Saved")
         let source = try #require(try ManagedDirectory.openRoot(sourceURL, create: false))
@@ -68,13 +68,13 @@ struct SatisfactoryPerformanceTests {
         }
         func cleanup() async throws {
             _ = try await lifecycle.stop()
-            _ = try await settings.setGraphicsBackend(original.override, appID: 526870)
+            _ = try await settings.setGraphicsBackend(original.override, appID: GameFixtures.renderer.appId)
             #expect(try snapshot(saves) == before, "Original saves must remain byte-identical")
             #expect(try snapshot(config) == configBefore, "Original config must remain byte-identical")
             print("Original save/config byte comparison completed; backend restored")
         }
         do {
-            _ = try await settings.setGraphicsBackend(backend, appID: 526870)
+            _ = try await settings.setGraphicsBackend(backend, appID: GameFixtures.renderer.appId)
             try await GameEvaluationLaunchTests().observeLaunch()
             try await cleanup()
         } catch {

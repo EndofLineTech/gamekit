@@ -2,23 +2,7 @@ import Foundation
 import Testing
 @testable import GamekitCore
 
-private let registryFixture = """
-WINE REGISTRY Version 2
-;; All keys relative to REGISTRY\\\\User\\\\fixture
-
-#arch=win64
-
-[Software\\\\Wine\\\\Mac Driver] 1
-"CaptureDisplaysForFullscreen"="y"
-
-[Software\\\\Wine\\\\AppDefaults\\\\helldivers2.exe\\\\Mac Driver] 1
-"OtherSetting"="keep"
-"CaptureDisplaysForFullscreen"="n"
-
-[Software\\\\Other] 1
-"CaptureDisplaysForFullscreen"="unrelated"
-
-"""
+private let registryFixture = GameFixtures.registry
 
 private struct CompatibilityFixture {
     let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -31,9 +15,10 @@ private struct CompatibilityFixture {
         _ = try await store.create(.init(id: id, name: "Steam", runtime: RuntimeProfile.sikarugir.identity, installation: .installed, installationRecipeVersion: 1))
         prefix = store.prefixURL(for: id)
         let steam = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam")
-        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Helldivers"), withIntermediateDirectories: true)
+        let game = GameFixtures.primary
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/" + game.name), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
-        try Data(#""AppState" { "appid" "553850" "name" "Helldivers" "installdir" "Helldivers" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_553850.acf"))
+        try game.manifest.write(to: steam.appendingPathComponent("steamapps/appmanifest_\(game.appId).acf"))
         try Data(registryFixture.utf8).write(to: prefix.appendingPathComponent("user.reg"))
     }
     func remove() { try? FileManager.default.removeItem(at: parent) }
@@ -70,7 +55,7 @@ struct GameCompatibilityTests {
         try await runtime.select(nil, revision: .driverVersion1, graphicsBackend: .metal3)
         let selected = try Data(contentsOf: fixture.store.root.appendingPathComponent("Metadata/RuntimeSelection.json"))
         let preferences = fixture.store.root.appendingPathComponent("Metadata/GameCompatibility.json")
-        try Data(#"{"schemaVersion":1,"driverVersions":{"553850":false}}"#.utf8).write(to: preferences)
+        try GameFixtures.preferences(game: GameFixtures.primary, driver: false, schema: 1).write(to: preferences)
         let settings = fixture.settings()
         let inherited = try await settings.inspectGraphics(appID: 123456)
         #expect(inherited.override == .inherit && inherited.effectiveBackend == .metal3)
@@ -121,7 +106,8 @@ struct GameCompatibilityTests {
                 let saved = try await settings.setDriverCompatibility(enabled, appID: 553850)
                 #expect(saved.driverCompatibility == enabled)
                 let session = try await RuntimeSession.startGameProbe(store: store, id: SteamInstallationRecipe.environmentID,
-                    layout: layout, game: .init(appID: 553850, name: "HELLDIVERS™ 2"), arguments: [probe, enabled ? "substituted" : "baseline"])
+                    layout: layout, game: .init(appID: GameFixtures.primary.appId, name: "Driver fixture"),
+                    arguments: [probe, enabled ? GameFixtures.primary.replacementHex : GameFixtures.primary.matchHex])
                 let result = await session.command.result()
                 print("Per-game driver enabled=\(enabled): \(result.stdoutText)")
                 _ = try await session.stop()
@@ -256,23 +242,23 @@ struct GameCompatibilityTests {
     @Test("Missing app section can be created; Wine default capture is disabled")
     func newOverride() throws {
         let data = Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8)
-        let registry = try GameCaptureRegistry(data, executable: "helldivers2.exe")
+        let registry = try GameCaptureRegistry(data, executable: GameFixtures.primary.executable)
         #expect(try registry.capture == .inherit)
         #expect(try !registry.inheritedCapture)
-        let enabled = try GameCaptureRegistry(registry.setting(.enabled), executable: "helldivers2.exe")
+        let enabled = try GameCaptureRegistry(registry.setting(.enabled), executable: GameFixtures.primary.executable)
         #expect(try enabled.capture == .enabled)
-        let restored = try GameCaptureRegistry(enabled.setting(.inherit), executable: "helldivers2.exe")
+        let restored = try GameCaptureRegistry(enabled.setting(.inherit), executable: GameFixtures.primary.executable)
         #expect(try restored.capture == .inherit)
     }
 
     @Test("Ambiguous and unsupported registry values refuse edits", arguments: [
         registryFixture.replacingOccurrences(of: "\"n\"", with: "dword:00000001"),
-        registryFixture + "[Software\\\\Wine\\\\AppDefaults\\\\helldivers2.exe\\\\Mac Driver]\n",
+        registryFixture + "[Software\\\\Wine\\\\AppDefaults\\\\\(GameFixtures.primary.executable)\\\\Mac Driver]\n",
         registryFixture.replacingOccurrences(of: "\"n\"", with: "\"n\"\n\"CaptureDisplaysForFullscreen\"=\"y\""),
         "not a Wine registry"
     ])
     func malformedRegistry(text: String) {
-        #expect(throws: (any Error).self) { _ = try GameCaptureRegistry(Data(text.utf8), executable: "helldivers2.exe").setting(.enabled) }
+        #expect(throws: (any Error).self) { _ = try GameCaptureRegistry(Data(text.utf8), executable: GameFixtures.primary.executable).setting(.enabled) }
     }
 
     @Test("Live or incomplete observations block changes without altering registry bytes", arguments: [true, false])

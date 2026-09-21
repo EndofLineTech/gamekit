@@ -1,5 +1,8 @@
 # Downloadable game profiles
 
+See [configuration sources and regression policy](configuration-sources.md) for
+the diagnostic, test and historical-build JSON sources as well.
+
 Gamekit matches installed games by numeric Steam AppID and downloads
 `https://endoflinetech.github.io/gamekit/profiles/<AppID>.json` in the background.
 Every wiki game page has a **Download Gamekit profile JSON** link, including

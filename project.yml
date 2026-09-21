@@ -75,7 +75,7 @@ targets:
   GamekitUITests:
     type: bundle.ui-testing
     platform: macOS
-    sources: [UITests]
+    sources: [UITests, tests/GamekitCoreTests/GameFixtures.swift]
     dependencies:
       - target: Gamekit
       - package: GamekitCore

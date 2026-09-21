@@ -119,7 +119,7 @@ final class GamekitUITests: XCTestCase {
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
         try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_42.acf"))
         try Data("WINE REGISTRY Version 2\n#arch=win64\n".utf8).write(to: prefix.appendingPathComponent("user.reg"))
-        var profile = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(GameProfileStore.bundled(appID: 553850))) as? [String: Any])
+        var profile = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(GameProfileStore.bundled(appID: GameFixtures.primary.appId))) as? [String: Any])
         profile["appId"] = 42; profile["revision"] = 99; profile["name"] = "Fixture"
         var execution = try XCTUnwrap(profile["execution"] as? [String: Any])
         execution["executable"] = "custom.exe"
@@ -174,7 +174,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
         let registry = try String(contentsOf: prefix.appendingPathComponent("user.reg"), encoding: .utf8)
         XCTAssertTrue(registry.contains("custom.exe"))
-        XCTAssertFalse(registry.contains("helldivers2.exe"))
+        XCTAssertFalse(registry.contains(GameFixtures.primary.executable))
     }
 
     func testEmptyLauncherCacheCleanup() async throws {
