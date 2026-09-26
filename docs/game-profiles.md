@@ -61,6 +61,13 @@ branches, executable names, driver-version values, per-game defaults and per-gam
 guidance are not part of the app's execution code. The UI renders the capabilities
 and guidance declared by the profile. Missing capabilities are not offered.
 
+`cursorGuard` is another schema-2 capability: `defaultEnabled` must be false and
+`guidance` explains the opt-in behavior. The helper matches the profile's
+executable against the owned session's installation map before substituting a
+transparent native cursor inside that game process. The user's on/off selection
+is saved in Gamekit metadata, not uploaded to the wiki. Games without this
+capability retain their normal cursor handling.
+
 For example, Helldivers' `553850.json` declares `helldivers2.exe`, the eligible
 runtime/backend combinations, the all-65535 match version and 35.0.15.6094
 replacement, driver enabled by default, optional capture controls and a fullscreen
@@ -133,6 +140,9 @@ and at least one of:
   precedence.
 - `fullscreenSpace`: `defaultEnabled` and `guidance`; the helper activates only
   for the profile's matching executable in the owned game directory/session.
+- `cursorGuard`: `defaultEnabled: false` and `guidance`; only an explicit saved
+  per-game choice enables native cursor substitution in an owned game process.
+  A change applies after stopping Windows Steam and starting a fresh session.
 
 Use `553850.json` as the complete concrete example. For every mechanism, absence
 means unsupported/inactive, not an invitation to guess a game's configuration.

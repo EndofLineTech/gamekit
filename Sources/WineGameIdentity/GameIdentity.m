@@ -237,6 +237,28 @@ BOOL GamekitShouldUseFullscreenSpace(void) {
     return enabled;
 }
 
+static BOOL ShouldGuardCursor(void) {
+    NSDictionary *document = ReadSessionDocument();
+    NSString *appID = ImageAppID(document);
+    if (!appID || ![document[@"games"][appID] isKindOfClass:NSString.class]) return NO;
+    if (EnvironmentString("SteamAppId").length && ![GameAppID() isEqual:appID]) return NO;
+    id guards = document[@"cursorGuardExecutables"];
+    if (![guards isKindOfClass:NSDictionary.class] || [guards count] > 512) return NO;
+    id executable = guards[appID];
+    NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
+    if (![executable isKindOfClass:NSString.class] || ![executable length] || [executable length] > 205 ||
+        [executable rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound ||
+        ![image isEqual:[executable lowercaseString]]) return NO;
+    return YES;
+}
+#ifndef GAMEKIT_IDENTITY_READER_TEST
+static void StartCursorGuardForOwnedGame(void) {
+    if (!ShouldGuardCursor()) return;
+    extern void GamekitStartCursorGuard(void);
+    GamekitStartCursorGuard();
+}
+#endif
+
 #ifdef GAMEKIT_IDENTITY_READER_TEST
 int main(void) {
     @autoreleasepool {
@@ -246,6 +268,7 @@ int main(void) {
             puts(getenv("D3DM_MTL4") ?: "unset"); return 0;
         }
         if (getenv("GAMEKIT_TEST_SPACE_SETTING")) { puts(GamekitShouldUseFullscreenSpace() ? "enabled" : "disabled"); return 0; }
+        if (getenv("GAMEKIT_TEST_CURSOR_SETTING")) { puts(ShouldGuardCursor() ? "enabled" : "disabled"); return 0; }
         NSString *name = ReadGameNameWithLoader(NULL, NULL);
         if (name) puts(name.UTF8String);
     }
@@ -289,6 +312,7 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
         if (routed) {
             unsetenv("GAMEKIT_IDENTITY_ROUTED");
             if ([routed isEqual:current]) {
+                StartCursorGuardForOwnedGame();
 #ifdef GAMEKIT_SAVE_WRITE_GUARD
                 guardSaves();
 #endif
@@ -298,6 +322,7 @@ __attribute__((constructor)) static void GameIdentityStart(void) {
         NSString *target = nil;
         (void)ReadGameNameWithLoader(&target, NULL);
         if (!current || !target.length || ([current isEqual:target] && !libraryPathChanged)) {
+            StartCursorGuardForOwnedGame();
 #ifdef GAMEKIT_SAVE_WRITE_GUARD
             guardSaves();
 #endif

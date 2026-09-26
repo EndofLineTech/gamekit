@@ -316,12 +316,9 @@ final class GamekitUITests: XCTestCase {
         let apps = steam.appendingPathComponent("steamapps")
         try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Stardew Valley"), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data("WINE REGISTRY Version 2\n".utf8).write(to: store.prefixURL(for: id).appendingPathComponent("user.reg"))
         let manifest = apps.appendingPathComponent("appmanifest_413150.acf")
         try Data(#""AppState" { "appid" "413150" "name" "Stardew Valley" "installdir" "Stardew Valley" "StateFlags" "4" "SizeOnDisk" "123456789" }"#.utf8).write(to: manifest)
-        let profiles = root.appendingPathComponent("Metadata/GameProfiles")
-        try FileManager.default.createDirectory(at: profiles, withIntermediateDirectories: true)
-        try Data(#"{"schemaVersion":1,"revision":2,"appId":413150,"name":"Stardew Valley","runtime":"sikarugir-10.0_6","launchArguments":{},"notes":"Profile UI fixture: keep existing game settings."}"#.utf8)
-            .write(to: profiles.appendingPathComponent("413150.json"))
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
         app.launch()
@@ -336,7 +333,8 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(uninstall.isEnabled, "Unavailable runtime must also disable Steam uninstall requests")
         app.buttons["game-compatibility-413150"].click()
         XCTAssertTrue(app.staticTexts["game-profile-source"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Profile UI fixture: keep existing game settings."].exists)
+        let cursorGuard = app.descendants(matching: .any)["game-cursor-guard"]
+        XCTAssertTrue(cursorGuard.exists)
         XCTAssertTrue(app.buttons["Update profile"].exists)
         app.buttons["Done"].click()
         try FileManager.default.removeItem(at: manifest)

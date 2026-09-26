@@ -195,6 +195,32 @@ struct GameCompatibilityTests {
         }
     }
 
+    @Test("Cursor guard is opt-in, scoped to the declared installed game, and survives legacy preferences")
+    func cursorGuardPreference() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let game = GameFixtures.other
+        let apps = fixture.prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/" + game.name), withIntermediateDirectories: true)
+        try game.manifest.write(to: apps.appendingPathComponent("appmanifest_\(game.appId).acf"))
+        let settings = fixture.settings()
+        let preferences = fixture.store.root.appendingPathComponent("Metadata/GamePresentation.json")
+        try Data(#"{"schemaVersion":1,"fullscreenSpaces":{"553850":true}}"#.utf8).write(to: preferences)
+        #expect(try await settings.inspect(appID: game.appId).cursorGuard == false)
+        let on = try await settings.setCursorGuard(true, appID: game.appId)
+        #expect(on.cursorGuard && !on.fullscreenSpace)
+        #expect(try await fixture.settings().inspect(appID: game.appId).cursorGuard)
+        #expect(try GamePresentationPreferences.read(root: fixture.store.root).fullscreenSpaces["553850"] == true)
+        let installed = try SteamGameLibrary.scan(prefix: fixture.prefix).games
+        try GameDockNames.publish(root: fixture.store.root, prefix: fixture.prefix, session: UUID(), games: installed, validate: {})
+        let map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: GameDockNames.url(root: fixture.store.root, prefix: fixture.prefix)))
+        #expect(map.cursorGuardExecutables == [String(game.appId): game.executable.lowercased()])
+        #expect(try await settings.setCursorGuard(false, appID: game.appId).cursorGuard == false)
+        #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setCursorGuard(true, appID: game.appId) }
+        await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setCursorGuard(true, appID: game.appId) }
+        await #expect(throws: GameCompatibilityError.unsupportedGame) { try await settings.setCursorGuard(true, appID: GameFixtures.primary.appId) }
+    }
+
     @Test("Independent Windows registry queries observe saved choices after each fresh Wine session", .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_COMPATIBILITY_WINE_SMOKE"] == "1"))
     func wineReadback() async throws {
         let fixture = try await CompatibilityFixture(); defer { fixture.remove() }

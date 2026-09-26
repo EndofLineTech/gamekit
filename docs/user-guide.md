@@ -242,13 +242,24 @@ Stop Steam before changing it, then launch a fresh session. This option is
 validated for Helldivers on this Mac's built-in display; other games retain their
 current presentation.
 
+For Stardew Valley's Windows build, the optional **Hide duplicate macOS pointer**
+toggle is under **Game cursor guard** in its gear panel. Stop Windows Steam and
+its games, enable it, then start a fresh session. It substitutes a transparent
+macOS cursor only inside Stardew's owned Wine process while its window is active;
+the game's drawn cursor stays visible. Command-Tab to another app or exit Stardew
+to restore the normal pointer. Disable the toggle with Steam stopped to revert.
+The wiki profile declares this capability, but the toggle starts off and your
+choice remains local. The scoped menu/focus/exit check does not establish a new
+full gameplay/save-reload pass with the guard enabled.
+
 Stop Windows Steam and all its games before making changes; launch a fresh session
 after saving. The existing accepted override is displayed as-is on first use.
 For capture, Gamekit reads the saved registry, changes only the supported
 app-specific value, and verifies it after saving. Driver and Space preferences
-are stored separately in Gamekit metadata. Other registry settings, saves, runtime binaries and
-launcher caches are preserved. Unsupported or ambiguous registry values are
-refused. Other titles offer backend selection but not the Helldivers-specific fixes.
+are stored separately in Gamekit metadata, as is the cursor guard preference.
+Other registry settings, saves, runtime binaries and launcher caches are preserved.
+Unsupported or ambiguous registry values are refused. Other titles offer backend
+selection but not the Helldivers-specific fixes.
 
 ## Recovery
 

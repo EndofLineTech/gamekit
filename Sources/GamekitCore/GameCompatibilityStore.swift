@@ -44,6 +44,7 @@ public struct GameCompatibilitySnapshot: Sendable {
     public let graphicsBackend: D3DMetalBackend
     public let sessionLocked: Bool
     public let fullscreenSpace: Bool
+    public let cursorGuard: Bool
     public let driverCompatibility: Bool
     public let driverCompatibilityAvailable: Bool
     public var effectiveCapture: Bool { capture == .enabled || (capture == .inherit && inheritedCapture) }
@@ -98,14 +99,29 @@ func gameExecution(appID: UInt32, root: URL? = nil) -> GameExecutionParameters {
 }
 
 struct GamePresentationPreferences: Codable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var fullscreenSpaces: [String: Bool] = [:]
+    var cursorGuards: [String: Bool] = [:]
+    init() {}
+    private enum CodingKeys: String, CodingKey { case schemaVersion, fullscreenSpaces, cursorGuards }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        fullscreenSpaces = try values.decode([String: Bool].self, forKey: .fullscreenSpaces)
+        if schemaVersion == 1 {
+            guard !values.contains(.cursorGuards) else { throw GameCompatibilityError.unsupportedPresentation }
+        } else {
+            cursorGuards = try values.decode([String: Bool].self, forKey: .cursorGuards)
+        }
+    }
     static func read(root: URL) throws -> Self {
         guard let directory = try ManagedDirectory.openRoot(root, create: false)?.directory("Metadata"),
               let data = try directory.read("GamePresentation.json") else { return .init() }
-        let value = try JSONDecoder().decode(Self.self, from: data)
-        guard value.schemaVersion == 1, value.fullscreenSpaces.count <= 512,
-              value.fullscreenSpaces.keys.allSatisfy(canonicalAppID) else { throw GameCompatibilityError.unsupportedPresentation }
+        var value = try JSONDecoder().decode(Self.self, from: data)
+        guard [1, 2].contains(value.schemaVersion), value.fullscreenSpaces.count <= 512,
+              value.fullscreenSpaces.keys.allSatisfy(canonicalAppID), value.cursorGuards.count <= 512,
+              value.cursorGuards.keys.allSatisfy(canonicalAppID) else { throw GameCompatibilityError.unsupportedPresentation }
+        value.schemaVersion = 2
         return value
     }
 }
@@ -210,9 +226,11 @@ public actor GameCompatibilityStore {
         let execution = gameExecution(appID: appID, root: store.root)
         guard let executable = execution.executable else { throw GameCompatibilityError.unsupportedGame }
         let registry = try execution.capture.map { try GameCaptureRegistry(data, executable: executable, inheritedDefault: $0.inheritedDefault) }
+        let presentation = try GamePresentationPreferences.read(root: store.root)
         return try .init(capture: registry?.capture ?? .inherit, inheritedCapture: registry?.inheritedCapture ?? false,
-                         graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
-                          fullscreenSpace: GamePresentationPreferences.read(root: store.root).fullscreenSpaces[String(appID)] ?? execution.fullscreenSpace?.defaultEnabled ?? false,
+                          graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
+                           fullscreenSpace: presentation.fullscreenSpaces[String(appID)] ?? execution.fullscreenSpace?.defaultEnabled ?? false,
+                           cursorGuard: presentation.cursorGuards[String(appID)] ?? execution.cursorGuard?.defaultEnabled ?? false,
                           driverCompatibility: GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: appID, revision: layout.profile.revision, root: store.root),
                           driverCompatibilityAvailable: execution.driver?.available(revision: layout.profile.revision) == true)
     }
@@ -261,6 +279,7 @@ public actor GameCompatibilityStore {
     }
 
     @discardableResult public func setDriverCompatibility(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        guard gameExecution(appID: appID, root: store.root).driver != nil else { throw GameCompatibilityError.unsupportedGame }
         let installation = try await store.installationLease()
         defer { withExtendedLifetime(installation) {} }
         let record = try await record(appID)
@@ -287,6 +306,7 @@ public actor GameCompatibilityStore {
         return try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
     }
     @discardableResult public func setCapture(_ capture: GameCaptureOverride, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        guard gameExecution(appID: appID, root: store.root).capture != nil else { throw GameCompatibilityError.unsupportedGame }
         let installation = try await store.installationLease()
         defer { withExtendedLifetime(installation) {} }
         let record = try await record(appID)
@@ -342,5 +362,33 @@ public actor GameCompatibilityStore {
             try metadata.write(JSONEncoder().encode(preferences), to: "GamePresentation.json", createOnly: false, beforeCommit: { try execution.validate() })
         }
         return try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
+    }
+
+    @discardableResult public func setCursorGuard(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await record(appID)
+        let settings = RuntimeSettingsStore(store: store)
+        guard !(try await settings.isSelectionLocked()) else { throw EnvironmentStoreError.busy }
+        let execution = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(execution) {} }
+        let selected = try await settings.layout()
+        for layout in [selected] + RuntimeRevision.allCases.map({ RuntimeLayout(dataRoot: store.root, profile: $0.profile) }) {
+            let observed = await observe(record, execution.prefix, layout)
+            guard observed.complete else { throw SteamRecoveryError.observationUnavailable }
+            guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
+        }
+        try execution.validate(); try Task.checkCancellation()
+        guard gameExecution(appID: appID, root: store.root).cursorGuard != nil else { throw GameCompatibilityError.unsupportedGame }
+        _ = try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
+        var preferences = try GamePresentationPreferences.read(root: store.root)
+        preferences.cursorGuards[String(appID)] = enabled
+        guard let metadata = try ManagedDirectory.openRoot(store.root, create: false)?.directory("Metadata") else { throw EnvironmentStoreError.notFound }
+        try metadata.withWriteLock {
+            try metadata.write(JSONEncoder().encode(preferences), to: "GamePresentation.json", createOnly: false, beforeCommit: { try execution.validate() })
+        }
+        let saved = try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
+        guard saved.cursorGuard == enabled else { throw GameCompatibilityError.unsupportedPresentation }
+        return saved
     }
 }

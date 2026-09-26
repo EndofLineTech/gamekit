@@ -53,6 +53,16 @@ class GameProfilesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             wiki.validate_profile(profile, 526870)
 
+    def test_cursor_guard_profile_is_published_without_automatically_enabling_it(self):
+        game = GAMES["other"]
+        profile = json.loads((ROOT / "Sources/GamekitCore/GameProfiles" / f'{game["appId"]}.json').read_text())
+        wiki.validate_profile(profile, game["appId"])
+        self.assertEqual(profile["execution"]["executable"], game["executable"].lower())
+        self.assertIs(profile["execution"]["cursorGuard"]["defaultEnabled"], False)
+        profile["execution"]["cursorGuard"]["defaultEnabled"] = True
+        with self.assertRaises(ValueError):
+            wiki.validate_profile(profile, game["appId"])
+
 
 if __name__ == "__main__":
     unittest.main()

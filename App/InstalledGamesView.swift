@@ -161,20 +161,6 @@ private final class InstalledGamesModel: ObservableObject {
             }
         }
     }
-
-    func showSteam(setup: SetupModel, diagnostics: AppDiagnosticsModel) {
-        guard let token = setup.begin("Showing Windows Steam") else { return }
-        Task {
-            defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
-            do {
-                let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
-                try await lifecycle.show()
-                if try await !SteamWindowPresentation.bringForward(using: lifecycle) {
-                    message = "Steam's window was requested, but macOS did not activate it. Select Windows Steam in the Dock."
-                }
-            } catch { message = AppFailure.message(error) }
-        }
-    }
 }
 
 struct InstalledGamesView: View {
@@ -256,8 +242,6 @@ struct InstalledGamesView: View {
                 if let warning = model.warning { Text(warning).font(.callout).foregroundStyle(.orange) }
                 if let message = model.message {
                     Text(message).font(.callout).accessibilityIdentifier("game-launch-status")
-                    Button("Show Windows Steam") { model.showSteam(setup: setup, diagnostics: diagnostics) }
-                        .disabled(setup.isBusy || !setup.actions.show).accessibilityIdentifier("show-game-launch-steam")
                 }
                 Text("Games in Gamekit's managed Steam library. External libraries are not shown. Launch starts Windows Steam if needed; installation does not establish game compatibility.")
                     .font(.caption).foregroundStyle(.secondary)

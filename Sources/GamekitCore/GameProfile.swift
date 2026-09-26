@@ -22,14 +22,19 @@ public struct GameExecutionParameters: Codable, Equatable, Sendable {
         public let defaultEnabled: Bool
         public let guidance: String
     }
+    public struct CursorGuard: Codable, Equatable, Sendable {
+        public let defaultEnabled: Bool
+        public let guidance: String
+    }
     public var executable: String? = nil
     public var driver: Driver? = nil
     public var capture: Capture? = nil
     public var fullscreenSpace: FullscreenSpace? = nil
-    public var hasSettings: Bool { driver != nil || capture != nil || fullscreenSpace != nil }
+    public var cursorGuard: CursorGuard? = nil
+    public var hasSettings: Bool { driver != nil || capture != nil || fullscreenSpace != nil || cursorGuard != nil }
 
     static func validate(_ object: [String: Any]) throws {
-        guard Set(object.keys).isSubset(of: ["executable", "driver", "capture", "fullscreenSpace"]) else { throw GameProfileError.invalid }
+        guard Set(object.keys).isSubset(of: ["executable", "driver", "capture", "fullscreenSpace", "cursorGuard"]) else { throw GameProfileError.invalid }
         let value = try JSONDecoder().decode(Self.self, from: JSONSerialization.data(withJSONObject: object))
         guard !object.values.contains(where: { $0 is NSNull }) else { throw GameProfileError.invalid }
         if value.hasSettings {
@@ -56,6 +61,10 @@ public struct GameExecutionParameters: Codable, Equatable, Sendable {
             guard !capture.inheritedDefault else { throw GameProfileError.invalid }
         }
         if value.fullscreenSpace != nil { try fields("fullscreenSpace", ["defaultEnabled", "guidance"]) }
+        if let guardSetting = value.cursorGuard {
+            try fields("cursorGuard", ["defaultEnabled", "guidance"])
+            guard !guardSetting.defaultEnabled else { throw GameProfileError.invalid }
+        }
     }
 }
 
