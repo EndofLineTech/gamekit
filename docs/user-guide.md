@@ -164,8 +164,12 @@ session. See the repository's
 
 Install games using **Windows Steam**, in its default managed library. Gamekit's
 **Installed games** section detects their Steam installation records and shows
-each title with artwork and a play button. The list refreshes every three seconds,
-when Gamekit becomes active, or with **Refresh games**. Uninstalled titles disappear.
+each title with artwork, a play button, and its Steam-reported installed size. The
+size may be unavailable while a download or update is incomplete, if game files
+are missing, or if Steam has not recorded a valid size. It is not a measurement
+of saves, shader caches or other files outside the game directory. The list
+refreshes every three seconds, when Gamekit becomes active, or with **Refresh
+games**. Uninstalled titles disappear.
 
 **Open steamapps folder**, beside **Refresh games**, opens the managed Windows
 Steam library directory in Finder. Installed game files are under its `common`

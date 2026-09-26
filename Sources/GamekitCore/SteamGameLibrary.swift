@@ -9,6 +9,7 @@ public struct InstalledSteamGame: Identifiable, Equatable, Sendable {
     public let installDirectory: String
     public let buildID: String?
     public let state: SteamGameInstallState
+    public let sizeOnDiskBytes: Int64?
     public let artwork: Data?
 }
 
@@ -51,10 +52,15 @@ public enum SteamGameLibrary {
                 let filesExist = try common?.directory(folder) != nil
                 let state: SteamGameInstallState = (flags == 4 || flags == 68)
                     ? (filesExist ? .ready : .missingFiles) : .updating
+                // Steam's receipt reports installed size; it is not a recursive
+                // filesystem measurement or an estimate for unfinished downloads.
+                let reportedBytes = fields["sizeondisk"]?.string.flatMap(Int64.init)
+                let sizeOnDiskBytes = state == .ready ? reportedBytes.flatMap { $0 >= 0 ? $0 : nil } : nil
                 // Prefer Steam's cache; no account files or arbitrary manifest URLs.
                 let artwork = (try? cache?.directory(String(id))?.read("header.jpg", maximumBytes: 262_144))
                     ?? (try? cache?.read("\(id)_header.jpg", maximumBytes: 262_144))
-                games.append(.init(id: id, name: name, installDirectory: folder, buildID: fields["buildid"]?.string, state: state, artwork: artwork))
+                games.append(.init(id: id, name: name, installDirectory: folder, buildID: fields["buildid"]?.string,
+                                    state: state, sizeOnDiskBytes: sizeOnDiskBytes, artwork: artwork))
             } catch { rejected += 1 }
         }
         return .init(games: games.sorted {

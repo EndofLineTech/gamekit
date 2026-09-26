@@ -1,10 +1,10 @@
 # Ace Combat 7 — default launch and controller gameplay
 
-Issue: `gamekit-77k`. User-reported result on **2026-09-26**.
+Issues: `gamekit-77k`, `gamekit-22l`. User-reported result on **2026-09-26**.
 
-**Gameplay observed.** The user reported that Ace Combat 7 “Works GREAT” with no
-special changes after testing the controller in Windows Steam. This is a positive
-play report, not a completed gameplay/audio/save-and-reload acceptance checklist.
+**Playable.** The user reported that Ace Combat 7 “Works GREAT” with no special
+changes after testing the controller in Windows Steam, then confirmed in-game
+audio and that saved progress survived exiting and reloading.
 
 ## Recorded setup
 
@@ -18,12 +18,11 @@ play report, not a completed gameplay/audio/save-and-reload acceptance checklist
 | Launch | Normal managed Windows Steam launch; no game-specific launch options reported |
 | Controller connection | Xbox Wireless Controller connected to macOS via Bluetooth; macOS Bluetooth and HID inventories detected it |
 | Windows Steam input | Steam displayed “Xbox Series X controller” in USB mode; user successfully tested its inputs |
-| Game result | User reported that Ace Combat 7 works great with the default setup |
+| Game result | User reported gameplay and controller use work great with the default setup; audio and saved progress after exit/reload were explicitly confirmed |
 
 The USB mode label is Steam's presentation of the device, not evidence of a
 physical USB connection to the Mac.
 
 The selected Metal 3 backend is a Gamekit setting, not a trace of the game's
 rendering API. No DXMT/DXVK qualification, measured frame rate, exact play
-duration, separate audio check, or save/reload verification was reported. Those
-checks would be needed before upgrading the wiki status to **Playable**.
+duration, or rendering API trace was reported.

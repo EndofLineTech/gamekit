@@ -317,7 +317,7 @@ final class GamekitUITests: XCTestCase {
         try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Stardew Valley"), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
         let manifest = apps.appendingPathComponent("appmanifest_413150.acf")
-        try Data(#""AppState" { "appid" "413150" "name" "Stardew Valley" "installdir" "Stardew Valley" "StateFlags" "4" }"#.utf8).write(to: manifest)
+        try Data(#""AppState" { "appid" "413150" "name" "Stardew Valley" "installdir" "Stardew Valley" "StateFlags" "4" "SizeOnDisk" "123456789" }"#.utf8).write(to: manifest)
         let profiles = root.appendingPathComponent("Metadata/GameProfiles")
         try FileManager.default.createDirectory(at: profiles, withIntermediateDirectories: true)
         try Data(#"{"schemaVersion":1,"revision":2,"appId":413150,"name":"Stardew Valley","runtime":"sikarugir-10.0_6","launchArguments":{},"notes":"Profile UI fixture: keep existing game settings."}"#.utf8)
@@ -329,6 +329,7 @@ final class GamekitUITests: XCTestCase {
         let game = app.buttons["launch-game-413150"]
         XCTAssertTrue(game.waitForExistence(timeout: 20))
         XCTAssertEqual(game.label, "Launch Stardew Valley")
+        XCTAssertTrue((game.value as? String)?.contains("Steam-reported size: 123") == true)
         XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")
         let uninstall = app.buttons["uninstall-game-413150"]
         XCTAssertTrue(uninstall.exists)

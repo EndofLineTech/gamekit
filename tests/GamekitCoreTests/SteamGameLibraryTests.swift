@@ -11,8 +11,9 @@ private struct GameLibraryFixture {
         try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common"), withIntermediateDirectories: true)
     }
     func remove() { try? FileManager.default.removeItem(at: prefix) }
-    func manifest(_ id: String = "413150", flags: String = "4", directory: String = "Stardew Valley", createFiles: Bool = true) throws {
-        let text = "\"AppState\" { \"appid\" \"\(id)\" \"name\" \"Stardew Valley\" \"StateFlags\" \"\(flags)\" \"installdir\" \"\(directory)\" \"buildid\" \"16826371\" \"InstalledDepots\" { \"413151\" { \"manifest\" \"4278718763097142923\" } } }"
+    func manifest(_ id: String = "413150", flags: String = "4", directory: String = "Stardew Valley", createFiles: Bool = true, sizeOnDisk: String? = nil) throws {
+        let size = sizeOnDisk.map { "\"SizeOnDisk\" \"\($0)\"" } ?? ""
+        let text = "\"AppState\" { \"appid\" \"\(id)\" \"name\" \"Stardew Valley\" \"StateFlags\" \"\(flags)\" \"installdir\" \"\(directory)\" \"buildid\" \"16826371\" \(size) \"InstalledDepots\" { \"413151\" { \"manifest\" \"4278718763097142923\" } } }"
         try Data(text.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_\(id).acf"))
         if createFiles { try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/\(directory)"), withIntermediateDirectories: true) }
     }
@@ -46,6 +47,22 @@ struct SteamGameLibraryTests {
         #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.state == .ready)
         try FileManager.default.removeItem(at: fixture.steam.appendingPathComponent("steamapps/common/Stardew Valley"))
         #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.state == .missingFiles)
+    }
+
+    @Test("Steam-reported installed bytes are optional and never an estimate for missing or incomplete files")
+    func diskUsage() throws {
+        let fixture = try GameLibraryFixture(); defer { fixture.remove() }
+        try fixture.manifest(sizeOnDisk: "65663762225")
+        #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.sizeOnDiskBytes == 65_663_762_225)
+        for value in [nil, "not-a-number", "-1", "9223372036854775808"] as [String?] {
+            try fixture.manifest(sizeOnDisk: value)
+            #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.sizeOnDiskBytes == nil)
+        }
+        try fixture.manifest(flags: "1026", sizeOnDisk: "65663762225")
+        #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.sizeOnDiskBytes == nil)
+        try fixture.manifest(flags: "4", createFiles: false, sizeOnDisk: "65663762225")
+        try FileManager.default.removeItem(at: fixture.steam.appendingPathComponent("steamapps/common/Stardew Valley"))
+        #expect(try SteamGameLibrary.scan(prefix: fixture.prefix).games.first?.sizeOnDiskBytes == nil)
     }
 
     @Test("Malformed or redirecting manifests cannot hide valid games or create launch targets")

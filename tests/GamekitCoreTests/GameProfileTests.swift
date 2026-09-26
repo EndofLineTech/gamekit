@@ -52,7 +52,7 @@ struct GameProfileTests {
         #expect(try SteamApplicationBundle.configured(layout: layout, game: .init(appID: 42, name: "Fixture")).driverCompatibility)
         let prefix = metadataRoot.appendingPathComponent("Environments/steam")
         try GameDockNames.publish(root: metadataRoot, prefix: prefix, session: UUID(),
-            games: [.init(id: 42, name: "Fixture", installDirectory: "Fixture", buildID: nil, state: .ready, artwork: nil)],
+            games: [.init(id: 42, name: "Fixture", installDirectory: "Fixture", buildID: nil, state: .ready, sizeOnDiskBytes: nil, artwork: nil)],
             graphicsBackend: .metal3, libraryLayout: layout, validate: {})
         let projection = try Data(contentsOf: metadataRoot.appendingPathComponent("Metadata/GameDock/steam-drivers.ini"))
         let ini = try #require(String(data: projection, encoding: .utf16))

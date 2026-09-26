@@ -134,7 +134,7 @@ struct GameDockNamesTests {
         let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
         let prefix = store.prefixURL(for: SteamInstallationRecipe.environmentID)
         let first = UUID(), second = UUID()
-        let game = InstalledSteamGame(id: 526870, name: "Satisfactory", installDirectory: "Satisfactory", buildID: nil, state: .ready, artwork: nil)
+        let game = InstalledSteamGame(id: 526870, name: "Satisfactory", installDirectory: "Satisfactory", buildID: nil, state: .ready, sizeOnDiskBytes: nil, artwork: nil)
         try FileManager.default.createDirectory(at: store.root.appendingPathComponent("Metadata"), withIntermediateDirectories: true)
         try Data(#"{"schemaVersion":2,"driverVersions":{},"graphicsBackends":{"526870":"automatic","553850":"metal3"}}"#.utf8)
             .write(to: store.root.appendingPathComponent("Metadata/GameCompatibility.json"))
