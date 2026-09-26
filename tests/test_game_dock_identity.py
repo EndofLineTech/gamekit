@@ -175,7 +175,8 @@ int main(void) {
         self.assertEqual(self.run_reader("42", **(flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\fixture\other.exe"})), "disabled")
         self.document.pop("fullscreenExecutables")
         self.write()
-        self.assertEqual(self.run_reader("42", **flags), "disabled")
+        self.assertEqual(self.run_reader("42", **flags), "enabled")
+        self.assertEqual(self.run_reader("42", **(flags | {"GAMEKIT_TEST_WINDOWS_IMAGE": r"C:\unrelated\custom.exe"})), "disabled")
 
     def test_matches_actual_windows_image_when_native_appid_is_absent(self):
         self.write()

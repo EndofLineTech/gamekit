@@ -1,18 +1,21 @@
 # Native macOS fullscreen Spaces investigation
 
-Issue: `gamekit-deg`. Helldivers now has an opt-in fullscreen Space setting,
-validated on the built-in display of the development Mac. The final implementation
-retains the full 1800×1169 game area, including the notch-height region.
+Issue: `gamekit-deg`; shared/per-game selection: `gamekit-c52`, `gamekit-b84`.
+Helldivers' opt-in fullscreen Space is validated on the built-in display of the
+development Mac and retains the full 1800×1169 game area, including the
+notch-height region. Stardew later passed a separate-Space and automatic-focus
+check with its existing borderless window; see [Stardew's report](stardew-fullscreen-space.md).
 
 ## Using the feature
 
-Stop Windows Steam, open the **gear beside Helldivers' Play button**, and choose
-**Use fullscreen Space**. Keep **Fullscreen** selected inside the game. A fresh
-launch creates the Space without changing the game resolution or capture override.
-Choose **Use desktop fullscreen** while stopped to restore the original path.
-The setting is off by default; it was explicitly enabled on the development Mac
-after the user's hands-on acceptance. Other games and Steam retain their existing
-presentation.
+Stop Windows Steam before changing presentation. **Setup and prerequisites**
+offers the shared fullscreen-Space default, initially off. Every installed game
+offers **Use shared default**, **Use fullscreen Space** and **Keep on desktop**
+in its gear. The per-game choice wins; existing saved Helldivers and Stardew
+choices remain intact. Keep **Fullscreen** selected inside Helldivers. A fresh
+launch creates a Space without changing game resolution or capture preferences.
+The helper does nothing if the game window does not cover the display. Games
+without a recorded result have controls but are not represented as qualified.
 
 The product helper creates a small native fullscreen host, then places the original
 Wine window using FullScreenAuxiliary and MoveToActiveSpace. It never reparents a
@@ -20,13 +23,14 @@ Wine window or resizes its game content. The host uses HideDock/HideMenuBar, and
 accepted Wine fullscreen capture preference remains intact. The native host itself
 is notch-safe; the separate game window covers the entire display.
 
-`Metadata/GamePresentation.json` stores the typed opt-in under AppID 553850. Changes
+`Metadata/GamePresentation.json` stores the shared default and per-game overrides. Changes
 require stopped-session checks and installation/execution leases. Launch copies
 the preference into the private prefix/session-bound Dock mapping. The helper
-requires a genuine JSON boolean, matching session/prefix, approved AppID and the
-main `helldivers2.exe` image. Steam, crash handlers and other games cannot inherit
-the Space merely through SteamAppId. Discovery is bounded to 90 seconds; failure
-leaves the normal game window available.
+requires a genuine JSON boolean, matching session/prefix and an installed-game
+AppID resolved from a validated installation directory. Profile-qualified games
+also match their exact executable. Steam and services cannot inherit the Space
+merely through SteamAppId. Discovery is bounded to 90 seconds; failure leaves
+the normal game window available.
 
 The host exits with game-window lifetime or sustained disappearance while the game
 is active. Wine emits close/hide operations during focus suspension, so these are

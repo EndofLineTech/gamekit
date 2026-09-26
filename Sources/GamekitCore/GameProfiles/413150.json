@@ -1,16 +1,20 @@
 {
   "schemaVersion": 2,
-  "revision": 4,
+  "revision": 5,
   "appId": 413150,
   "name": "Stardew Valley",
   "runtime": "sikarugir-10.0_6",
   "launchArguments": {},
-  "notes": "Build 16826371: the Windows game is playable, but its unguarded cursor is duplicated. The cursor guard is now enabled by default after successful menu, input and focus checks; gameplay and save/reload with the guard remain unverified. An explicit saved Off choice still wins. No extra launch options are needed.",
+  "notes": "Build 16826371: the Windows game is playable, but its unguarded cursor is duplicated. The cursor guard is enabled by default after menu/input/focus checks. A separate macOS fullscreen Space was accepted for Stardew's borderless window, with automatic focus, as an optional per-game choice. Explicit saved choices still win; gameplay and save/reload with these settings remain unverified.",
   "execution": {
     "executable": "stardew valley.exe",
     "cursorGuard": {
       "defaultEnabled": true,
       "guidance": "Enabled by default: show only the game's drawn cursor while its managed window is frontmost. The macOS pointer returns on Command-Tab, game exit or Stop Windows Steam. Stop Windows Steam before changing this setting; an explicit Off choice is retained across profile updates."
+    },
+    "fullscreenSpace": {
+      "defaultEnabled": false,
+      "guidance": "Tested on the built-in display with Stardew in its existing borderless mode: a dedicated macOS Space opened and brought the game forward automatically. The option does not alter the game's resolution, saves or borderless preference. Restore desktop presentation in this game's gear if needed."
     }
   }
 }

@@ -223,10 +223,12 @@ static NSString *ReadGameNameWithLoader(NSString **loader, BOOL *fullscreenSpace
         id spaces = document[@"fullscreenSpaces"];
         id enabled = [spaces isKindOfClass:NSDictionary.class] ? spaces[appID] : nil;
         id executables = document[@"fullscreenExecutables"];
-        id executable = [executables isKindOfClass:NSDictionary.class] ? executables[appID] : nil;
+        if (executables && (![executables isKindOfClass:NSDictionary.class] || [executables count] > 512)) return name;
+        id executable = executables[appID];
         NSString *image = [[WindowsImage() stringByReplacingOccurrencesOfString:@"\\" withString:@"/"] lastPathComponent].lowercaseString;
         if ([enabled isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)enabled) == CFBooleanGetTypeID() &&
-            [enabled boolValue] && [executable isKindOfClass:NSString.class] && [image isEqual:executable]) *fullscreenSpace = YES;
+            [enabled boolValue] && (!executable || ([executable isKindOfClass:NSString.class] && [image isEqual:executable])))
+            *fullscreenSpace = YES;
     }
     return name;
 }

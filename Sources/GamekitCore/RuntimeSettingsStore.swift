@@ -38,6 +38,33 @@ public actor RuntimeSettingsStore {
         layout(try readSettings())
     }
 
+    public func sharedFullscreenSpace() throws -> Bool {
+        try GamePresentationPreferences.read(root: store.root).sharedFullscreenSpace
+    }
+
+    public func selectSharedFullscreenSpace(_ enabled: Bool) async throws {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        guard !(try isSelectionLocked()) else { throw EnvironmentStoreError.busy }
+        let selected = try layout()
+        let records = try await store.loadAll()
+        var locks: [ManagedFileLock] = []
+        defer { withExtendedLifetime(locks) {} }
+        if let environments = try metadata(create: false)?.directory("Environments") {
+            for record in records {
+                locks.append(try environments.acquireLock(".execution-\(record.id.rawValue).lock"))
+                let snapshot = await RuntimeProcessObserver().inspect(record: record, prefix: store.prefixURL(for: record.id), layout: selected)
+                guard snapshot.complete, snapshot.processes.isEmpty else { throw EnvironmentStoreError.busy }
+            }
+        }
+        var preferences = try GamePresentationPreferences.read(root: store.root)
+        preferences.sharedFullscreenSpace = enabled
+        guard let directory = try metadata(create: true) else { throw EnvironmentStoreError.notFound }
+        try directory.withWriteLock {
+            try directory.write(JSONEncoder().encode(preferences), to: "GamePresentation.json", createOnly: false, beforeCommit: {})
+        }
+    }
+
     public func isSelectionLocked() throws -> Bool {
         guard let directory = try metadata(create: false)?.directory("Lifecycle") else { return false }
         return try directory.names().contains { $0.hasSuffix(".json") }

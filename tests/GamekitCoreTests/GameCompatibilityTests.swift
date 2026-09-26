@@ -179,7 +179,32 @@ struct GameCompatibilityTests {
         let disabled = try await settings.setFullscreenSpace(false, appID: 553850)
         #expect(!disabled.fullscreenSpace)
         #expect(disabled.capture == .disabled)
-        await #expect(throws: GameCompatibilityError.unsupportedGame) { try await settings.setFullscreenSpace(true, appID: 526870) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await settings.setFullscreenSpace(true, appID: GameFixtures.renderer.appId) }
+    }
+
+    @Test("Any installed game may inherit the shared Space, force desktop, or choose a Space")
+    func genericFullscreenSpace() async throws {
+        let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
+        let id: UInt32 = 42 // Synthetic game identity, not a shipped game rule.
+        let apps = fixture.prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps")
+        try FileManager.default.createDirectory(at: apps.appendingPathComponent("common/Fixture"), withIntermediateDirectories: true)
+        try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
+            .write(to: apps.appendingPathComponent("appmanifest_42.acf"))
+        let settings = fixture.settings()
+        #expect(try await settings.inspectFullscreenSpace(appID: id).effective == false)
+        try await RuntimeSettingsStore(store: fixture.store).selectSharedFullscreenSpace(true)
+        let inherited = try await settings.inspectFullscreenSpace(appID: id)
+        #expect(inherited.override == .inherit && inherited.effective)
+        let desktop = try await settings.setFullscreenSpace(.disabled, appID: id)
+        #expect(desktop.override == .disabled && !desktop.effective)
+        let shared = try await settings.setFullscreenSpace(.inherit, appID: id)
+        #expect(shared.override == .inherit && shared.effective)
+        let games = try SteamGameLibrary.scan(prefix: fixture.prefix).games
+        try GameDockNames.publish(root: fixture.store.root, prefix: fixture.prefix, session: UUID(), games: games, validate: {})
+        let map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: GameDockNames.url(root: fixture.store.root, prefix: fixture.prefix)))
+        #expect(map.fullscreenSpaces?[String(id)] == true)
+        #expect(map.fullscreenExecutables?[String(id)] == nil)
+        await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setFullscreenSpace(.enabled, appID: id) }
     }
 
     @Test("Fullscreen Space changes require a stopped session and reject malformed settings")
@@ -219,6 +244,13 @@ struct GameCompatibilityTests {
         #expect(map.cursorGuardExecutables?.isEmpty == true)
         let on = try await settings.setCursorGuard(true, appID: game.appId)
         #expect(on.cursorGuard && !on.fullscreenSpace)
+        let inSpace = try await settings.setFullscreenSpace(true, appID: game.appId)
+        #expect(inSpace.fullscreenSpace && inSpace.cursorGuard)
+        #expect(try GamePresentationPreferences.read(root: fixture.store.root).fullscreenSpaces["553850"] == true)
+        try GameDockNames.publish(root: fixture.store.root, prefix: fixture.prefix, session: UUID(), games: installed, validate: {})
+        map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: mapping))
+        #expect(map.fullscreenSpaces?[String(game.appId)] == true)
+        #expect(map.fullscreenExecutables?[String(game.appId)] == game.executable.lowercased())
         #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
         await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setCursorGuard(true, appID: game.appId) }
         await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setCursorGuard(true, appID: game.appId) }

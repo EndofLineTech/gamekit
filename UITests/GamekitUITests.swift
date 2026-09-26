@@ -70,6 +70,7 @@ final class GamekitUITests: XCTestCase {
             let gear = app.buttons["game-compatibility-123456"]
             XCTAssertTrue(gear.waitForExistence(timeout: 20)); revealRecoveryButton(gear, in: app); gear.click()
             XCTAssertTrue(app.popUpButtons["game-graphics-backend-picker"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.popUpButtons["game-fullscreen-space-picker"].exists, "Games without a specific profile still offer the Space override")
         }
         func choose(_ title: String, effective: String) {
             let picker = app.popUpButtons["game-graphics-backend-picker"]
@@ -90,6 +91,25 @@ final class GamekitUITests: XCTestCase {
         choose("Use shared default", effective: "Automatic")
         let snapshot = try await GameCompatibilityStore(store: store).inspectGraphics(appID: 123456)
         XCTAssertEqual(snapshot.override, .inherit)
+    }
+    func testSharedFullscreenSpaceCanBeChangedAndReopened() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch(); defer { app.terminate() }
+        let toggle = app.checkBoxes["shared-fullscreen-space"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        revealRecoveryButton(toggle, in: app)
+        XCTAssertEqual(toggle.value as? Int, 0)
+        toggle.click()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == 1"), object: toggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        let stored = try await RuntimeSettingsStore(store: store).sharedFullscreenSpace()
+        XCTAssertTrue(stored)
+        app.terminate(); app.launch()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertEqual(toggle.value as? Int, 1)
     }
     func testDebugCaptureIsOptInAndResetsWhenAppReopens() throws {
         let root = try temporaryRoot()
@@ -157,20 +177,19 @@ final class GamekitUITests: XCTestCase {
         app.terminate(); app.launch()
         openSettings()
         XCTAssertTrue((app.staticTexts["game-capture-setting"].value as? String ?? "").hasPrefix("Enabled for this game"))
-        let spaceButton = app.buttons["enable-fullscreen-space"]
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: spaceButton)
+        let spacePicker = app.popUpButtons["game-fullscreen-space-picker"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: spacePicker)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
-        spaceButton.click()
+        spacePicker.click(); app.menuItems["Use fullscreen Space"].click()
         let space = app.staticTexts["game-fullscreen-presentation"]
-        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Dedicated fullscreen Space"), object: space)
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Dedicated fullscreen Space"), object: space)
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 15), .completed)
         app.terminate(); app.launch(); openSettings()
-        XCTAssertEqual(space.value as? String, "Dedicated fullscreen Space")
-        let desktop = app.buttons["disable-fullscreen-space"]
-        let unlocked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: desktop)
+        XCTAssertTrue((space.value as? String ?? "").contains("Dedicated fullscreen Space"))
+        let unlocked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: spacePicker)
         XCTAssertEqual(XCTWaiter.wait(for: [unlocked], timeout: 15), .completed)
-        desktop.click()
-        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Fullscreen on the desktop"), object: space)
+        spacePicker.click(); app.menuItems["Keep on desktop"].click()
+        let reverted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Effective next launch: Desktop"), object: space)
         XCTAssertEqual(XCTWaiter.wait(for: [reverted], timeout: 15), .completed)
         let registry = try String(contentsOf: prefix.appendingPathComponent("user.reg"), encoding: .utf8)
         XCTAssertTrue(registry.contains("custom.exe"))

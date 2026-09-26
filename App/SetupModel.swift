@@ -19,6 +19,7 @@ final class SetupModel: ObservableObject {
     @Published private(set) var lifecycleState: SteamLifecycleState = .notInstalled
     @Published private(set) var metadataValid = false
     @Published private(set) var availableGraphicsBackends: Set<GraphicsBackend> = [.automatic, .metal3]
+    @Published private(set) var sharedFullscreenSpace = false
     private var owner: UUID?
     private var fixtureReads = 0
     private var refreshCount = 0
@@ -55,6 +56,7 @@ final class SetupModel: ObservableObject {
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
                 let settings = RuntimeSettingsStore(store: store)
                 let selected = try await settings.layout()
+                sharedFullscreenSpace = try await settings.sharedFullscreenSpace()
                 availableGraphicsBackends = await Task.detached {
                     Set(GraphicsBackend.allCases.filter { selected.isGraphicsBackendAvailable($0) })
                 }.value
@@ -134,6 +136,21 @@ final class SetupModel: ObservableObject {
                 let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
                 try await settings.selectGraphicsBackend(backend)
                 layout = try await settings.layout(); selectionRevision = UUID()
+                end(token); refresh(diagnostics: diagnostics)
+            } catch { problem = AppFailure.message(error); end(token) }
+        }
+    }
+
+    func chooseSharedFullscreenSpace(_ enabled: Bool, diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, !selectionLocked, enabled != sharedFullscreenSpace,
+              let token = begin("Saving shared fullscreen Space") else { return }
+        problem = nil
+        Task { [self] in
+            do {
+                let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
+                try await settings.selectSharedFullscreenSpace(enabled)
+                sharedFullscreenSpace = try await settings.sharedFullscreenSpace()
+                selectionRevision = UUID()
                 end(token); refresh(diagnostics: diagnostics)
             } catch { problem = AppFailure.message(error); end(token) }
         }

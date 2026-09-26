@@ -8,6 +8,7 @@ struct GameCompatibilityView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var snapshot: GameCompatibilitySnapshot?
     @State private var graphics: GameGraphicsSnapshot?
+    @State private var fullscreen: GameFullscreenSpaceSnapshot?
     @State private var profile: ResolvedGameProfile?
     @State private var profileStatus: String?
     @State private var fetchingProfile = false
@@ -82,6 +83,23 @@ struct GameCompatibilityView: View {
             }
             Text("Use shared default follows Setup. An override applies only to this game, including launches from managed Steam. DXMT and DXVK support Direct3D 10/11 only; choose an Apple backend for Direct3D 12 games. Steam keeps its Apple backend. Stop Windows Steam before changing settings.")
                 .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Text("Fullscreen Space — this game").font(.headline)
+            if let fullscreen {
+                Picker("Fullscreen presentation", selection: Binding(
+                    get: { fullscreen.override }, set: { run(space: $0) })) {
+                    ForEach(GameFullscreenSpaceOverride.allCases, id: \.rawValue) { choice in
+                        Text(choice.title).tag(choice)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("game-fullscreen-space-picker")
+                .disabled(setup.isBusy || fullscreen.sessionLocked || !setup.actions.reset)
+                Text("Effective next launch: \(fullscreen.effective ? "Dedicated fullscreen Space" : "Desktop") · Shared default: \(fullscreen.sharedDefault ? "Space" : "Desktop")")
+                    .font(.caption).accessibilityIdentifier("game-fullscreen-presentation")
+            }
+            Text(profile?.profile.execution.fullscreenSpace?.guidance ?? "Only a game window covering the display can enter a separate macOS Space. Windowed games remain on the desktop. Stop Windows Steam before changing this option.")
+                .font(.caption).foregroundStyle(.secondary)
             if let problem = setup.problem { Text(problem).font(.callout).foregroundStyle(.secondary) }
             Divider()
             if let execution = profile?.profile.execution, execution.hasSettings {
@@ -112,21 +130,6 @@ struct GameCompatibilityView: View {
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
                     Divider()
                     }
-                    if let space = execution.fullscreenSpace {
-                    Text("Fullscreen presentation — this game only").font(.headline)
-                    Text(snapshot.fullscreenSpace ? "Dedicated fullscreen Space" : "Fullscreen on the desktop")
-                        .accessibilityIdentifier("game-fullscreen-presentation")
-                    HStack {
-                        Button("Use fullscreen Space") { run(space: true) }
-                            .disabled(snapshot.fullscreenSpace).accessibilityIdentifier("enable-fullscreen-space")
-                        Button("Use desktop fullscreen") { run(space: false) }
-                            .disabled(!snapshot.fullscreenSpace).accessibilityIdentifier("disable-fullscreen-space")
-                    }
-                    .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
-                    Text(space.guidance)
-                        .font(.caption)
-                    Divider()
-                    }
                     if let cursor = execution.cursorGuard {
                     Text("Game cursor guard — this game only").font(.headline)
                     Toggle("Hide duplicate macOS pointer", isOn: Binding(
@@ -148,7 +151,7 @@ struct GameCompatibilityView: View {
         .padding(24).frame(width: 580)
     }
 
-    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil, cursorGuard: Bool? = nil) {
+    private func run(capture: GameCaptureOverride? = nil, space: GameFullscreenSpaceOverride? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil, cursorGuard: Bool? = nil) {
         guard let token = setup.begin(capture == nil && space == nil && driver == nil && backend == nil && cursorGuard == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
@@ -159,12 +162,15 @@ struct GameCompatibilityView: View {
                     status = "Saved and verified. Applies to this game's next launch."
                     return
                 }
+                if let space {
+                    fullscreen = try await settings.setFullscreenSpace(space, appID: game.id)
+                    status = "Saved and verified. Applies when the game next launches."
+                    return
+                }
                 graphics = try await settings.inspectGraphics(appID: game.id)
+                fullscreen = try await settings.inspectFullscreenSpace(appID: game.id)
                 if let driver {
                     snapshot = try await settings.setDriverCompatibility(driver, appID: game.id)
-                    status = "Saved and verified. Applies when the game next launches."
-                } else if let space {
-                    snapshot = try await settings.setFullscreenSpace(space, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else if let capture {
                     snapshot = try await settings.setCapture(capture, appID: game.id)
@@ -178,6 +184,7 @@ struct GameCompatibilityView: View {
                 }
             } catch {
                 snapshot = nil
+                fullscreen = nil
                 status = AppFailure.message(error)
             }
         }
