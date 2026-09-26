@@ -16,6 +16,21 @@
     }
   },
   "games": {
+    "502500": {
+      "recommendation": "Use the shared Metal 3 setting and normal managed Windows Steam launch; no Ace Combat 7-specific adjustments were needed in the reported play session.",
+      "recommended_backend": "apple",
+      "summary": "User reports Ace Combat 7 plays great with an Xbox Wireless Controller; Windows Steam detected and successfully tested its inputs. Save/reload and audio were not separately confirmed.",
+      "issues": [],
+      "results": [
+        {
+          "backend": "apple", "status": "gameplay", "version": "D3DMetal 4.0b2 (shared Metal 3 setting; active graphics API not traced)",
+          "api": "Game rendering API not independently identified", "api_evidence": "unknown", "build": "9855922", "date": "2026-09-26", "environment": "m4-driver-version-1",
+          "launch_options": [],
+          "notes": "The user reported that the game works great without special changes. An Xbox Wireless Controller connected to macOS over Bluetooth appeared in managed Windows Steam as an Xbox Series X controller in USB mode; Steam's device-input test passed. The game/controller session was reported successful, but no separate save/reload, audio, measured FPS, session-duration or API trace was supplied. The shared Metal 3 selection is not proof of the game's active rendering API; DXMT and DXVK were not tested.",
+          "evidence": ["docs/ace-combat-7-acceptance.md"]
+        }
+      ]
+    },
     "16030": {
       "recommendation": "Use windowed mode: turn off Fullscreen in the game's Options. The accepted saved configuration is 1024×768 with FullScreen=False.",
       "recommended_backend": "other",
