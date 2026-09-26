@@ -61,9 +61,8 @@ public struct GameExecutionParameters: Codable, Equatable, Sendable {
             guard !capture.inheritedDefault else { throw GameProfileError.invalid }
         }
         if value.fullscreenSpace != nil { try fields("fullscreenSpace", ["defaultEnabled", "guidance"]) }
-        if let guardSetting = value.cursorGuard {
+        if value.cursorGuard != nil {
             try fields("cursorGuard", ["defaultEnabled", "guidance"])
-            guard !guardSetting.defaultEnabled else { throw GameProfileError.invalid }
         }
     }
 }

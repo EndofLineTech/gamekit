@@ -75,8 +75,6 @@ def validate_profile(profile, app_id):
             require(type(value["inheritedDefault" if key == "capture" else "defaultEnabled"]) is bool, "Invalid execution default")
             if key == "capture":
                 require(value["inheritedDefault"] is False, "Unsupported Wine inherited default")
-            if key == "cursorGuard":
-                require(value["defaultEnabled"] is False, "Cursor guard must be opt-in")
             if key == "driver":
                 require(isinstance(value["runtimeRevisions"], list) and 0 < len(value["runtimeRevisions"]) <= 3
                         and all(v == "driver-version-1" for v in value["runtimeRevisions"]), "Unqualified driver runtime")

@@ -61,12 +61,14 @@ branches, executable names, driver-version values, per-game defaults and per-gam
 guidance are not part of the app's execution code. The UI renders the capabilities
 and guidance declared by the profile. Missing capabilities are not offered.
 
-`cursorGuard` is another schema-2 capability: `defaultEnabled` must be false and
-`guidance` explains the opt-in behavior. The helper matches the profile's
+`cursorGuard` is another schema-2 capability: `defaultEnabled` is a boolean and
+`guidance` explains the behavior and rollback. The helper matches the profile's
 executable against the owned session's installation map before substituting a
 transparent native cursor inside that game process. The user's on/off selection
 is saved in Gamekit metadata, not uploaded to the wiki. Games without this
-capability retain their normal cursor handling.
+capability retain their normal cursor handling. Stardew's revision-4 profile
+enables it by default after menu/focus acceptance; an explicit saved Off choice
+remains effective across profile updates.
 
 For example, Helldivers' `553850.json` declares `helldivers2.exe`, the eligible
 runtime/backend combinations, the all-65535 match version and 35.0.15.6094
@@ -140,8 +142,9 @@ and at least one of:
   precedence.
 - `fullscreenSpace`: `defaultEnabled` and `guidance`; the helper activates only
   for the profile's matching executable in the owned game directory/session.
-- `cursorGuard`: `defaultEnabled: false` and `guidance`; only an explicit saved
-  per-game choice enables native cursor substitution in an owned game process.
+- `cursorGuard`: boolean `defaultEnabled` and `guidance`. A saved per-game
+  choice, including Off, takes precedence over the profile default. When
+  enabled, native cursor substitution applies only to the owned game process.
   A change applies after stopping Windows Steam and starting a fresh session.
 
 Use `553850.json` as the complete concrete example. For every mechanism, absence

@@ -25,22 +25,43 @@ struct GameProfileTests {
         }
     }
 
-    @Test("Cursor-guard capability requires an executable and an explicit opt-in")
+    @Test("Cursor-guard default is validated and requires a qualified executable")
     func cursorGuardProfile() throws {
         let game = GameFixtures.other
         let profile = try #require(GameProfileStore.bundled(appID: game.appId))
         #expect(profile.execution.executable?.lowercased() == game.executable.lowercased())
-        #expect(profile.execution.cursorGuard?.defaultEnabled == false)
+        #expect(profile.execution.cursorGuard?.defaultEnabled == true)
         var document = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
         var execution = try #require(document["execution"] as? [String: Any])
         var guardSetting = try #require(execution["cursorGuard"] as? [String: Any])
-        guardSetting["defaultEnabled"] = true
+        guardSetting["defaultEnabled"] = "yes"
         execution["cursorGuard"] = guardSetting; document["execution"] = execution
         #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: game.appId) }
         execution.removeValue(forKey: "executable")
-        guardSetting["defaultEnabled"] = false
+        guardSetting["defaultEnabled"] = true
         execution["cursorGuard"] = guardSetting; document["execution"] = execution
         #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: game.appId) }
+    }
+
+    @Test("Bundled cursor-guard revision supersedes a cached older default")
+    func cursorGuardUpgrade() throws {
+        let game = GameFixtures.other
+        let bundled = try #require(GameProfileStore.bundled(appID: game.appId))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let cache = root.appendingPathComponent("Metadata/GameProfiles")
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var document = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(bundled)) as? [String: Any])
+        document["revision"] = bundled.revision - 1
+        var execution = try #require(document["execution"] as? [String: Any])
+        var guardSetting = try #require(execution["cursorGuard"] as? [String: Any])
+        guardSetting["defaultEnabled"] = false
+        execution["cursorGuard"] = guardSetting; document["execution"] = execution
+        try JSONSerialization.data(withJSONObject: document).write(to: cache.appendingPathComponent("\(game.appId).json"))
+        let resolved = try #require(GameProfileStore.resolved(appID: game.appId, root: root))
+        #expect(resolved.profile.revision == bundled.revision)
+        #expect(resolved.profile.execution.cursorGuard?.defaultEnabled == true)
+        #expect(resolved.source == "Bundled offline profile")
     }
 
     @Test("Execution capabilities belong to profiles, not known AppIDs")
