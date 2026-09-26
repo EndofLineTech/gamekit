@@ -35,11 +35,13 @@ struct GameDockNames: Codable {
         var driverParameters = ""
         for game in games where game.state == .ready {
             let key = String(game.id), parameters = gameExecution(appID: game.id, root: root)
-            guard let executable = parameters.executable else { continue }
-            if let space = parameters.fullscreenSpace {
-                spaces[key] = preferences.fullscreenSpaces[key] ?? space.defaultEnabled
+            if preferences.fullscreenSpaces[key] ?? (preferences.sharedFullscreenSpace || parameters.fullscreenSpace?.defaultEnabled == true) {
+                spaces[key] = true
+            }
+            if parameters.fullscreenSpace != nil, let executable = parameters.executable {
                 executables[key] = executable
             }
+            guard let executable = parameters.executable else { continue }
             if let cursorGuard = parameters.cursorGuard,
                preferences.cursorGuards[key] ?? cursorGuard.defaultEnabled {
                 cursorGuards[key] = executable

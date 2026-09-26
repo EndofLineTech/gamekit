@@ -50,6 +50,13 @@ struct SetupView: View {
                      ? "Default for all games without an override. Windows Steam retains Metal 3. Direct3D 12 games need an Apple backend in their gear panel. Stop Windows Steam before changing settings."
                      : "Applies to Windows Steam and all games using the shared default. Individual games can override it in their gear panel. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
                     .font(.caption).accessibilityIdentifier("graphics-backend-scope")
+                Toggle("Shared fullscreen Space for games", isOn: Binding(
+                    get: { setup.sharedFullscreenSpace },
+                    set: { setup.chooseSharedFullscreenSpace($0, diagnostics: diagnostics) }))
+                    .disabled(setup.isBusy || setup.selectionLocked)
+                    .accessibilityIdentifier("shared-fullscreen-space")
+                Text("Off by default. Creates a separate macOS Space only for a game window that covers a display; smaller windows remain on the desktop. Individual games can override this in their gear panel. Stop Windows Steam before changing it.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)
                 HStack {

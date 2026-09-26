@@ -4,6 +4,30 @@ import Testing
 
 @Suite("Local runtime selection")
 struct RuntimeSettingsTests {
+    @Test("Shared fullscreen Space defaults off, preserves presentation choices, and refuses live sessions")
+    func sharedFullscreenSpace() async throws {
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        let settings = RuntimeSettingsStore(store: store)
+        let file = store.root.appendingPathComponent("Metadata/GamePresentation.json")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let game = GameFixtures.other
+        try Data("{\"schemaVersion\":2,\"fullscreenSpaces\":{\"\(game.appId)\":false},\"cursorGuards\":{\"\(game.appId)\":true}}".utf8).write(to: file)
+        #expect(try await settings.sharedFullscreenSpace() == false)
+        try await settings.selectSharedFullscreenSpace(true)
+        let saved = try GamePresentationPreferences.read(root: store.root)
+        #expect(saved.sharedFullscreenSpace)
+        #expect(saved.fullscreenSpaces[String(game.appId)] == false && saved.cursorGuards[String(game.appId)] == true)
+        #expect(try await RuntimeSettingsStore(store: store).sharedFullscreenSpace())
+        let record = try await store.create(EnvironmentRecord(id: SteamInstallationRecipe.environmentID, name: "Fixture"))
+        try FileManager.default.createDirectory(at: store.prefixURL(for: record.id), withIntermediateDirectories: true)
+        let lease = try await store.executionLease(for: record.id)
+        defer { withExtendedLifetime(lease) {} }
+        await #expect(throws: EnvironmentStoreError.busy) { try await settings.selectSharedFullscreenSpace(false) }
+        #expect(try GamePresentationPreferences.read(root: store.root).sharedFullscreenSpace)
+    }
     @Test("Driver revision is isolated, preserves graphics and rolls back without prefix edits")
     func driverRevision() async throws {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

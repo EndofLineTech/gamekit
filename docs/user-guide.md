@@ -221,6 +221,15 @@ installed game offers an independent graphics-backend override and displays its
 effective next-launch choice. **Use shared default** follows Setup; explicit
 Automatic or Metal3 choices leave Steam and other games on their own settings.
 
+**Setup and prerequisites** also has a **Shared fullscreen Space for games**
+toggle, off by default. In every installed game's gear, choose **Use shared
+default**, **Use fullscreen Space**, or **Keep on desktop** independently of its
+graphics choice. Only a managed game window covering a display can enter a
+separate macOS Space; a smaller/windowed game remains on the desktop even when
+the setting is on. Gamekit does not change the game's own fullscreen setting or
+resolution. Stop Windows Steam before changing the shared or per-game choice;
+saved per-game choices override the shared default.
+
 Helldivers 2 additionally offers the validated **Fullscreen display capture**
 override for the Dock-edge cursor issue:
 
@@ -233,23 +242,21 @@ The panel shows the saved override, inherited setting and effective capture stat
 Select **Fullscreen** inside Helldivers itself. The capture controls do not change
 its resolution or suppress the GPU-driver warning.
 
-Helldivers also offers **Use fullscreen Space**, an opt-in native macOS desktop
-for its full-display game window. The image uses the entire display, including
-behind the notch. Keep the game's own Fullscreen mode selected. **Use desktop
-fullscreen** restores its original presentation; this choice is separate from
-the capture override and Metal 3 selection. The Space closes with the game.
-Stop Steam before changing it, then launch a fresh session. This option is
-validated for Helldivers on this Mac's built-in display; other games retain their
-current presentation.
+Helldivers' **Use fullscreen Space** path is validated for its full-display game
+window, including behind the notch. Keep the game's own Fullscreen mode selected.
+Stardew's existing borderless window also passed a separate-Space and automatic
+foreground check on this Mac's built-in display. The Space closes with the game.
+Other games have the same controls, but their window sizes and focus behavior
+have not been individually qualified.
 
 For Stardew Valley's Windows build, the optional **Hide duplicate macOS pointer**
 toggle is under **Game cursor guard** in its gear panel. Stop Windows Steam and
 its games before changing the toggle, then start a fresh session. It substitutes
 a transparent macOS cursor only inside Stardew's owned Wine process while its
-window is active;
-the game's drawn cursor stays visible. Command-Tab to another app or exit Stardew
-to restore the normal pointer. Disable the toggle with Steam stopped to revert.
-The revision-4 wiki profile enables the guard by default; an explicit saved Off
+window is active; the game's drawn cursor stays visible. Command-Tab to another
+app or exit Stardew to restore the normal pointer. Disable the toggle with Steam
+stopped to revert.
+The revision-5 wiki profile enables the guard by default; an explicit saved Off
 choice remains local and takes precedence even after profile updates. The scoped
 menu/focus/exit check does not establish a new full gameplay/save-reload pass
 with the guard enabled.
@@ -258,10 +265,11 @@ Stop Windows Steam and all its games before making changes; launch a fresh sessi
 after saving. The existing accepted override is displayed as-is on first use.
 For capture, Gamekit reads the saved registry, changes only the supported
 app-specific value, and verifies it after saving. Driver and Space preferences
-are stored separately in Gamekit metadata, as is the cursor guard preference.
+are stored separately in Gamekit metadata, as are the shared Space default and
+cursor guard preference.
 Other registry settings, saves, runtime binaries and launcher caches are preserved.
-Unsupported or ambiguous registry values are refused. Other titles offer backend
-selection but not the Helldivers-specific fixes.
+Unsupported or ambiguous registry values are refused. The driver and display
+capture fixes remain profile-qualified for Helldivers.
 
 ## Recovery
 

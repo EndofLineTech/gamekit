@@ -66,7 +66,7 @@ and guidance declared by the profile. Missing capabilities are not offered.
 executable against the owned session's installation map before substituting a
 transparent native cursor inside that game process. The user's on/off selection
 is saved in Gamekit metadata, not uploaded to the wiki. Games without this
-capability retain their normal cursor handling. Stardew's revision-4 profile
+capability retain their normal cursor handling. Stardew's revision-5 profile
 enables it by default after menu/focus acceptance; an explicit saved Off choice
 remains effective across profile updates.
 
@@ -141,7 +141,10 @@ and at least one of:
   control. Explicit user registry settings and the inherited Wine setting retain
   precedence.
 - `fullscreenSpace`: `defaultEnabled` and `guidance`; the helper activates only
-  for the profile's matching executable in the owned game directory/session.
+  for an owned game process with a screen-covering window. A profile may declare
+  an exact executable for a qualified setup, but **shared and per-game Space
+  choices are available for every installed game** without a profile. Saved
+  per-game choices override the shared default; Steam and services are excluded.
 - `cursorGuard`: boolean `defaultEnabled` and `guidance`. A saved per-game
   choice, including Off, takes precedence over the profile default. When
   enabled, native cursor substitution applies only to the owned game process.

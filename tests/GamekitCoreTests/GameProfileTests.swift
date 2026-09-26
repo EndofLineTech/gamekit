@@ -31,6 +31,7 @@ struct GameProfileTests {
         let profile = try #require(GameProfileStore.bundled(appID: game.appId))
         #expect(profile.execution.executable?.lowercased() == game.executable.lowercased())
         #expect(profile.execution.cursorGuard?.defaultEnabled == true)
+        #expect(profile.execution.fullscreenSpace?.defaultEnabled == false)
         var document = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
         var execution = try #require(document["execution"] as? [String: Any])
         var guardSetting = try #require(execution["cursorGuard"] as? [String: Any])

@@ -59,6 +59,7 @@ class GameProfilesTests(unittest.TestCase):
         wiki.validate_profile(profile, game["appId"])
         self.assertEqual(profile["execution"]["executable"], game["executable"].lower())
         self.assertIs(profile["execution"]["cursorGuard"]["defaultEnabled"], True)
+        self.assertIs(profile["execution"]["fullscreenSpace"]["defaultEnabled"], False)
         profile["execution"]["cursorGuard"]["defaultEnabled"] = "yes"
         with self.assertRaises(ValueError):
             wiki.validate_profile(profile, game["appId"])

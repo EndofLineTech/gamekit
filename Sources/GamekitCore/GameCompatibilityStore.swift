@@ -11,6 +11,30 @@ public enum GameCaptureOverride: String, CaseIterable, Sendable {
         }
     }
 }
+public enum GameFullscreenSpaceOverride: String, CaseIterable, Sendable {
+    case inherit, enabled, disabled
+    public var title: String {
+        switch self {
+        case .inherit: "Use shared default"
+        case .enabled: "Use fullscreen Space"
+        case .disabled: "Keep on desktop"
+        }
+    }
+    public func effective(shared: Bool) -> Bool {
+        switch self {
+        case .inherit: shared
+        case .enabled: true
+        case .disabled: false
+        }
+    }
+}
+public struct GameFullscreenSpaceSnapshot: Sendable {
+    public let override: GameFullscreenSpaceOverride
+    public let sharedDefault: Bool
+    public let profileDefault: Bool
+    public let sessionLocked: Bool
+    public var effective: Bool { override.effective(shared: sharedDefault || profileDefault) }
+}
 public enum GameGraphicsOverride: String, Codable, CaseIterable, Sendable {
     case inherit, automatic, metal3, dxvk, dxmt
     public var title: String {
@@ -99,11 +123,12 @@ func gameExecution(appID: UInt32, root: URL? = nil) -> GameExecutionParameters {
 }
 
 struct GamePresentationPreferences: Codable {
-    var schemaVersion = 2
+    var schemaVersion = 3
     var fullscreenSpaces: [String: Bool] = [:]
     var cursorGuards: [String: Bool] = [:]
+    var sharedFullscreenSpace = false
     init() {}
-    private enum CodingKeys: String, CodingKey { case schemaVersion, fullscreenSpaces, cursorGuards }
+    private enum CodingKeys: String, CodingKey { case schemaVersion, fullscreenSpaces, cursorGuards, sharedFullscreenSpace }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
@@ -113,15 +138,20 @@ struct GamePresentationPreferences: Codable {
         } else {
             cursorGuards = try values.decode([String: Bool].self, forKey: .cursorGuards)
         }
+        if schemaVersion <= 2 {
+            guard !values.contains(.sharedFullscreenSpace) else { throw GameCompatibilityError.unsupportedPresentation }
+        } else {
+            sharedFullscreenSpace = try values.decode(Bool.self, forKey: .sharedFullscreenSpace)
+        }
     }
     static func read(root: URL) throws -> Self {
         guard let directory = try ManagedDirectory.openRoot(root, create: false)?.directory("Metadata"),
               let data = try directory.read("GamePresentation.json") else { return .init() }
         var value = try JSONDecoder().decode(Self.self, from: data)
-        guard [1, 2].contains(value.schemaVersion), value.fullscreenSpaces.count <= 512,
+        guard [1, 2, 3].contains(value.schemaVersion), value.fullscreenSpaces.count <= 512,
               value.fullscreenSpaces.keys.allSatisfy(canonicalAppID), value.cursorGuards.count <= 512,
               value.cursorGuards.keys.allSatisfy(canonicalAppID) else { throw GameCompatibilityError.unsupportedPresentation }
-        value.schemaVersion = 2
+        value.schemaVersion = 3
         return value
     }
 }
@@ -229,7 +259,7 @@ public actor GameCompatibilityStore {
         let presentation = try GamePresentationPreferences.read(root: store.root)
         return try .init(capture: registry?.capture ?? .inherit, inheritedCapture: registry?.inheritedCapture ?? false,
                          graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
-                         fullscreenSpace: presentation.fullscreenSpaces[String(appID)] ?? execution.fullscreenSpace?.defaultEnabled ?? false,
+                         fullscreenSpace: presentation.fullscreenSpaces[String(appID)] ?? (execution.fullscreenSpace?.defaultEnabled == true || presentation.sharedFullscreenSpace),
                          cursorGuard: presentation.cursorGuards[String(appID)] ?? execution.cursorGuard?.defaultEnabled ?? false,
                          driverCompatibility: GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: appID, revision: layout.profile.revision, root: store.root),
                          driverCompatibilityAvailable: execution.driver?.available(revision: layout.profile.revision) == true)
@@ -249,6 +279,18 @@ public actor GameCompatibilityStore {
         let settings = RuntimeSettingsStore(store: store)
         return try await .init(override: GameCompatibilityPreferences.read(root: store.root).graphicsBackends[String(appID)] ?? .inherit,
                               sharedBackend: settings.layout().graphicsBackend, sessionLocked: settings.isSelectionLocked())
+    }
+
+    public func inspectFullscreenSpace(appID: UInt32) async throws -> GameFullscreenSpaceSnapshot {
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        _ = try await record(appID, specialized: false)
+        let settings = RuntimeSettingsStore(store: store)
+        let preferences = try GamePresentationPreferences.read(root: store.root)
+        let override: GameFullscreenSpaceOverride = preferences.fullscreenSpaces[String(appID)].map { $0 ? .enabled : .disabled } ?? .inherit
+        return try await .init(override: override, sharedDefault: preferences.sharedFullscreenSpace,
+                               profileDefault: gameExecution(appID: appID, root: store.root).fullscreenSpace?.defaultEnabled ?? false,
+                               sessionLocked: settings.isSelectionLocked())
     }
 
     @discardableResult public func setGraphicsBackend(_ override: GameGraphicsOverride, appID: UInt32) async throws -> GameGraphicsSnapshot {
@@ -338,10 +380,10 @@ public actor GameCompatibilityStore {
         return result
     }
 
-    @discardableResult public func setFullscreenSpace(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+    @discardableResult public func setFullscreenSpace(_ override: GameFullscreenSpaceOverride, appID: UInt32) async throws -> GameFullscreenSpaceSnapshot {
         let installation = try await store.installationLease()
         defer { withExtendedLifetime(installation) {} }
-        let record = try await record(appID)
+        let record = try await record(appID, specialized: false)
         let settings = RuntimeSettingsStore(store: store)
         guard !(try await settings.isSelectionLocked()) else { throw EnvironmentStoreError.busy }
         let execution = try await store.executionLease(for: record.id)
@@ -353,15 +395,24 @@ public actor GameCompatibilityStore {
             guard observed.processes.isEmpty else { throw SteamRecoveryError.activeProcesses }
         }
         try execution.validate(); try Task.checkCancellation()
-        guard gameExecution(appID: appID, root: store.root).fullscreenSpace != nil else { throw GameCompatibilityError.unsupportedGame }
-        _ = try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
         var preferences = try GamePresentationPreferences.read(root: store.root)
-        preferences.fullscreenSpaces[String(appID)] = enabled
+        if override == .inherit { preferences.fullscreenSpaces.removeValue(forKey: String(appID)) }
+        else { preferences.fullscreenSpaces[String(appID)] = override == .enabled }
         guard let metadata = try ManagedDirectory.openRoot(store.root, create: false)?.directory("Metadata") else { throw EnvironmentStoreError.notFound }
         try metadata.withWriteLock {
             try metadata.write(JSONEncoder().encode(preferences), to: "GamePresentation.json", createOnly: false, beforeCommit: { try execution.validate() })
         }
-        return try snapshot(registry(prefix(record)), appID: appID, layout: selected, locked: false)
+        let saved = try GamePresentationPreferences.read(root: store.root)
+        let resolved: GameFullscreenSpaceOverride = saved.fullscreenSpaces[String(appID)].map { $0 ? .enabled : .disabled } ?? .inherit
+        guard resolved == override else { throw GameCompatibilityError.unsupportedPresentation }
+        return .init(override: resolved, sharedDefault: saved.sharedFullscreenSpace,
+                     profileDefault: gameExecution(appID: appID, root: store.root).fullscreenSpace?.defaultEnabled ?? false,
+                     sessionLocked: false)
+    }
+
+    @discardableResult public func setFullscreenSpace(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
+        _ = try await setFullscreenSpace(enabled ? .enabled : .disabled, appID: appID)
+        return try await inspect(appID: appID)
     }
 
     @discardableResult public func setCursorGuard(_ enabled: Bool, appID: UInt32) async throws -> GameCompatibilitySnapshot {
