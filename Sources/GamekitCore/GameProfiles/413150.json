@@ -1,16 +1,16 @@
 {
   "schemaVersion": 2,
-  "revision": 3,
+  "revision": 4,
   "appId": 413150,
   "name": "Stardew Valley",
   "runtime": "sikarugir-10.0_6",
   "launchArguments": {},
-  "notes": "Build 16826371: the Windows game is playable with a duplicate macOS cursor in the normal configuration. The optional, reversible cursor guard passed a menu/focus check; gameplay and save/reload with it enabled remain unverified. No extra launch options are needed.",
+  "notes": "Build 16826371: the Windows game is playable, but its unguarded cursor is duplicated. The cursor guard is now enabled by default after successful menu, input and focus checks; gameplay and save/reload with the guard remain unverified. An explicit saved Off choice still wins. No extra launch options are needed.",
   "execution": {
     "executable": "stardew valley.exe",
     "cursorGuard": {
-      "defaultEnabled": false,
-      "guidance": "When enabled, show only the game's drawn cursor while its managed window is frontmost. The macOS pointer returns on Command-Tab, game exit or Stop Windows Steam. Stop Windows Steam before changing this setting."
+      "defaultEnabled": true,
+      "guidance": "Enabled by default: show only the game's drawn cursor while its managed window is frontmost. The macOS pointer returns on Command-Tab, game exit or Stop Windows Steam. Stop Windows Steam before changing this setting; an explicit Off choice is retained across profile updates."
     }
   }
 }

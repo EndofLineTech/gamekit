@@ -195,7 +195,7 @@ struct GameCompatibilityTests {
         }
     }
 
-    @Test("Cursor guard is opt-in, scoped to the declared installed game, and survives legacy preferences")
+    @Test("Profile cursor-guard default respects an explicit off choice and survives legacy preferences")
     func cursorGuardPreference() async throws {
         let fixture = try await CompatibilityFixture(); defer { fixture.remove() }
         let game = GameFixtures.other
@@ -205,16 +205,20 @@ struct GameCompatibilityTests {
         let settings = fixture.settings()
         let preferences = fixture.store.root.appendingPathComponent("Metadata/GamePresentation.json")
         try Data(#"{"schemaVersion":1,"fullscreenSpaces":{"553850":true}}"#.utf8).write(to: preferences)
-        #expect(try await settings.inspect(appID: game.appId).cursorGuard == false)
-        let on = try await settings.setCursorGuard(true, appID: game.appId)
-        #expect(on.cursorGuard && !on.fullscreenSpace)
-        #expect(try await fixture.settings().inspect(appID: game.appId).cursorGuard)
+        #expect(try await settings.inspect(appID: game.appId).cursorGuard)
         #expect(try GamePresentationPreferences.read(root: fixture.store.root).fullscreenSpaces["553850"] == true)
         let installed = try SteamGameLibrary.scan(prefix: fixture.prefix).games
         try GameDockNames.publish(root: fixture.store.root, prefix: fixture.prefix, session: UUID(), games: installed, validate: {})
-        let map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: GameDockNames.url(root: fixture.store.root, prefix: fixture.prefix)))
+        let mapping = GameDockNames.url(root: fixture.store.root, prefix: fixture.prefix)
+        var map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: mapping))
         #expect(map.cursorGuardExecutables == [String(game.appId): game.executable.lowercased()])
         #expect(try await settings.setCursorGuard(false, appID: game.appId).cursorGuard == false)
+        #expect(try await fixture.settings().inspect(appID: game.appId).cursorGuard == false)
+        try GameDockNames.publish(root: fixture.store.root, prefix: fixture.prefix, session: UUID(), games: installed, validate: {})
+        map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: mapping))
+        #expect(map.cursorGuardExecutables?.isEmpty == true)
+        let on = try await settings.setCursorGuard(true, appID: game.appId)
+        #expect(on.cursorGuard && !on.fullscreenSpace)
         #expect(try Data(contentsOf: fixture.prefix.appendingPathComponent("user.reg")) == Data(registryFixture.utf8))
         await #expect(throws: SteamRecoveryError.activeProcesses) { try await fixture.settings(running: true).setCursorGuard(true, appID: game.appId) }
         await #expect(throws: SteamRecoveryError.observationUnavailable) { try await fixture.settings(complete: false).setCursorGuard(true, appID: game.appId) }

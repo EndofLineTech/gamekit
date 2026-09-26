@@ -1,4 +1,4 @@
-# Stardew Valley: opt-in native cursor guard
+# Stardew Valley: profile-driven native cursor guard
 
 Issue: `gamekit-vl6`. On macOS 27.0 (26A428), M4 Pro/24 GB, the managed Windows
 Stardew Valley build 16826371 showed both Wine's macOS cursor and the game's
@@ -30,7 +30,7 @@ loaded the packaged helper into the running game. The user again confirmed one
 usable brown game cursor, then confirmed the macOS pointer returned on switching
 to Gamekit. The game was closed through Gamekit's scoped Stop after this check.
 
-Gamekit's generic mechanism activates only if the saved per-game preference is
+Gamekit's generic mechanism activates only if the effective per-game setting is
 enabled and the session-bound mapping matches the game AppID, installation
 directory and profile-declared executable. The mapping originates in the
 validated JSON profile; the executable and default do not live in native code.
@@ -40,10 +40,15 @@ the system pointer; if needed, **Stop Windows Steam** ends the game process and
 the cursor substitution. The original option is one toggle away with a stopped
 session.
 
-The shipped `413150.json` profile offers the cursor guard **off by default**.
-To use it, stop managed Windows Steam, open Stardew's gear, turn on **Hide
-duplicate macOS pointer**, then relaunch through Gamekit. Its portable profile
-is published on the wiki; the user's saved preference stays local. If an
-imported profile replaces the bundled profile, it must explicitly declare the
+Revision 3 of `413150.json` offered the guard off by default. At the user's
+request, revision **4** enables it by default for this tested game and setup.
+New installs therefore use the guard on the next fresh managed Steam session.
+**Stop Windows Steam** before changing the toggle in Stardew's gear; an explicit
+saved **Off** choice takes precedence over the profile's default, including after
+downloads or updates, and can be reversed there. The portable profile is published
+on the wiki; the user's saved preference stays local. The menu/focus acceptance
+supports the changed default, but gameplay and save/reload with it on remain a
+separate follow-up (`gamekit-np5`). If an imported profile replaces the bundled
+profile, it must explicitly declare the
 capability or the toggle is unavailable. Source and acceptance apply only to
 the recorded Mac/runtime and game build, not to other games by inference.
