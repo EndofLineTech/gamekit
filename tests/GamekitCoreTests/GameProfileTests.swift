@@ -25,6 +25,24 @@ struct GameProfileTests {
         }
     }
 
+    @Test("Cursor-guard capability requires an executable and an explicit opt-in")
+    func cursorGuardProfile() throws {
+        let game = GameFixtures.other
+        let profile = try #require(GameProfileStore.bundled(appID: game.appId))
+        #expect(profile.execution.executable?.lowercased() == game.executable.lowercased())
+        #expect(profile.execution.cursorGuard?.defaultEnabled == false)
+        var document = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
+        var execution = try #require(document["execution"] as? [String: Any])
+        var guardSetting = try #require(execution["cursorGuard"] as? [String: Any])
+        guardSetting["defaultEnabled"] = true
+        execution["cursorGuard"] = guardSetting; document["execution"] = execution
+        #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: game.appId) }
+        execution.removeValue(forKey: "executable")
+        guardSetting["defaultEnabled"] = false
+        execution["cursorGuard"] = guardSetting; document["execution"] = execution
+        #expect(throws: (any Error).self) { try GameProfile.decode(JSONSerialization.data(withJSONObject: document), appID: game.appId) }
+    }
+
     @Test("Execution capabilities belong to profiles, not known AppIDs")
     func executionIsDataDriven() async throws {
         let source = try #require(GameProfileStore.bundled(appID: 553850))

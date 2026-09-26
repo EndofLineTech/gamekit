@@ -125,9 +125,18 @@ struct GameCompatibilityView: View {
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
                     Text(space.guidance)
                         .font(.caption)
+                    Divider()
+                    }
+                    if let cursor = execution.cursorGuard {
+                    Text("Game cursor guard — this game only").font(.headline)
+                    Toggle("Hide duplicate macOS pointer", isOn: Binding(
+                        get: { snapshot.cursorGuard }, set: { run(cursorGuard: $0) }))
+                        .accessibilityIdentifier("game-cursor-guard")
+                        .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
+                    Text(cursor.guidance).font(.caption)
                     }
                 }
-                Text("Stop Windows Steam and its games before changing settings. Restore capture default removes only the capture override; fullscreen presentation and the shared graphics backend are separate settings.")
+                Text("Stop Windows Steam and its games before changing settings. Restore capture default removes only the capture override; fullscreen presentation, cursor guard and graphics backend are separate settings.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("No additional validated compatibility overrides are available for this title yet.")
@@ -139,8 +148,8 @@ struct GameCompatibilityView: View {
         .padding(24).frame(width: 580)
     }
 
-    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil) {
-        guard let token = setup.begin(capture == nil && space == nil && driver == nil && backend == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
+    private func run(capture: GameCaptureOverride? = nil, space: Bool? = nil, driver: Bool? = nil, backend: GameGraphicsOverride? = nil, cursorGuard: Bool? = nil) {
+        guard let token = setup.begin(capture == nil && space == nil && driver == nil && backend == nil && cursorGuard == nil ? "Reading game compatibility" : "Saving game compatibility") else { return }
         Task {
             defer { setup.end(token); setup.refresh(diagnostics: diagnostics) }
             do {
@@ -159,6 +168,9 @@ struct GameCompatibilityView: View {
                     status = "Saved and verified. Applies when the game next launches."
                 } else if let capture {
                     snapshot = try await settings.setCapture(capture, appID: game.id)
+                    status = "Saved and verified. Applies when the game next launches."
+                } else if let cursorGuard {
+                    snapshot = try await settings.setCursorGuard(cursorGuard, appID: game.id)
                     status = "Saved and verified. Applies when the game next launches."
                 } else {
                     if GameCompatibilityStore.supports(game.id, root: AppStorageLocations.metadata) { snapshot = try await settings.inspect(appID: game.id) }

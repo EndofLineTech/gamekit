@@ -46,7 +46,8 @@ int main(void) {
 }
 ''', text=True, check=True, capture_output=True)
         subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wall", "-Wextra", "-Werror",
-                        "-dynamiclib", "-framework", "AppKit", str(source), "-o", str(cls.helper)],
+                        "-dynamiclib", "-framework", "AppKit", str(source),
+                        str(source.with_name("CursorGuard.m")), "-o", str(cls.helper)],
                        check=True, capture_output=True)
         subprocess.run(["xcrun", "clang", "-fobjc-arc", "-framework", "AppKit",
                         str(source.parents[2] / "tools/dock_identity_probe.m"), "-o", str(cls.probe)],
@@ -87,6 +88,24 @@ int main(void) {
         self.assertEqual(self.run_reader("0"), "")
         self.assertEqual(self.run_reader("526870;bad"), "")
         self.assertEqual(self.run_reader("4294967296"), "")
+
+    def test_cursor_guard_requires_matching_owned_game_image_and_session(self):
+        game = GAMES["other"]
+        app_id = str(game["appId"])
+        image = "c:\\program files (x86)\\steam\\steamapps\\common\\" + game["name"].lower() + "\\" + game["executable"]
+        self.document["games"] = {app_id: game["name"]}
+        self.document["directories"] = {app_id: image[: -len(game["executable"])]}
+        self.write()
+        probe = dict(GAMEKIT_TEST_CURSOR_SETTING="1", GAMEKIT_TEST_WINDOWS_IMAGE=image)
+        self.assertEqual(self.run_reader(app_id, **probe), "disabled")
+        self.document["cursorGuardExecutables"] = {app_id: game["executable"].lower()}
+        self.write()
+        self.assertEqual(self.run_reader(app_id, **probe), "enabled")
+        self.assertEqual(self.run_reader("1", **probe), "disabled")
+        self.assertEqual(self.run_reader(app_id, **dict(probe, GAMEKIT_TEST_WINDOWS_IMAGE="c:\\unrelated\\" + game["executable"])), "disabled")
+        self.document["sessionID"] = "3C1B8D88-34CC-490A-AB93-5767C8D9DD51"
+        self.write()
+        self.assertEqual(self.run_reader(app_id, **probe), "disabled")
 
     def test_backend_override_is_image_and_session_scoped_and_restores_shared_default(self):
         image = r"C:\program files (x86)\steam\steamapps\common\satisfactory\game.exe"

@@ -55,7 +55,7 @@ def validate_profile(profile, app_id):
     require(len((json.dumps(profile, ensure_ascii=False, indent=2) + "\n").encode("utf-8")) <= 32768, "Profile too large")
     if profile["schemaVersion"] == 2:
         execution = profile["execution"]
-        require(isinstance(execution, dict) and set(execution) <= {"executable", "driver", "capture", "fullscreenSpace"}, "Invalid execution fields")
+        require(isinstance(execution, dict) and set(execution) <= {"executable", "driver", "capture", "fullscreenSpace", "cursorGuard"}, "Invalid execution fields")
         if execution:
             require(isinstance(execution.get("executable"), str) and
                     re.fullmatch(r"[a-z0-9][a-z0-9 ._()'-]{0,200}\.exe", execution["executable"]), "Invalid target executable")
@@ -64,6 +64,7 @@ def validate_profile(profile, app_id):
             "driver": {"runtimeRevisions", "backends", "defaultEnabled", "matchVersion", "replacementVersion", "guidance"},
             "capture": {"inheritedDefault", "guidance"},
             "fullscreenSpace": {"defaultEnabled", "guidance"},
+            "cursorGuard": {"defaultEnabled", "guidance"},
         }
         for key, fields in expected.items():
             if key not in execution:
@@ -74,6 +75,8 @@ def validate_profile(profile, app_id):
             require(type(value["inheritedDefault" if key == "capture" else "defaultEnabled"]) is bool, "Invalid execution default")
             if key == "capture":
                 require(value["inheritedDefault"] is False, "Unsupported Wine inherited default")
+            if key == "cursorGuard":
+                require(value["defaultEnabled"] is False, "Cursor guard must be opt-in")
             if key == "driver":
                 require(isinstance(value["runtimeRevisions"], list) and 0 < len(value["runtimeRevisions"]) <= 3
                         and all(v == "driver-version-1" for v in value["runtimeRevisions"]), "Unqualified driver runtime")

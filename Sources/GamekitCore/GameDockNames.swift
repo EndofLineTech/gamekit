@@ -17,6 +17,7 @@ struct GameDockNames: Codable {
     var defaultLibraryPath: String? = nil
     var dxvkLibraryPath: String? = nil
     var fullscreenExecutables: [String: String]? = nil
+    var cursorGuardExecutables: [String: String]? = nil
 
     static func url(root: URL, prefix: URL) -> URL {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
@@ -30,7 +31,7 @@ struct GameDockNames: Codable {
         let common = "c:\\" + steamExecutable.components.dropFirst().dropLast().joined(separator: "\\") + "\\steamapps\\common\\"
         let preferences = try GamePresentationPreferences.read(root: root)
         let compatibility = try GameCompatibilityPreferences.read(root: root)
-        var spaces: [String: Bool] = [:], executables: [String: String] = [:]
+        var spaces: [String: Bool] = [:], executables: [String: String] = [:], cursorGuards: [String: String] = [:]
         var driverParameters = ""
         for game in games where game.state == .ready {
             let key = String(game.id), parameters = gameExecution(appID: game.id, root: root)
@@ -38,6 +39,10 @@ struct GameDockNames: Codable {
             if let space = parameters.fullscreenSpace {
                 spaces[key] = preferences.fullscreenSpaces[key] ?? space.defaultEnabled
                 executables[key] = executable
+            }
+            if let cursorGuard = parameters.cursorGuard,
+               preferences.cursorGuards[key] ?? cursorGuard.defaultEnabled {
+                cursorGuards[key] = executable
             }
             let backend = (compatibility.graphicsBackends[key] ?? .inherit).effectiveBackend(shared: graphicsBackend)
             if let layout = libraryLayout, let driver = parameters.driver, driver.backends.contains(backend),
@@ -56,7 +61,7 @@ struct GameDockNames: Codable {
                             graphicsBackends: try GameCompatibilityPreferences.read(root: root).graphicsBackends.filter { key, choice in
                                 choice != .inherit && games.contains { String($0.id) == key && $0.state == .ready }
                              }, defaultLibraryPath: libraryLayout?.defaultLibraryPath, dxvkLibraryPath: libraryLayout?.dxvkLibraryPath,
-                             fullscreenExecutables: executables)
+                              fullscreenExecutables: executables, cursorGuardExecutables: cursorGuards)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(document)
         guard let root = try ManagedDirectory.openRoot(root, create: true),
