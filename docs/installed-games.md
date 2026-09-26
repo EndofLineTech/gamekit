@@ -26,12 +26,18 @@ Steamworks Common Redistributables (228980) are omitted.
 - The native model scans off the main actor every three seconds, on app activation
   and on explicit refresh. It pauses while a shared operation is active. Names
   sort naturally, and removal of a manifest removes the corresponding tile.
+- A tile shows Steam's `SizeOnDisk` receipt value as a formatted, decimal byte
+  count for complete installs whose game directory exists. Missing, invalid or
+  out-of-range sizes and incomplete/missing-file installs show **unavailable**.
+  This is Steam-reported installed size, not a recursive measurement or a total
+  of saves, shader caches, downloads, or other files outside the game directory.
+  Reading the receipt adds no filesystem walk to the three-second refresh.
 
 ## Artwork and interaction
 
-Tiles contain a game title, installation state, header image and play symbol, with
-a named accessible button and native keyboard focus. Images are decorative to
-accessibility because the button already names the game.
+Tiles contain a game title, installation state, Steam-reported size, header image
+and play symbol, with a named accessible button and native keyboard focus. Images
+are decorative to accessibility because the button already names the game.
 
 Artwork is read from `appcache/librarycache/<AppID>/header.jpg`, falling back to
 the older `<AppID>_header.jpg` cache naming. Each local image read is bounded to
@@ -71,8 +77,8 @@ launch route.
 ## Verification
 
 Core regressions cover nested/escaped KeyValues, ambiguous/malformed/oversized
-records, AppID mismatches, installation flags, missing directories, redirected
-paths, local artwork, uninstall refresh and scoped launch dispatch/refusal.
+records, AppID mismatches, installation flags, reported sizes, missing directories,
+redirected paths, local artwork, uninstall refresh and scoped launch dispatch/refusal.
 Native UI regression covers named game tiles, prerequisite gating and disappearance
 after uninstall. Read-only real-library inspection can be run with:
 

@@ -214,6 +214,7 @@ struct InstalledGamesView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(game.name).font(.headline).lineLimit(2)
                                     Text(status(game)).font(.caption).foregroundStyle(.secondary)
+                                    Text(diskUsage(game)).font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Image(systemName: "play.circle.fill").font(.title)
@@ -224,7 +225,7 @@ struct InstalledGamesView: View {
                         .buttonStyle(.plain)
                         .disabled(model.pendingGame != nil || game.state != .ready || !(setup.actions.launch || setup.actions.show))
                         .accessibilityLabel("Launch \(game.name)")
-                        .accessibilityValue(status(game))
+                        .accessibilityValue("\(status(game)), \(diskUsage(game))")
                         .accessibilityIdentifier("launch-game-\(game.id)")
                         .help(game.state == .ready ? "Launch through managed Windows Steam" : "Finish installation or updates in Windows Steam")
                         Button { compatibilityGame = game } label: {
@@ -294,6 +295,11 @@ struct InstalledGamesView: View {
         case .updating: "Installation or update incomplete · Open Steam"
         case .missingFiles: "Game files unavailable · Check Steam"
         }
+    }
+
+    private func diskUsage(_ game: InstalledSteamGame) -> String {
+        guard let bytes = game.sizeOnDiskBytes else { return "Steam-reported size: unavailable" }
+        return "Steam-reported size: \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
     }
 }
 
