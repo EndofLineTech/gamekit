@@ -25,7 +25,10 @@ void GamekitStartCursorGuard(void) {
         guardCursor = [[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];
         Method method = class_getInstanceMethod(NSCursor.class, @selector(set));
         if (!guardCursor || !method) return;
-        originalSetCursor = method_setImplementation(method, (IMP)GuardedSetCursor);
+        // Publish the fallback before installing the hook: another thread may
+        // set a cursor as soon as the implementation is exchanged.
+        originalSetCursor = method_getImplementation(method);
+        method_setImplementation(method, (IMP)GuardedSetCursor);
         [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification
             object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { (void)note; [guardCursor set]; }];
         [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification

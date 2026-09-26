@@ -228,11 +228,11 @@ public actor GameCompatibilityStore {
         let registry = try execution.capture.map { try GameCaptureRegistry(data, executable: executable, inheritedDefault: $0.inheritedDefault) }
         let presentation = try GamePresentationPreferences.read(root: store.root)
         return try .init(capture: registry?.capture ?? .inherit, inheritedCapture: registry?.inheritedCapture ?? false,
-                          graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
-                           fullscreenSpace: presentation.fullscreenSpaces[String(appID)] ?? execution.fullscreenSpace?.defaultEnabled ?? false,
-                           cursorGuard: presentation.cursorGuards[String(appID)] ?? execution.cursorGuard?.defaultEnabled ?? false,
-                          driverCompatibility: GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: appID, revision: layout.profile.revision, root: store.root),
-                          driverCompatibilityAvailable: execution.driver?.available(revision: layout.profile.revision) == true)
+                         graphicsBackend: layout.graphicsBackend, sessionLocked: locked,
+                         fullscreenSpace: presentation.fullscreenSpaces[String(appID)] ?? execution.fullscreenSpace?.defaultEnabled ?? false,
+                         cursorGuard: presentation.cursorGuards[String(appID)] ?? execution.cursorGuard?.defaultEnabled ?? false,
+                         driverCompatibility: GameCompatibilityPreferences.read(root: store.root).driverEnabled(appID: appID, revision: layout.profile.revision, root: store.root),
+                         driverCompatibilityAvailable: execution.driver?.available(revision: layout.profile.revision) == true)
     }
     public func inspect(appID: UInt32) async throws -> GameCompatibilitySnapshot {
         let installation = try await store.installationLease()
