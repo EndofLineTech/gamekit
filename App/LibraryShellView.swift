@@ -34,6 +34,7 @@ struct LibraryShellView: View {
     @State private var uninstallGame: InstalledSteamGame?
     @State private var confirmingUninstall = false
     @FocusState private var searchFocused: Bool
+    @FocusState private var focusedGameID: UInt32?
     private let preferenceStore = LibraryPreferencesStore(root: AppStorageLocations.metadata)
 
     private var selectedGame: InstalledSteamGame? { games.games.first { $0.id == selectedGameID } }
@@ -89,6 +90,14 @@ struct LibraryShellView: View {
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
                 self.selectedGameID = nil
+            }
+            if let focusedGameID, !current.contains(where: { $0.id == focusedGameID }), !games.libraryStale {
+                self.focusedGameID = nil
+            }
+        }
+        .onChange(of: preferences.viewMode) { _, mode in
+            if mode == .grid, let selectedGameID, visibleGames.contains(where: { $0.id == selectedGameID }) {
+                focusedGameID = selectedGameID
             }
         }
         .sheet(item: $compatibilityGame) { GameCompatibilityView(game: $0) }
@@ -231,7 +240,10 @@ struct LibraryShellView: View {
                     if let warning = games.warning { Text(warning).foregroundStyle(.orange) }
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
                     else if visibleGames.isEmpty { emptyLibrary }
-                    else if preferences.viewMode == .grid { coverGrid }
+                    else if preferences.viewMode == .grid {
+                        coverGrid(width: geometry.size.width - (inspectorVisible && geometry.size.width >= 920 ? 320 : 0)
+                                  - 2 * LibraryVisualStyle.contentSpacing)
+                    }
                     else { gameList }
                     if let message = games.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
                 }
@@ -255,31 +267,67 @@ struct LibraryShellView: View {
         }
     }
 
-    private var coverGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: CGFloat(preferences.coverSize), maximum: CGFloat(preferences.coverSize + 20)), spacing: 18)], spacing: 23) {
-            ForEach(visibleGames) { game in
-                let favorite = isFavorite(game)
-                Button { select(game) } label: {
-                    LibraryGridCell(game: game, selected: selectedGameID == game.id)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("select-game-\(game.id)")
-                .accessibilityValue(favorite ? "Favorite" : "Not favorite")
-                .overlay(alignment: .topTrailing) {
-                    Button { toggleFavorite(game) } label: {
-                        Image(systemName: favorite ? "star.fill" : "star")
-                            .foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 3)
-                            .frame(width: 32, height: 32)
+    private func coverGrid(width: CGFloat) -> some View {
+        let spacing: CGFloat = 18
+        let minimum = CGFloat(preferences.coverSize)
+        let columnCount = max(1, Int((max(width, minimum) + spacing) / (minimum + spacing)))
+        return ScrollViewReader { scroll in
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: minimum), spacing: spacing), count: columnCount), spacing: 23) {
+                ForEach(visibleGames) { game in
+                    let favorite = isFavorite(game)
+                    Button { select(game) } label: {
+                        LibraryGridCell(game: game, selected: selectedGameID == game.id)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
-                    .accessibilityIdentifier("favorite-game-\(game.id)")
-                    .padding(7)
+                    .focusable()
+                    .focused($focusedGameID, equals: game.id)
+                    .onKeyPress { press in
+                        if (press.key == .return || press.key == .space),
+                           press.modifiers.intersection([.command, .option, .control]).isEmpty {
+                            select(game)
+                            return .handled
+                        }
+                        return moveGridFocus(press.key, modifiers: press.modifiers, columns: columnCount)
+                    }
+                    .accessibilityIdentifier("select-game-\(game.id)")
+                    .accessibilityValue(favorite ? "Favorite" : "Not favorite")
+                    .overlay(alignment: .topTrailing) {
+                        Button { toggleFavorite(game) } label: {
+                            Image(systemName: favorite ? "star.fill" : "star")
+                                .foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 3)
+                                .frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
+                        .accessibilityIdentifier("favorite-game-\(game.id)")
+                        .padding(7)
+                    }
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
+                    .contextMenu { gameMenu(game) }
+                    .id(game.id)
                 }
-                .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
-                .contextMenu { gameMenu(game) }
+            }
+            .onChange(of: focusedGameID) { _, id in
+                if let id { scroll.scrollTo(id, anchor: .center) }
             }
         }
+    }
+
+    private func moveGridFocus(_ key: KeyEquivalent, modifiers: EventModifiers, columns: Int) -> KeyPress.Result {
+        guard modifiers.intersection([.command, .option, .control]).isEmpty,
+              let focused = focusedGameID, let index = visibleGames.firstIndex(where: { $0.id == focused }) else { return .ignored }
+        let target: Int
+        switch key {
+        case .leftArrow: target = index - 1
+        case .rightArrow: target = index + 1
+        case .upArrow: target = index - columns
+        case .downArrow: target = index + columns
+        case .home: target = 0
+        case .end: target = visibleGames.count - 1
+        default: return .ignored
+        }
+        focusedGameID = visibleGames[min(max(target, 0), visibleGames.count - 1)].id
+        return .handled
     }
 
     private var gameList: some View {
@@ -372,7 +420,8 @@ struct LibraryShellView: View {
 
     @ViewBuilder private func gameMenu(_ game: InstalledSteamGame) -> some View {
         if game.state == .ready {
-            Button("Play") { play(game) }.disabled(games.pendingGame != nil || games.libraryStale)
+            Button("Play") { play(game) }
+                .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
         }
         Button("Show Windows Steam") { steam.control(stop: false, diagnostics: diagnostics, setup: setup) }
         Button("Compatibility settings…") { compatibilityGame = game }
@@ -479,7 +528,12 @@ struct LibraryShellView: View {
         preferences.favorites.contains(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
     }
 
-    private func select(_ game: InstalledSteamGame) { selectedGameID = game.id; inspectorVisible = true }
+    private func select(_ game: InstalledSteamGame) {
+        selectedGameID = game.id
+        searchFocused = false
+        focusedGameID = game.id
+        inspectorVisible = true
+    }
 
     private func play(_ game: InstalledSteamGame) {
         guard !games.libraryStale else { return }

@@ -3,6 +3,49 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testGridKeyboardFocusMovesWithoutLaunchingAndReturnSelects() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Keyboard fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam, withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        for (appID, title) in [(42, "Alpha"), (43, "Beta"), (44, "Charlie"), (45, "Delta")] {
+            try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/\(title)"), withIntermediateDirectories: true)
+            let manifest = #""AppState" { "appid" "\#(appID)" "name" "\#(title)" "installdir" "\#(title)" "StateFlags" "4" }"#
+            try Data(manifest.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_\(appID).acf"))
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        let first = app.buttons["select-game-42"]
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+        first.click()
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        app.typeKey(.rightArrow, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-42"].exists, "Arrow keys move focus without selecting or playing")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-43"].waitForExistence(timeout: 10))
+        app.typeKey(.home, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10), "Down moves by the displayed column count")
+        app.typeKey(.end, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10))
+        app.typeKey(.leftArrow, modifierFlags: [])
+        app.typeKey(.space, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-44"].waitForExistence(timeout: 10), "Space selects without playing")
+        app.typeKey(.upArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     func testNativeLibraryShellNavigationNeverLaunchesOnSelection() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
