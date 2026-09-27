@@ -45,6 +45,24 @@ public struct SteamLibraryService: Sendable {
         try await lifecycle.requestGameUninstall(appID: id.appID)
     }
 
+    /// Re-read the managed manifest before presenting an installed folder in
+    /// Finder. A cached title or path cannot select a different installation;
+    /// no missing or redirected common directory is returned.
+    public func gameFiles(_ id: SteamGameInstallationID) async throws -> URL {
+        try validate(id)
+        guard let record = try await store.load(id.environmentID), record.installation == .installed else {
+            throw SteamGameLibraryError.notInstalled
+        }
+        let prefix = try await store.checkedPrefixURL(for: record.id)
+        guard let game = try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable)
+            .games.first(where: { $0.id == id.appID }), game.state == .ready
+        else { throw SteamGameLibraryError.notInstalled }
+        let folder = prefix.appendingPathComponent(record.steamExecutable.rawValue).deletingLastPathComponent()
+            .appendingPathComponent("steamapps/common/\(game.installDirectory)", isDirectory: true)
+        guard try ManagedDirectory.openRoot(folder, create: false) != nil else { throw SteamGameLibraryError.notInstalled }
+        return folder
+    }
+
     /// The caller performs the existing SteamWindowPresentation focus handoff.
     public func openSteam() async throws {
         if try await lifecycle.status() == .running {
