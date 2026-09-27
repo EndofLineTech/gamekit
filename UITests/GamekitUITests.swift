@@ -3,6 +3,60 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testInspectorSummarizesSavedChoicesAndGatesManagedGameFiles() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Inspector fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let manifest = steam.appendingPathComponent("steamapps/appmanifest_42.acf")
+        func writeManifest(flags: Int) throws {
+            try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "\#(flags)" }"#.utf8)
+                .write(to: manifest)
+        }
+        try writeManifest(flags: 4)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        openGameInspector(42, in: app)
+        XCTAssertTrue(app.staticTexts["inspector-graphics-42"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["inspector-space-42"].exists)
+        let files = app.buttons["game-files-42"]
+        XCTAssertTrue(files.exists && files.isEnabled, "Revealing a ready folder does not require launching Wine")
+        try writeManifest(flags: 1026)
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: files)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 15), .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
+    func testLauncherManagementBrowsesOnlyAnInstalledSteamLibrary() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Launcher fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        app.buttons["nav-launchers"].click()
+        let browse = app.buttons["browse-steam-games"]
+        XCTAssertTrue(browse.waitForExistence(timeout: 10))
+        browse.click()
+        let heading = app.staticTexts["library-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        XCTAssertEqual(heading.value as? String, "Windows Steam", heading.debugDescription)
+        XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 10))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path),
+                       "Management navigation must not start a managed Steam session")
+    }
+
     func testSettingsShowsCategoriesAfterLibrarySidebarWasCollapsed() async throws {
         let root = try temporaryRoot()
         _ = try await LibraryPreferencesStore(root: root).setSidebarVisible(false)
@@ -1025,6 +1079,8 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["games-empty"].exists)
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["metadata-empty"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Set up Windows Steam"].exists)
+        XCTAssertFalse(app.buttons["browse-steam-games"].exists)
         XCTAssertTrue(app.buttons["install-steam"].exists)
         XCTAssertTrue(app.buttons["verify-steam"].exists)
         XCTAssertFalse(app.buttons["confirm-steam-ui"].exists)
