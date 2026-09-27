@@ -294,14 +294,16 @@ struct LibraryShellView: View {
 
     private func coverGrid(width: CGFloat) -> some View {
         let spacing: CGFloat = 18
-        let minimum = CGFloat(preferences.coverSize)
-        let columnCount = max(1, Int((max(width, minimum) + spacing) / (minimum + spacing)))
+        let coverWidth = CGFloat(preferences.coverSize)
+        let columnCount = max(1, Int((max(width, coverWidth) + spacing) / (coverWidth + spacing)))
         return ScrollViewReader { scroll in
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: minimum), spacing: spacing), count: columnCount), spacing: 23) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(coverWidth), spacing: spacing), count: columnCount),
+                      alignment: .leading, spacing: 23) {
                 ForEach(visibleGames) { game in
                     let favorite = isFavorite(game)
                     Button { select(game) } label: {
                         LibraryGridCell(game: game, selected: selectedGameID == game.id)
+                            .frame(width: coverWidth)
                     }
                     .buttonStyle(.plain)
                     .focusable()
