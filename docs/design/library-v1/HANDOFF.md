@@ -124,6 +124,10 @@ announcements. Resolve them in `.2` from existing behavior and the approved
 direction; ask the owner about meaningful UX alternatives rather than inventing
 new features. Later components must consume those decisions.
 
+Update: the Steam-only native interaction contract in [README.md](README.md)
+resolves these implementation details against the existing UI and core services.
+The prototype remains a visual reference; native acceptance is still required.
+
 Use focused core and native UI tests during implementation. Full repository
 delivery gates are `make check`, `make ui-test`,
 `python3 tools/check_game_configuration.py`, and the wiki checks when public data
@@ -157,5 +161,5 @@ application-scoped models. No new launcher integration is on this critical path.
 
 The mockup navigation (`vwq.1`) and revised icon concept (`vwq.3`) are approved and
 closed. The detailed interaction specification (`vwq.2`) remains open honestly;
-the artifact README identifies its remaining details. The icon-production bead
+the artifact README now records its native interaction decisions. The icon-production bead
 (`8n5.1`) is also ready. Other implementation work follows those explicit links.

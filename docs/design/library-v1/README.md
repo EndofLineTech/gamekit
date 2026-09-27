@@ -139,8 +139,125 @@ captures in addition to the automated smoke checks.
 Heuristic review: library-first hierarchy addresses the current major information
 overload; visible source labels and separate duplicate-title installations improve
 recognition; explicit Play and provider-mediated uninstall preserve user control.
-Remaining **major** specification work: full setup/recovery and compatibility
-sheets; **minor** work: native keyboard-grid behavior, remembered per-library
-scroll positions and detailed loading announcements. Browser checks do not replace
-VoiceOver, native window or packaged-app acceptance. The visual direction is
-approved; remaining implementation-detail decisions belong to `gamekit-vwq.2`.
+Browser checks do not replace VoiceOver, native window or packaged-app acceptance.
+The visual direction is approved; the shipping interaction contract follows.
+
+## Steam-only native interaction contract (`gamekit-vwq.2`)
+
+### Navigation, identity and operation lifetime
+
+- Start every app launch at **All Installed Games**, even if the previous session
+  ended in Settings or with a Steam filter. Keep one stable installation key per
+  managed Steam environment and AppID; never select, favorite or launch by title.
+  The initial source filter is only **Windows Steam**. Do not show future-launcher
+  cards, counts, authentication or configuration in the shipped UI.
+- Keep the shared `SetupModel` operation gate, installed-library refresh/launch
+  observer, installation coordinator and Steam lifecycle owner alive at window
+  scope while navigating. A destination switch hides a screen, not its work:
+  do not cancel a running install, lose a Steam prompt/launch message, call Play
+  again or release backend ownership. Backend leases, fresh readiness and process
+  ownership checks remain authoritative. Quit leaves Steam/games running; Stop
+  explicitly stops the managed session and may close its games.
+- Library grid, list, Favorites and Steam filter share one selection, query,
+  installation-state filter and sort. Switching views or refreshing records
+  retains the selected key and keyboard focus when it still exists. If a record
+  disappears after a successful full scan, clear its selection and show the
+  select-a-game inspector prompt. A temporarily unreadable scan must not imply
+  removal. Keep per-destination scroll offsets in window memory across navigation
+  and grid/list changes, restoring to the selected item when the collection
+  changes; a new app launch may begin at the top. Persist view mode, sort, cover
+  size and favorites locally without rewriting Steam manifests or profiles.
+  Clearing filters clears the query and state filter, not favorites or sort.
+- Settings/Command-comma opens the **in-window** Settings destination and replaces
+  the *left sidebar* with General, Game defaults, Runtime and Storage. **Back to
+  Launchers** always opens launcher management. Library selection is retained
+  for return from other destinations; the inspector is visible only in library
+  destinations. Command-F enters library search (navigating to All Installed
+  Games first if needed), selects its text and does not launch anything.
+
+### Library controls and accessibility
+
+- A single click on a cover or list row selects it and opens the inspector;
+  repeated single clicks do not Play. Double-click on a ready record and the inspector's
+  explicit Play button each dispatch **one** launch request through
+  `SteamLifecycle.launchGame(appID:)`, gated by `SetupModel.begin` and readiness.
+  Ignore subsequent double-click/shortcut requests while one is being handled or
+  observed. Return/Space on a focused item selects/opens the inspector; the
+  focused inspector Play button uses Return/Space to Play. Do not bind an
+  unmodified global Return, Space or letter shortcut to Play. Arrow keys move
+  focus by a row/column in the grid (respecting the current column count), by
+  adjacent row in the list; Home/End go to first/last. Movement alone never
+  launches and is ignored while typing in a text field or using a picker.
+- The item context menu exposes **Play** only when ready, **Show Windows Steam**,
+  **Compatibility settings…**, **Add/Remove Favorite**, and **Uninstall…** when
+  applicable. Play and uninstall use the same guarded actions as the inspector;
+  unavailable actions explain readiness rather than silently retrying. A
+  confirmation precedes the Steam-mediated uninstall request, and Steam owns its
+  final confirmation. Escape closes a sheet/menu or collapses the inspector,
+  returning focus to the selected item; it does not cancel install or launch
+  observation. Focus stays visible when a tile is selected.
+- Use a true 2:3 portrait image or a readable original placeholder; never stretch
+  the existing landscape header. Show a transparent Steam mark at upper left and
+  the favorite control at upper right, with no opaque mark backing. Source text
+  below the cover/list column supplements the mark. VoiceOver reads title, Windows
+  Steam, installation state and **Steam-reported** size (or unavailable), then
+  selected/favorite state and available actions. Do not equate a sum of known
+  Steam-reported sizes with physical disk use; unknown is not zero.
+
+### Inspector and full compatibility sheet
+
+- Inspector shows selected installation, Steam source, authoritative state,
+  optional reported bytes, launch progress, favorite, Show Steam, confirmed
+  uninstall, and the existing per-game graphics/Space choices. Not-ready games
+  offer Show Steam rather than Play. Read errors leave last-known entries visible
+  as stale but disable execution until ownership/readiness is checked afresh.
+- **All compatibility settings…** opens a scrollable native sheet for that AppID,
+  retaining `GameCompatibilityView`'s full capabilities: resolved bundled/wiki/
+  locally imported profile source and notes, Profile JSON link, explicit update,
+  JSON import/export and restore automatic profile; effective/shared/overridden
+  graphics and fullscreen Space; backend-specific launch options; profile-gated
+  driver compatibility, capture (inherit/enabled/disabled) and cursor guard;
+  saved-setting refresh, status and Done. Show profile guidance and apply changes
+  to the *next* launch only. Hide unsupported profile-defined controls instead
+  of inventing generic per-title toggles. Imported profiles take precedence over
+  wiki refresh; explicit overrides (including Off) take precedence over defaults.
+  Keep current session locks and `GameCompatibilityStore` inspection/setters;
+  don't dismiss or reset a sheet when a background library refresh occurs.
+
+### Launchers, setup, Settings and diagnostics routing
+
+| Destination | Existing UI/service contract to carry forward |
+| --- | --- |
+| Launchers → Windows Steam | `SteamLifecycleView` status plus Launch/Show and Stop, using `SteamLifecycle.status/launch/show/stop` and the existing owned-window focus handoff. Explain Stop scope and ordinary Quit. Browse games opens the Steam filter. |
+| Launchers → Setup & recovery | `SetupView` prerequisite report/refresh and `SteamInstallationView` staged install, verification, retry and cancel. Keep stage/status feedback across navigation. Retry inspects saved state; it is not a reset. Preserve force-stop-interrupted-setup and its confirmation. |
+| Setup & recovery → reset options | Explicitly expand preserve-downloads versus delete-downloads choices before their *separate* destructive confirmations. Preserve the current messages about archived prefix, sign-in, saves, external libraries, incomplete operations and ownership locks. No automatic cleanup, reset or response to Steam prompts. |
+| Settings → General | Local library preferences (view mode, sort, cover size). Startup remains All Installed Games. Follow system appearance; do not replace macOS appearance controls with the mockup's review toggle. |
+| Settings → Game defaults | Existing shared graphics backend and fullscreen Space in `SetupModel`/`RuntimeSettingsStore`; session and operation locks apply. Per-game settings remain in inspector/sheet and override shared choices. |
+| Settings → Runtime | `SetupView` validated-runtime selection, updated/text-input/original rollback choices, prerequisite refresh and links; retain saved environment details from `EnvironmentSummaryView`. |
+| Settings → Storage | Managed steamapps Finder shortcut; `RecoveryArchivesView` inspection and confirmed completed-archive cleanup; `LauncherCachesView` inspection and confirmed obsolete-cache cleanup. Show logical bytes as such. Keep recovery reset in Launchers → Setup & recovery, not an unlabeled storage cleanup. |
+| Diagnostics | `DiagnosticsView` local summaries/output, debug capture toggle/stop, local log opening and safe JSON export with existing redaction. Route failures here without leaking raw logs into the library. |
+
+### Loading, failures and announcements
+
+- Distinguish no registered Steam setup (route to Launchers), an installed Steam
+  library with no games (open Steam to install), zero search/filter matches (clear
+  filters), partial install/update and missing files (Show Steam), and unreadable
+  manifests (warning, not an empty library). Initial scan has a progress label;
+  subsequent refreshes preserve artwork/selection and indicate stale results on
+  failure. Offline artwork retrieval uses a placeholder; connectivity alone
+  does not promise offline Steam authentication or game execution.
+- Show one persistent, accessible status near the relevant control and in the
+  window operation banner. Announce *transitions*, not every one-second poll:
+  scan started/completed or failed, operation acquired/completed or failed, Steam
+  prompt requiring user attention, and launch observation ended. Do not call a
+  process-created event a gameplay pass. For Cloud/other-session/user attention,
+  offer **Show Windows Steam** and leave the decision to the user; when tracking
+  times out, say that Steam may still be starting and ask users to check Steam
+  before requesting Play again. Disabled controls expose their reason to
+  VoiceOver. Never clear an actionable error solely because a screen changed.
+
+This contract maps to the current `InstalledGamesView`, `GameCompatibilityView`,
+`SteamLifecycleView`, `SteamInstallationView`, `SetupView`, `DiagnosticsView`,
+`RecoveryArchivesView`, `LauncherCachesView`, `SetupModel` and their existing
+`GamekitCore` services. It specifies native shipping behavior; mockup simulated
+actions and sample installations are not test fixtures or acceptance evidence.
