@@ -10,6 +10,7 @@ final class InstalledGamesModel: ObservableObject {
     @Published private(set) var libraryStale = false
     @Published private(set) var message: String?
     @Published private(set) var pendingGame: UInt32?
+    @Published private(set) var lastDiagnosticID: UUID?
     private var launchObservation: Task<Void, Never>?
     private var namesNeedRefresh = true
     private var requestedUninstall: (id: UInt32, name: String)?
@@ -81,6 +82,7 @@ final class InstalledGamesModel: ObservableObject {
         message = "Requesting \(game.name)…"
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: .launch, context: .init(component: .steam))
+            lastDiagnosticID = operation?.id
             do {
                 let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
                 let observation = try await service.launch(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
@@ -128,6 +130,7 @@ final class InstalledGamesModel: ObservableObject {
         message = "Opening uninstall for \(game.name) in Windows Steam…"
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: .uninstallation, context: .init(component: .steam))
+            lastDiagnosticID = operation?.id
             do {
                 let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
                 try await service.requestUninstall(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
