@@ -31,6 +31,7 @@ struct LibraryShellView: View {
     @State private var selectedGameID: UInt32?
     @State private var inspectorVisible = false
     @State private var compatibilityGame: InstalledSteamGame?
+    @State private var compatibilityRevision = 0
     @State private var uninstallGame: InstalledSteamGame?
     @State private var confirmingUninstall = false
     @FocusState private var searchFocused: Bool
@@ -97,7 +98,7 @@ struct LibraryShellView: View {
                 if preferences.viewMode == .list { focusedListID = id }
             }
         }
-        .sheet(item: $compatibilityGame) { GameCompatibilityView(game: $0) }
+        .sheet(item: $compatibilityGame, onDismiss: { compatibilityRevision += 1 }) { GameCompatibilityView(game: $0) }
         .confirmationDialog("Uninstall \(uninstallGame?.name ?? "game")?", isPresented: $confirmingUninstall,
                             titleVisibility: .visible) {
             Button("Continue in Windows Steam", role: .destructive) {
@@ -437,10 +438,15 @@ struct LibraryShellView: View {
                             .disabled(!(setup.actions.launch || setup.actions.show))
                         Button("All compatibility settings…") { compatibilityGame = game }
                             .disabled(setup.isBusy).accessibilityIdentifier("game-compatibility-\(game.id)")
+                        Button("Open game files in Finder") { games.openGameFiles(game, setup: setup) }
+                            .disabled(game.state != .ready || games.libraryStale || setup.isBusy)
+                            .accessibilityIdentifier("game-files-\(game.id)")
+                            .help("Open this game's current managed installation folder in Finder")
                         Button("Uninstall…") { uninstallGame = game; confirmingUninstall = true }
                             .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
                             .accessibilityIdentifier("uninstall-game-\(game.id)")
                     }
+                    InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
                 } else {
                     Text("Select a game").font(.title2.bold())
                     Text("Artwork, launch status and settings appear here.").foregroundStyle(.secondary)
@@ -458,6 +464,10 @@ struct LibraryShellView: View {
         }
         Button("Show Windows Steam") { steam.control(stop: false, diagnostics: diagnostics, setup: setup) }
         Button("Compatibility settings…") { compatibilityGame = game }
+        if game.state == .ready {
+            Button("Open game files in Finder") { games.openGameFiles(game, setup: setup) }
+                .disabled(games.libraryStale || setup.isBusy)
+        }
         Button(isFavorite(game) ? "Remove Favorite" : "Add Favorite") { toggleFavorite(game) }
         Divider()
         Button("Uninstall…") { uninstallGame = game; confirmingUninstall = true }
@@ -643,5 +653,48 @@ private struct LibraryGridCell: View {
 
     private var reportedSize: String {
         game.sizeOnDiskBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Unavailable"
+    }
+}
+
+/// Read-only effective settings alongside Play. The full sheet remains the
+/// single editor, preserving inheritance, explicit overrides and session locks.
+private struct InspectorCompatibilitySummary: View {
+    let game: InstalledSteamGame
+    let revision: Int
+    @State private var graphics: GameGraphicsSnapshot?
+    @State private var space: GameFullscreenSpaceSnapshot?
+    @State private var unavailable = false
+
+    var body: some View {
+        LibraryInspectorSection(title: "Compatibility · next launch") {
+            if let graphics, let space {
+                Text("Graphics: \(graphics.effectiveBackend.title) · \(graphics.override == .inherit ? "shared default" : "game override")")
+                    .accessibilityIdentifier("inspector-graphics-\(game.id)")
+                Text("Fullscreen Space: \(space.effective ? "On" : "Off") · \(space.override == .inherit ? "inherited" : "game override")")
+                    .accessibilityIdentifier("inspector-space-\(game.id)")
+                Text(graphics.sessionLocked || space.sessionLocked
+                     ? "Stop Windows Steam to change saved settings. They apply on the next launch."
+                     : "Saved changes apply on the next launch, not to a game already running.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if unavailable {
+                Text("Per-game settings are unavailable. Open compatibility settings for details.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ProgressView("Loading saved settings…").controlSize(.small)
+            }
+        }
+        .task(id: "\(game.id)-\(revision)") {
+            graphics = nil; space = nil; unavailable = false
+            do {
+                let settings = GameCompatibilityStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
+                let currentGraphics = try await settings.inspectGraphics(appID: game.id)
+                let currentSpace = try await settings.inspectFullscreenSpace(appID: game.id)
+                guard !Task.isCancelled else { return }
+                graphics = currentGraphics; space = currentSpace
+            } catch {
+                guard !Task.isCancelled else { return }
+                unavailable = true
+            }
+        }
     }
 }

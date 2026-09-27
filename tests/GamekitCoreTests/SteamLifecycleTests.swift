@@ -414,6 +414,9 @@ struct SteamLifecycleTests {
         let foreign = SteamGameInstallationID(environmentID: try EnvironmentID("foreign-steam"), appID: 42)
         await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.launch(foreign) }
         await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.requestUninstall(foreign) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.gameFiles(foreign) }
+        let folder = try await service.gameFiles(game.id)
+        #expect(folder == fixture.store.prefixURL(for: fixture.id).appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/Fixture"))
         #expect(await runtime.launches == 0)
         #expect(await runtime.commands.isEmpty)
         _ = try await service.launch(game.id)
@@ -428,7 +431,22 @@ struct SteamLifecycleTests {
         #expect(try await service.scan().games.isEmpty)
         await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.launch(game.id) }
         await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.requestUninstall(game.id) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.gameFiles(game.id) }
         #expect(await runtime.commands.count == 3)
+    }
+
+    @Test("An installed game's Finder folder cannot redirect outside the managed library")
+    func gameFilesRejectRedirect() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        _ = try fixture.game()
+        let service = SteamLibraryService(store: fixture.store,
+            lifecycle: SteamLifecycle(store: fixture.store, driver: await LifecycleFixtureRuntime().driver))
+        let folder = fixture.store.prefixURL(for: fixture.id)
+            .appendingPathComponent("drive_c/Program Files (x86)/Steam/steamapps/common/Fixture")
+        try FileManager.default.removeItem(at: folder)
+        try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: fixture.store.root)
+        let id = SteamGameInstallationID(environmentID: fixture.id, appID: 42)
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.gameFiles(id) }
     }
 
     @Test("Library boundary retains runtime preflight and does not dispatch on failure")
