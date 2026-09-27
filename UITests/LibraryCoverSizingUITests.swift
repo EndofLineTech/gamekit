@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class LibraryCoverSizingUITests: XCTestCase {
-    func testWindowResizeKeepsSavedCoverWidth() async throws {
+    func testChangingAvailableWidthKeepsSavedCoverWidth() async throws {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: parent) }
@@ -30,17 +30,14 @@ final class LibraryCoverSizingUITests: XCTestCase {
         }
         XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "Saved cover size sets the artwork width")
 
-        let window = app.windows["Gamekit"]
-        let initialWidth = window.frame.width
-        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
-            .withOffset(CGVector(dx: -4, dy: -4))
-        corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: -105, dy: -40)))
-        for _ in 0..<20 {
-            if window.frame.width < initialWidth - 30 { break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        XCTAssertLessThan(window.frame.width, initialWidth - 30, "The window must actually resize")
-        XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "Window width must not scale a game's cover")
+        let firstX = tile.frame.minX
+        app.buttons["toggle-sidebar"].click()
+        XCTAssertFalse(app.buttons["library-all"].exists)
+        XCTAssertLessThan(tile.frame.minX, firstX - 100, "Collapsing the sidebar gives the grid more space")
+        XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "More grid space must not scale a game's cover")
+        app.buttons["toggle-sidebar"].click()
+        XCTAssertTrue(app.buttons["library-all"].waitForExistence(timeout: 10))
+        XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "Restoring the sidebar must not scale the cover")
         let savedCoverSize = try await LibraryPreferencesStore(root: root).load().coverSize
         XCTAssertEqual(savedCoverSize, 180)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
