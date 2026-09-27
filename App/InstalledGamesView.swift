@@ -24,14 +24,14 @@ private final class InstalledGamesModel: ObservableObject {
             guard let record = try await store.load(SteamInstallationRecipe.environmentID), record.installation == .installed else {
                 games = []; warning = nil; return
             }
-            let prefix = store.prefixURL(for: record.id)
+            let service = SteamLibraryService(store: store, layout: setup.layout)
             let result = try await Task.detached(priority: .utility) {
-                try SteamGameLibrary.scan(prefix: prefix, steamExecutable: record.steamExecutable)
+                try await service.scan()
             }.value
             guard !setup.isBusy, !Task.isCancelled else { return }
-            if games != result.games { games = result.games; namesNeedRefresh = true }
+            if games != result.installedGames { games = result.installedGames; namesNeedRefresh = true }
             if profileRefresh == nil {
-                let ids = result.games.map(\.id)
+                let ids = result.games.map(\.id.appID)
                 profileRefresh = Task { [weak self, profiles] in
                     for id in ids {
                         if Task.isCancelled { break }
@@ -41,7 +41,7 @@ private final class InstalledGamesModel: ObservableObject {
                 }
             }
             if result.unreadableManifests == 0, let requested = requestedUninstall,
-               !result.games.contains(where: { $0.id == requested.id }) {
+               !result.games.contains(where: { $0.id.appID == requested.id }) {
                 message = "\(requested.name) is no longer listed as installed in Windows Steam."
                 requestedUninstall = nil
             }
@@ -70,8 +70,8 @@ private final class InstalledGamesModel: ObservableObject {
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: .launch, context: .init(component: .steam))
             do {
-                let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
-                let observation = try await lifecycle.launchGame(appID: game.id)
+                let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                let observation = try await service.launch(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
                 diagnostics.captureGameIfEnabled(game, layout: setup.layout)
                 watch(observation, game: game)
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
@@ -117,11 +117,11 @@ private final class InstalledGamesModel: ObservableObject {
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: .uninstallation, context: .init(component: .steam))
             do {
-                let lifecycle = SteamLifecycle(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
-                try await lifecycle.requestGameUninstall(appID: game.id)
+                let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                try await service.requestUninstall(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
                 requestedUninstall = (game.id, game.name)
                 message = "Uninstall requested for \(game.name). Confirm or cancel in Windows Steam; this list refreshes automatically."
-                if (try? await SteamWindowPresentation.bringForward(using: lifecycle)) != true {
+                if (try? await SteamWindowPresentation.bringForward(using: service.lifecycle)) != true {
                     message = "Uninstall requested for \(game.name), but Steam could not be brought forward. Use Show Windows Steam to review its confirmation."
                 }
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
