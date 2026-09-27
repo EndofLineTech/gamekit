@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var games = InstalledGamesModel()
     @StateObject private var steam = SteamLifecycleModel()
     @StateObject private var installation = SteamInstallationModel()
+    @StateObject private var portraits = SteamPortraitModel()
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         VStack(spacing: 0) {
@@ -19,6 +20,19 @@ struct ContentView: View {
                 }.padding(16).background(.quaternary)
             }
             LibraryShellView()
+            if let message = games.message {
+                HStack(spacing: 10) {
+                    Image(systemName: "info.circle")
+                    Text(message).font(.callout).accessibilityIdentifier("persistent-game-status")
+                    Spacer()
+                    Button("Show Windows Steam") {
+                        steam.control(stop: false, diagnostics: diagnostics, setup: setup)
+                    }
+                    .disabled(!(setup.actions.launch || setup.actions.show))
+                }
+                .padding(.horizontal, 18).padding(.vertical, 9)
+                .background(LibraryVisualStyle.panel)
+            }
         }
         .frame(minWidth: 850, minHeight: 620)
         .environmentObject(diagnostics)
@@ -26,6 +40,7 @@ struct ContentView: View {
         .environmentObject(games)
         .environmentObject(steam)
         .environmentObject(installation)
+        .environmentObject(portraits)
         .task {
             setup.refresh(diagnostics: diagnostics)
             #if DEBUG

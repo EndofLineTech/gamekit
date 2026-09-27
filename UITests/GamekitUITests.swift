@@ -23,6 +23,10 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(item.waitForExistence(timeout: 20))
         item.click()
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        let gridCapture = XCTAttachment(screenshot: app.screenshot())
+        gridCapture.name = "native-library-grid"
+        gridCapture.lifetime = .keepAlways
+        add(gridCapture)
         XCTAssertFalse(app.buttons["launch-game-42"].isEnabled)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
         app.buttons["nav-diagnostics"].click()
@@ -37,10 +41,38 @@ final class GamekitUITests: XCTestCase {
         app.buttons["library-all"].click()
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["launch-game-42"].exists, "Selection must survive navigation")
+        app.buttons["favorite-game-42"].click()
+        let preferences = LibraryPreferencesStore(root: root)
+        let favoriteID = SteamGameInstallationID(environmentID: id, appID: 42)
+        for _ in 0..<40 {
+            if (try? await preferences.load().favorites.contains(favoriteID)) == true { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let savedFavorites = try await preferences.load().favorites
+        XCTAssertTrue(savedFavorites.contains(favoriteID))
+        app.buttons["library-favorites"].click()
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        app.buttons["library-all"].click()
+        let listMode = app.buttons["library-view-list"]
+        XCTAssertTrue(listMode.waitForExistence(timeout: 10))
+        listMode.click()
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        let listCapture = XCTAttachment(screenshot: app.screenshot())
+        listCapture.name = "native-library-list"
+        listCapture.lifetime = .keepAlways
+        add(listCapture)
+        let savedMode = try await preferences.load().viewMode
+        XCTAssertEqual(savedMode, .list)
+        XCTAssertTrue(app.buttons["launch-game-42"].exists, "Grid and list share the inspector selection")
         let search = app.textFields["library-search"]
         search.click(); search.typeText("no match")
         XCTAssertTrue(app.staticTexts["No matching games"].waitForExistence(timeout: 10))
         app.buttons["Clear filters"].click()
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["back-to-launchers"].waitForExistence(timeout: 10))
+        app.buttons["back-to-launchers"].click()
+        app.buttons["library-all"].click()
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
     }

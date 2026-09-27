@@ -85,6 +85,7 @@ struct LibraryShellView: View {
             preferencesWarning = restored.savedPreferencesUnavailable
         }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in destination = .settings }
+        .onExitCommand { inspectorVisible = false }
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
                 self.selectedGameID = nil
@@ -166,16 +167,20 @@ struct LibraryShellView: View {
             Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : destination == .launchers ? "Launchers" : "Diagnostics")
                 .font(.subheadline.weight(.semibold))
             Spacer(minLength: 8)
+            Button { destination = .all; searchFocused = true } label: { Image(systemName: "magnifyingglass") }
+                .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
             if destination.isLibrary {
                 TextField("Search games", text: $query).textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 230).focused($searchFocused).accessibilityIdentifier("library-search")
-                Button { destination = .all; searchFocused = true } label: { Image(systemName: "magnifyingglass") }
-                    .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
-                Picker("View", selection: Binding(get: { preferences.viewMode }, set: { setViewMode($0) })) {
-                    Label("Box art", systemImage: "square.grid.2x2").tag(LibraryViewMode.grid)
-                    Label("List", systemImage: "list.bullet").tag(LibraryViewMode.list)
+                HStack(spacing: 2) {
+                    Button { setViewMode(.grid) } label: { Image(systemName: "square.grid.2x2") }
+                        .accessibilityLabel("Box art view").accessibilityIdentifier("library-view-grid")
+                        .tint(preferences.viewMode == .grid ? LibraryVisualStyle.accent : nil)
+                    Button { setViewMode(.list) } label: { Image(systemName: "list.bullet") }
+                        .accessibilityLabel("List view").accessibilityIdentifier("library-view-list")
+                        .tint(preferences.viewMode == .list ? LibraryVisualStyle.accent : nil)
                 }
-                .pickerStyle(.segmented).frame(width: 130).accessibilityIdentifier("library-view-mode")
+                .buttonStyle(.bordered)
                 Button { inspectorVisible.toggle() } label: { Image(systemName: "info.circle") }
                     .accessibilityLabel("Toggle game inspector").accessibilityIdentifier("toggle-inspector")
             }
@@ -184,8 +189,9 @@ struct LibraryShellView: View {
     }
 
     private var libraryBody: some View {
-        HStack(spacing: 0) {
-            ScrollView {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 5) {
@@ -212,6 +218,15 @@ struct LibraryShellView: View {
                         }
                         .frame(width: 160).accessibilityIdentifier("library-sort")
                     }
+                    if preferences.viewMode == .grid {
+                        HStack(spacing: 10) {
+                            Text("Cover size").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: Binding(get: { Double(preferences.coverSize) },
+                                                  set: { setCoverSize(Int($0)) }), in: 125...220)
+                                .frame(width: 135).accessibilityIdentifier("library-cover-size")
+                            Spacer()
+                        }
+                    }
                     if preferencesWarning { Text("Saved library preferences could not be read; showing defaults. Your saved file was preserved.").foregroundStyle(.orange) }
                     if let warning = games.warning { Text(warning).foregroundStyle(.orange) }
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
@@ -222,10 +237,20 @@ struct LibraryShellView: View {
                 }
                 .padding(LibraryVisualStyle.contentSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if inspectorVisible && geometry.size.width >= 920 {
+                    Divider()
+                    inspector.frame(minWidth: 255, idealWidth: 290, maxWidth: 320)
+                }
             }
-            if inspectorVisible {
-                Divider()
-                inspector.frame(minWidth: 255, idealWidth: 290, maxWidth: 320)
+            .overlay(alignment: .trailing) {
+                if inspectorVisible && geometry.size.width < 920 {
+                    inspector
+                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 155))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.35), radius: 20, x: -8)
+                        .padding(.top, 130).padding(.trailing, 12)
+                }
             }
         }
     }
@@ -235,10 +260,7 @@ struct LibraryShellView: View {
             ForEach(visibleGames) { game in
                 let favorite = isFavorite(game)
                 Button { select(game) } label: {
-                    LibraryGameTile(title: game.name, source: "Windows Steam", state: status(game),
-                                    needsAttention: game.state != .ready, reportedSize: size(game), portrait: nil,
-                                    selected: selectedGameID == game.id, favorite: false,
-                                    mark: Image(systemName: "window.split.2x2"))
+                    LibraryGridCell(game: game, selected: selectedGameID == game.id)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("select-game-\(game.id)")
@@ -272,9 +294,9 @@ struct LibraryShellView: View {
             ForEach(visibleGames) { game in
                 Button { select(game) } label: {
                     HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 4).fill(LibraryVisualStyle.accent.gradient)
-                            .overlay(Image(systemName: "gamecontroller.fill").foregroundStyle(.white))
-                            .frame(width: 32, height: 46)
+                        SteamPortraitCover(game: SteamLibraryGame(installed: game,
+                            environmentID: SteamInstallationRecipe.environmentID), markSize: 14)
+                            .frame(width: 32, height: 48)
                         Text(game.name).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading)
                         Text("Windows Steam").frame(width: 120, alignment: .leading)
                         Text(status(game)).frame(width: 125, alignment: .leading)
@@ -292,17 +314,22 @@ struct LibraryShellView: View {
     }
 
     private var emptyLibrary: some View {
-        LibraryPanel {
+        let initial = query.isEmpty && filter == .all
+        let favoritesEmpty = initial && destination == .favorites
+        return LibraryPanel {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "square.grid.2x2").font(.largeTitle).foregroundStyle(LibraryVisualStyle.accent)
-                Text(query.isEmpty && filter == .all && destination != .favorites ? "Your library starts here" : "No matching games")
+                Text(favoritesEmpty ? "No favorites yet" : initial ? "Your library starts here" : "No matching games")
                     .font(.title2.bold()).accessibilityIdentifier("games-empty")
-                Text(query.isEmpty && filter == .all && destination != .favorites
-                     ? "Install games in Windows Steam to see them here."
+                Text(favoritesEmpty ? "Mark a game as a favorite in your library." : initial
+                     ? setup.record?.installation == .installed
+                         ? "Install games in Windows Steam to see them here."
+                         : "Set up Windows Steam, then install a game to see it here."
                      : "Try another search or clear the filters.")
                     .foregroundStyle(.secondary)
-                Button(query.isEmpty && filter == .all && destination != .favorites ? "Open Launchers" : "Clear filters") {
-                    if query.isEmpty && filter == .all && destination != .favorites { destination = .launchers }
+                Button(favoritesEmpty ? "Browse all games" : initial ? "Open Launchers" : "Clear filters") {
+                    if favoritesEmpty { destination = .all }
+                    else if initial { destination = .launchers }
                     else { query = ""; filter = .all }
                 }
             }
@@ -313,6 +340,9 @@ struct LibraryShellView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 15) {
                 if let game = selectedGame {
+                    SteamPortraitCover(game: SteamLibraryGame(installed: game,
+                        environmentID: SteamInstallationRecipe.environmentID))
+                        .frame(width: 205, height: 308)
                     Text(game.name).font(.title2.bold())
                     Text("Windows Steam · \(status(game))").foregroundStyle(.secondary)
                     Text("Steam-reported size: \(size(game))").font(.callout)
@@ -491,5 +521,38 @@ struct LibraryShellView: View {
             do { preferences = try await preferenceStore.setSidebarVisible(visible); preferencesWarning = false }
             catch { preferencesWarning = true }
         }
+    }
+}
+
+/// One cancellable image decode per visible grid tile. The shared actor owns the
+/// small data cache; scrolling never retains a decoded copy for every game.
+private struct LibraryGridCell: View {
+    @EnvironmentObject private var portraits: SteamPortraitModel
+    let game: InstalledSteamGame
+    let selected: Bool
+    @State private var portrait: NSImage?
+
+    var body: some View {
+        LibraryGameTile(title: game.name, source: "Windows Steam", state: state,
+                        needsAttention: game.state != .ready, reportedSize: reportedSize,
+                        portrait: portrait, selected: selected, favorite: false,
+                        mark: Image("ManagedSteamSource").resizable().frame(width: 25, height: 25))
+            .task(id: game.id) {
+                portrait = nil
+                portrait = await portraits.image(for: .init(environmentID: SteamInstallationRecipe.environmentID,
+                                                            appID: game.id))
+            }
+    }
+
+    private var state: String {
+        switch game.state {
+        case .ready: "Installed"
+        case .updating: "Updating or incomplete"
+        case .missingFiles: "Missing files"
+        }
+    }
+
+    private var reportedSize: String {
+        game.sizeOnDiskBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Unavailable"
     }
 }

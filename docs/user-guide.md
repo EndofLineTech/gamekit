@@ -38,7 +38,8 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 ## First setup
 
-1. Review **Setup and prerequisites**. Each failed check explains its next step.
+1. Gamekit opens to **All Installed Games**. Choose **Launchers** in the sidebar,
+   then review **Setup and prerequisites**. Each failed check explains its next step.
 2. Choose **Use updated runtime** for the prepared runtime with per-game
    driver-compatibility support (includes text-input 1). **Use text-input runtime
    (rollback)** selects the previous text-input revision, and **Use original
@@ -62,9 +63,28 @@ bar shows the current stage, with no invented progress percentages.
 
 ## Everyday use
 
+The sidebar opens to **All Installed Games** on every app launch. Switch between
+box-art grid and list using the toolbar buttons; selection, search and filters
+are shared. The toolbar Sort menu can order by name, launcher, state or
+Steam-reported size (unknown sizes sort last). Use the **Favorites** sidebar
+destination and the star in a cover's upper-right corner to keep a local list.
+Only managed Windows Steam is a configured launcher in this version. The
+original, transparent source glyph at a cover's upper-left is accompanied by
+the text **Windows Steam** below it. Gamekit remembers browsing preferences;
+installed games, saves, graphics overrides and imported profiles are preserved.
+
+**Settings…** (Command-comma) replaces the sidebar with **General**, **Game
+defaults**, **Runtime** and **Storage**. **Back to Launchers** opens launcher
+management. Shared graphics and fullscreen-Space defaults are under **Game
+defaults**; prerequisite/runtime checks and rollback are under **Runtime**;
+archive/cache inspection and the steamapps Finder shortcut are under **Storage**.
+Steam setup/recovery and Launch/Show/Stop are under **Launchers**; logs and safe
+exports are under **Diagnostics**. Changing destinations does not stop Steam or
+cancel a launch being observed.
+
 ### Debug capture
 
-Under **Local diagnostics**, enable **Debug mode — capture game startup
+Under **Diagnostics**, enable **Debug mode — capture game startup
 performance** before launching a game from Gamekit. It records up to 60 seconds
 of read-only CPU, memory and disk-I/O counters for one identified owned game
 process. **Stop debug capture** stops only the sampler. Debug mode starts off
@@ -77,8 +97,9 @@ counters. No screenshots or shader hooks are enabled. See
 
 ### Helldivers driver alert
 
-Open the **gear beside Helldivers' Play button** and use **Avoid the virtual-GPU
-driver warning** to enable or disable the workaround for that game. It requires
+Select Helldivers, open **All compatibility settings…** in the inspector and
+use **Avoid the virtual-GPU driver warning** to enable or disable the workaround
+for that game. It requires
 the updated runtime and a stopped Steam session. Your existing enabled choice
 is preserved when upgrading from the earlier driver-runtime release.
 
@@ -95,10 +116,10 @@ recurrence in this setup; they are not the delivered fix.
 ### Graphics backend
 
 To retain the tested Helldivers Metal 3 configuration, save/exit games and
-**Stop Windows Steam**, then choose **Metal 3 compatibility** in the
-**Shared graphics backend** dropdown under Setup. This is the default for
+**Stop Windows Steam**, then choose **Metal 3 compatibility** in the shared
+graphics backend dropdown under **Settings → Game defaults**. This is the default for
 Windows Steam and games with no override, and survives app and Steam restarts.
-Each game's gear panel now has its own dropdown: **Use shared default**,
+Each game's compatibility sheet has its own dropdown: **Use shared default**,
 **Automatic (Apple default)**, or **Metal 3 compatibility**. It shows the
 effective next-launch backend. Changing it affects only that game, including
 launches from managed Steam. **Automatic (Apple default)** restores Apple's default
@@ -162,21 +183,27 @@ Steam**, then launch again. The new DLL preference takes effect in a fresh Steam
 session. See the repository's
 [VC++ prerequisite investigation](https://github.com/EndofLineTech/gamekit/blob/dev/docs/visual-cpp-prerequisites.md).
 
-Install games using **Windows Steam**, in its default managed library. Gamekit's
-**Installed games** section detects their Steam installation records and shows
-each title with artwork, a play button, and its Steam-reported installed size. The
+Install games using **Windows Steam**, in its default managed library. **All
+Installed Games** shows Steam's installed records as portrait covers or list rows.
+Click once to select a game and open its inspector; click **Play** explicitly to
+send a launch request. Double-clicking a ready game is a shortcut. Neither
+switching views nor browsing Settings sends Play. Gamekit shows
+each title with artwork, status, and its Steam-reported installed size. The
 size may be unavailable while a download or update is incomplete, if game files
 are missing, or if Steam has not recorded a valid size. It is not a measurement
 of saves, shader caches or other files outside the game directory. The list
-refreshes every three seconds, when Gamekit becomes active, or with **Refresh
-games**. Uninstalled titles disappear.
+refreshes every three seconds, when Gamekit becomes active, or with **Refresh**.
+On a library read error, last-known entries may remain visible as stale, but
+Play and uninstall stay disabled until a successful refresh. Uninstalled titles
+disappear after a complete scan.
 
-**Open steamapps folder**, beside **Refresh games**, opens the managed Windows
+**Open steamapps folder** under **Settings → Storage** opens the managed Windows
 Steam library directory in Finder. Installed game files are under its `common`
 subfolder. Windows Steam does not need to be running to use this button.
 
-To uninstall, click the **trash button beside the game's gear**, then choose
-**Continue in Windows Steam**. Steam opens its uninstall flow; review and confirm
+To uninstall, select the game and click **Uninstall…** in its inspector (or use
+the game's context menu), then choose **Continue in Windows Steam**. Steam opens
+its uninstall flow; review and confirm
 or cancel there. Gamekit brings the owned Steam window forward for confirmation,
 starts managed Windows Steam if needed, and updates the
 tile list after Steam removes the installation record. **Cancel** in Gamekit's
@@ -188,25 +215,26 @@ finished. Use **Show Windows Steam** if its prompt is hidden. Steam controls
 which files are removed; Gamekit does not directly delete game folders or saves.
 See [uninstall behavior](uninstall-games.md) for details.
 
-Click a game's tile to launch it. Gamekit starts its managed Windows Steam session
-if necessary and sends that game's AppID to the Windows client. The native macOS
+Click **Play** in the inspector or double-click a ready game. Gamekit starts its
+managed Windows Steam session if necessary and sends that game's AppID to the Windows client. The native macOS
 Steam app is not used. A launch-request message means Steam received the request;
 confirm the game window, first-run setup and actual gameplay separately.
 
-Incomplete downloads, pending updates and missing game directories disable the
-tile. Let Steam complete installation or repair it there. Runtime checks and the
+Incomplete downloads, pending updates and missing game directories disable
+Play. Let Steam complete installation or repair it there. Runtime checks and the
 shared operation gate also apply to game launches. Steam's installation record
 does not prove compatibility or verify every installed game file.
 
-Artwork comes from Steam's local header-image cache first. If unavailable or
-invalid, Gamekit requests the title's public header image from Steam's CDN. An
-offline/missing image falls back to a controller symbol beside the game title.
+Portrait artwork uses Steam's local portrait cache first and then its public
+2:3 Steam CDN image. A missing, corrupt or offline cover shows a title fallback;
+the existing landscape header is never stretched into portrait art. Artwork
+loading does not prevent browsing or Play.
 External Steam libraries and the native macOS library are not scanned in this
 version. See the repository's [library contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/installed-games.md)
 for detection and launch details.
 
 New Steam sessions also load Gamekit's small Intel Wine-side helper. The first
-game-tile launch prepares a game-named Wine bundle so the game uses its own Dock
+Gamekit Play request prepares a game-named Wine bundle so the game uses its own Dock
 title while Steam remains **Windows Steam**.
 Restart Steam after updating Gamekit to pick up this helper. Keep the app bundle
 in place while Steam is running; stop Steam before moving/removing it. The helper
@@ -216,13 +244,14 @@ for scope and validation.
 
 ## Per-game compatibility
 
-Choose the **gear icon beside Play** in an installed game's row. Every ready
-installed game offers an independent graphics-backend override and displays its
-effective next-launch choice. **Use shared default** follows Setup; explicit
+Select a game and choose **All compatibility settings…** in its inspector.
+Every ready installed game offers an independent graphics-backend override and
+displays its effective next-launch choice. **Use shared default** follows the
+shared selection under **Settings → Game defaults**; explicit
 Automatic or Metal3 choices leave Steam and other games on their own settings.
 
-**Setup and prerequisites** also has a **Shared fullscreen Space for games**
-toggle, off by default. In every installed game's gear, choose **Use shared
+**Settings → Game defaults** has a **Shared fullscreen Space for games** toggle,
+off by default. In each game's compatibility sheet, choose **Use shared
 default**, **Use fullscreen Space**, or **Keep on desktop** independently of its
 graphics choice. Only a managed game window covering a display can enter a
 separate macOS Space; a smaller/windowed game remains on the desktop even when
@@ -250,7 +279,7 @@ Other games have the same controls, but their window sizes and focus behavior
 have not been individually qualified.
 
 For Stardew Valley's Windows build, the optional **Hide duplicate macOS pointer**
-toggle is under **Game cursor guard** in its gear panel. Stop Windows Steam and
+toggle is under **Game cursor guard** in its compatibility sheet. Stop Windows Steam and
 its games before changing the toggle, then start a fresh session. It substitutes
 a transparent macOS cursor only inside Stardew's owned Wine process while its
 window is active; the game's drawn cursor stays visible. Command-Tab to another
