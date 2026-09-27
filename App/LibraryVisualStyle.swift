@@ -10,6 +10,7 @@ enum LibraryVisualStyle {
     static let border = Color.primary.opacity(0.11)
     static let contentSpacing: CGFloat = 28
     static let controlSpacing: CGFloat = 10
+    static let launcherMarkOpacity = 0.75
 }
 
 struct LibraryPanel<Content: View>: View {
@@ -61,7 +62,8 @@ struct LibraryCover<Mark: View>: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .overlay(alignment: .topLeading) {
-                mark.foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 3)
+                mark.foregroundStyle(.white).opacity(LibraryVisualStyle.launcherMarkOpacity)
+                    .shadow(color: .black.opacity(0.8), radius: 3)
                     .padding(max(5, geometry.size.width * 0.07))
             }
             .overlay(alignment: .topTrailing) {
