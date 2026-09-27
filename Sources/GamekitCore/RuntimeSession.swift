@@ -60,9 +60,7 @@ public actor RuntimeSession {
                                 onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil,
                                 game: GameApplicationIdentity? = nil) async throws -> RuntimeSession {
         try Task.checkCancellation()
-        try lease.validate()
-        let snapshot = RuntimeProcessObserver().snapshot(record: lease.record, prefix: lease.prefix, layout: layout)
-        guard snapshot.complete else { throw RuntimeSessionError.observationUnavailable }
+        let snapshot = try await completeSnapshot(lease: lease, layout: layout)
         guard snapshot.processes.isEmpty else { throw RuntimeSessionError.prefixBusy }
         let sessionID = UUID()
         let token = sessionID.uuidString
@@ -85,6 +83,20 @@ public actor RuntimeSession {
             throw CancellationError()
         }
         return session
+    }
+
+    /// A process can exit between the kernel's PID listing and identity read.
+    /// Never act on a partial inventory; retry briefly and validate the pinned
+    /// prefix again on every sample before treating it as complete.
+    private static func completeSnapshot(lease: EnvironmentExecutionLease, layout: RuntimeLayout) async throws -> RuntimeProcessSnapshot {
+        for attempt in 0..<5 {
+            try Task.checkCancellation()
+            try lease.validate()
+            let result = RuntimeProcessObserver().snapshot(record: lease.record, prefix: lease.prefix, layout: layout)
+            if result.complete { return result }
+            if attempt < 4 { try await Task.sleep(for: .milliseconds(80)) }
+        }
+        throw RuntimeSessionError.observationUnavailable
     }
 
     private func armDeadline(_ timeout: TimeInterval) {
@@ -141,9 +153,7 @@ public actor RuntimeSession {
     private func performStop(_ reason: RuntimeSessionEnd) async throws -> CommandResult {
         guard let lease else { return await command.result() }
         do {
-            try lease.validate()
-            let before = try snapshot()
-            guard before.complete else { throw RuntimeSessionError.observationUnavailable }
+            let before = try await Self.completeSnapshot(lease: lease, layout: layout)
             guard before.processes.allSatisfy({ $0.sessionID == sessionID }) else { throw RuntimeSessionError.prefixBusy }
             if !before.processes.isEmpty {
                 // Use Wine's per-prefix server protocol, never a kill-by-name/PID
@@ -167,8 +177,7 @@ public actor RuntimeSession {
                 try await Task.sleep(for: .milliseconds(100))
             }
             try await ScopedProcessTermination.finish { [self] in
-                let remaining = try await self.snapshot()
-                guard remaining.complete else { throw RuntimeSessionError.observationUnavailable }
+                let remaining = try await Self.completeSnapshot(lease: lease, layout: layout)
                 guard remaining.processes.allSatisfy({ $0.sessionID == self.sessionID }) else { throw RuntimeSessionError.prefixBusy }
                 return remaining.processes
             }
