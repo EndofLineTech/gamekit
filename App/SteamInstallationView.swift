@@ -156,10 +156,8 @@ struct SteamInstallationView: View {
                         Button("Reset and delete downloads…") { confirmDelete = true }
                             .disabled(model.running || !setup.actions.reset).accessibilityIdentifier("reset-delete-downloads")
                     }
-                    Divider()
-                    RecoveryArchivesView()
-                    Divider()
-                    LauncherCachesView()
+                    Text("Inspect completed archives and obsolete caches under Settings → Storage. Reset only affects the currently selected managed environment.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Text("Recipe 1 · Sikarugir 10.0 revision 6 · D3DMetal 4.0b2")
                     .font(.caption).foregroundStyle(.secondary)
