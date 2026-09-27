@@ -22,6 +22,7 @@ struct LibraryShellView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @EnvironmentObject private var games: InstalledGamesModel
     @EnvironmentObject private var steam: SteamLifecycleModel
+    @EnvironmentObject private var installation: SteamInstallationModel
     @State private var destination: LibraryDestination = .all
     @State private var category: SettingsCategory = .general
     @State private var preferences = LibraryBrowsingPreferences()
@@ -86,6 +87,9 @@ struct LibraryShellView: View {
             preferencesWarning = restored.savedPreferencesUnavailable
         }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in destination = .settings }
+        .onChange(of: installation.installedSuccessfully) { _, completed in
+            if completed && destination == .launchers { destination = .all }
+        }
         .onExitCommand { inspectorVisible = false }
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
@@ -436,9 +440,20 @@ struct LibraryShellView: View {
             VStack(alignment: .leading, spacing: 22) {
                 Text("Launchers").font(.largeTitle.bold()).accessibilityIdentifier("launchers-heading")
                 Text("Windows Steam · Managed environment").foregroundStyle(.secondary)
+                if setup.record?.installation != .installed {
+                    LibraryPanel {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Set up Windows Steam", systemImage: "square.and.arrow.down").font(.headline)
+                            Text("Choose a validated runtime and complete the setup checks below. After installation, browse your managed library and install games in Windows Steam.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 SteamLifecycleView()
-                Button("Browse installed games") { destination = .steam }
-                    .accessibilityIdentifier("browse-steam-games")
+                if setup.record?.installation == .installed {
+                    Button("Browse installed games") { destination = .steam }
+                        .accessibilityIdentifier("browse-steam-games")
+                }
                 SetupView()
                 SteamInstallationView()
                 EnvironmentSummaryView()
