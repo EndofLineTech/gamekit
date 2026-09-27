@@ -65,8 +65,10 @@ bar shows the current stage, with no invented progress percentages.
 
 The sidebar opens to **All Installed Games** on every app launch. Switch between
 box-art grid and native table using the toolbar buttons; selection, search and filters
-are shared. The toolbar Sort menu can order by name, launcher, state or
-Steam-reported size (unknown sizes sort last). Use the **Favorites** sidebar
+are shared. **Cover size** sets the width of grid artwork; resizing the window
+rearranges columns without stretching the covers. The toolbar Sort menu can
+order by name, launcher, state or Steam-reported size (unknown sizes sort last).
+Use the **Favorites** sidebar
 destination and the star in a cover's upper-right corner to keep a local list.
 Only managed Windows Steam is a configured launcher in this version. Its
 transparent Steam icon appears in the upper-left of each cover and compact
