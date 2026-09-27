@@ -4,14 +4,18 @@ E5.1/E5.2 keep the SwiftUI layer over the existing validated core APIs.
 
 ## Everyday workflow
 
-The lifecycle controls are near the top of the window. Setup lists host, Rosetta,
+Gamekit opens to **All Installed Games**. **Launchers** holds managed Windows Steam
+Start/Show/Stop, installation and recovery; successful initial setup returns to
+the library. Setup lists host, Rosetta,
 runtime, graphics and storage checks with concrete next steps and official links.
 Install and Launch require successful checks. **Refresh checks** (Command-Shift-R)
-clears stale readiness while it runs. Launch is Command-L; Stop is Command-Shift-S.
+clears stale readiness while it runs. In Launchers, Launch/Show is Command-L
+and Stop is Command-Shift-S.
 
 **Choose runtime…** selects the local `.app` containing the pinned Sikarugir/GPTK
 recipe. This does not install a runtime, accept licenses, or permit arbitrary Wine
-versions. **Use managed runtime** restores the conventional path. The selection
+versions. **Use original runtime**, **Use updated runtime** and the text-input
+rollback choice select validated revisions. The selection
 persists in `Metadata/RuntimeSelection.json`; prefixes and logs do not move.
 Selection is blocked during operations, while registered processes are active,
 or while a persistent launch receipt exists. Use Stop to clear the old session
@@ -21,6 +25,11 @@ old runtime has disappeared; uncertain or active ownership cannot.
 Storage paths and the 15 GiB working allowance are visible. Downloaded games remain
 inside the managed prefix unless Steam is configured with external libraries.
 Older recovery archives retain data and consume storage independently.
+**Settings** replaces the sidebar with General, Game defaults, Runtime and
+Storage; Command-comma enters the same in-window destination. Shared graphics
+and fullscreen-Space controls live only in Game defaults. Archive/cache cleanup
+is under Storage; reset confirmations stay in Launchers. Diagnostics has its own
+destination and contextual links from persistent setup, Steam and library status.
 
 ## Controls and state
 
