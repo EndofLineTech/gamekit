@@ -97,7 +97,9 @@ authentication or gameplay. Uninstall remains provider-mediated and confirmed.
 
 ## Icon review
 
-1. [Game case + controller](icon-case.svg) — recommended; library-first identity.
+1. [Game case + controller](icon-case.svg) — owner-selected direction; library-first
+   identity. Revised with two analog sticks, four face buttons, a D-pad and center
+   buttons at the owner's request. Detail refinement awaits review.
 2. [Collection](icon-stack.svg) — layered cases with a play motif.
 3. [Toolkit](icon-toolkit.svg) — emphasizes compatibility tooling.
 
