@@ -26,6 +26,7 @@ struct LibraryShellView: View {
     @State private var category: SettingsCategory = .general
     @State private var preferences = LibraryBrowsingPreferences()
     @State private var preferencesWarning = false
+    @State private var settingsSidebarVisible = true
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
@@ -37,6 +38,8 @@ struct LibraryShellView: View {
     @FocusState private var focusedListID: UInt32?
     @FocusState private var focusedGameID: UInt32?
     private let preferenceStore = LibraryPreferencesStore(root: AppStorageLocations.metadata)
+
+    private var sidebarVisible: Bool { destination == .settings ? settingsSidebarVisible : preferences.sidebarVisible }
 
     private var selectedGame: InstalledSteamGame? { games.games.first { $0.id == selectedGameID } }
 
@@ -51,7 +54,7 @@ struct LibraryShellView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if preferences.sidebarVisible {
+            if sidebarVisible {
                 sidebar.frame(width: 220)
                 Divider()
             }
@@ -71,7 +74,7 @@ struct LibraryShellView: View {
             preferences = restored.preferences
             preferencesWarning = restored.savedPreferencesUnavailable
         }
-        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in destination = .settings }
+        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in openSettings() }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in destination = .diagnostics }
         .onExitCommand { inspectorVisible = false }
         .onChange(of: games.games) { _, current in
@@ -138,7 +141,7 @@ struct LibraryShellView: View {
                 sidebarHeading("Management")
                 navButton("Launchers", symbol: "square.stack", active: destination == .launchers, identifier: "nav-launchers") { destination = .launchers }
                 navButton("Diagnostics", symbol: "waveform.path.ecg", active: destination == .diagnostics, identifier: "nav-diagnostics") { destination = .diagnostics }
-                navButton("Settings…", symbol: "gearshape", active: false, identifier: "nav-settings") { destination = .settings }
+                navButton("Settings…", symbol: "gearshape", active: false, identifier: "nav-settings") { openSettings() }
             }
             Spacer(minLength: 0)
             Text(steam.state == .running ? "Windows Steam running" : "Windows Steam · \(steam.state.rawValue)")
@@ -166,12 +169,19 @@ struct LibraryShellView: View {
 
     private var toolbar: some View {
         HStack(spacing: LibraryVisualStyle.controlSpacing) {
-            Button { setSidebar(!preferences.sidebarVisible) } label: {
+            Button {
+                if destination == .settings { settingsSidebarVisible.toggle() }
+                else { setSidebar(!preferences.sidebarVisible) }
+            } label: {
                 Image(systemName: "sidebar.left").frame(width: 22)
             }
             .accessibilityLabel("Toggle sidebar").accessibilityIdentifier("toggle-sidebar")
             Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : destination == .launchers ? "Launchers" : "Diagnostics")
                 .font(.subheadline.weight(.semibold))
+            if destination == .settings && !settingsSidebarVisible {
+                Button("Back to Launchers") { destination = .launchers }
+                    .accessibilityIdentifier("back-to-launchers")
+            }
             Spacer(minLength: 8)
             Button { destination = .all; searchFocused = true } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
@@ -518,7 +528,13 @@ struct LibraryShellView: View {
                     LibraryPanel {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("Graphics backend for games using the shared default").font(.headline)
+                            Text("Saved graphics backend: \(setup.layout.graphicsBackend.title)")
+                                .accessibilityIdentifier("selected-graphics-backend")
                             GraphicsBackendPicker()
+                            Text(setup.layout.graphicsBackend == .dxmt || setup.layout.graphicsBackend == .dxvk
+                                 ? "Default for all games without an override. Windows Steam retains Metal 3. Direct3D 12 games need an Apple backend in their gear panel. Stop Windows Steam before changing settings."
+                                 : "Applies to Windows Steam and all games using the shared default. Individual games can override it in their gear panel. Stop Windows Steam before changing it; the next Steam launch uses the saved choice.")
+                                .font(.caption).accessibilityIdentifier("graphics-backend-scope")
                             Toggle("Shared fullscreen Space for games", isOn: Binding(
                                 get: { setup.sharedFullscreenSpace },
                                 set: { setup.chooseSharedFullscreenSpace($0, diagnostics: diagnostics) }))
@@ -610,6 +626,11 @@ struct LibraryShellView: View {
             do { preferences = try await preferenceStore.setSidebarVisible(visible); preferencesWarning = false }
             catch { preferencesWarning = true }
         }
+    }
+
+    private func openSettings() {
+        settingsSidebarVisible = true
+        destination = .settings
     }
 }
 
