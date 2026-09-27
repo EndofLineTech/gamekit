@@ -397,6 +397,56 @@ struct SteamLifecycleTests {
         #expect(await runtime.commands.count == 2)
     }
 
+    @Test("Library boundary maps managed records and sends each action through owned Steam")
+    func libraryService() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let manifest = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let service = SteamLibraryService(store: fixture.store,
+            lifecycle: SteamLifecycle(store: fixture.store, driver: await runtime.driver))
+        let entries = try await service.scan()
+        #expect(entries.unreadableManifests == 0)
+        #expect(entries.installedGames.map(\.id) == [42])
+        let game = try #require(entries.games.first)
+        #expect(game.id.environmentID == fixture.id && game.id.appID == 42)
+        #expect(game.source == .windowsSteam && game.state == .ready)
+        #expect(game.title == "Fixture" && game.reportedSizeBytes == nil)
+        let foreign = SteamGameInstallationID(environmentID: try EnvironmentID("foreign-steam"), appID: 42)
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.launch(foreign) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.requestUninstall(foreign) }
+        #expect(await runtime.launches == 0)
+        #expect(await runtime.commands.isEmpty)
+        _ = try await service.launch(game.id)
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.commands.last?.suffix(2) == ["-applaunch", "42"])
+        try await service.openSteam()
+        #expect(await runtime.commands.last?.last == "steam://open/main")
+        try await service.requestUninstall(game.id)
+        #expect(await runtime.commands.last?.last == "steam://uninstall/42")
+        #expect(await runtime.launches == 1)
+        try FileManager.default.removeItem(at: manifest)
+        #expect(try await service.scan().games.isEmpty)
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.launch(game.id) }
+        await #expect(throws: SteamGameLibraryError.notInstalled) { try await service.requestUninstall(game.id) }
+        #expect(await runtime.commands.count == 3)
+    }
+
+    @Test("Library boundary retains runtime preflight and does not dispatch on failure")
+    func libraryUnavailableRuntime() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        _ = try fixture.game()
+        let runtime = LifecycleFixtureRuntime()
+        let driver = await runtime.driver
+        let unavailable = SteamLifecycleDriver(preflight: { throw RuntimeSessionError.prerequisitesNotReady },
+            observe: driver.observe, spawn: driver.spawn, execute: driver.execute)
+        let service = SteamLibraryService(store: fixture.store,
+            lifecycle: SteamLifecycle(store: fixture.store, driver: unavailable))
+        let game = try #require(try await service.scan().games.first)
+        await #expect(throws: RuntimeSessionError.prerequisitesNotReady) { try await service.launch(game.id) }
+        #expect(await runtime.commands.isEmpty)
+        #expect(await runtime.launches == 0)
+    }
+
     @Test("Uninstall during Steam startup prevents the subsequent game command")
     func gameRemovedDuringStartup() async throws {
         let fixture = try await LifecycleFixture(); defer { fixture.remove() }
