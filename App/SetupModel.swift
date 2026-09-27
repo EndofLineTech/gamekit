@@ -50,7 +50,7 @@ final class SetupModel: ObservableObject {
             do {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("--metadata-root"), ProcessInfo.processInfo.arguments.contains("ready-with-delay"), refreshCount > 1 {
-                    try await Task.sleep(for: .seconds(2))
+                    try await Task.sleep(for: .seconds(4))
                 }
                 #endif
                 let store = try EnvironmentStore(root: AppStorageLocations.metadata)
