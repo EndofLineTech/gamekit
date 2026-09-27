@@ -3,6 +3,29 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testSettingsShowsCategoriesAfterLibrarySidebarWasCollapsed() async throws {
+        let root = try temporaryRoot()
+        _ = try await LibraryPreferencesStore(root: root).setSidebarVisible(false)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["nav-launchers"].exists)
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(app.buttons["settings-General"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
+        XCTAssertTrue(app.buttons["settings-Runtime"].exists)
+        XCTAssertTrue(app.buttons["settings-Storage"].exists)
+        app.buttons["toggle-sidebar"].click()
+        XCTAssertFalse(app.buttons["settings-General"].exists)
+        app.buttons["back-to-launchers"].click()
+        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 10))
+        let saved = try await LibraryPreferencesStore(root: root).load()
+        XCTAssertFalse(saved.sidebarVisible, "Browsing sidebar preference must not be rewritten by Settings")
+        app.buttons["toggle-sidebar"].click()
+        XCTAssertTrue(app.buttons["library-all"].waitForExistence(timeout: 10))
+    }
+
     func testNativeTableSortsKnownZeroAndUnknownSizesWithoutLosingSelection() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
@@ -195,7 +218,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
-        openLaunchers(in: app)
+        openGameDefaults(in: app)
         let shared = app.popUpButtons["graphics-backend-picker"]
         XCTAssertTrue(shared.waitForExistence(timeout: 30))
         revealRecoveryButton(shared, in: app)
@@ -207,6 +230,7 @@ final class GamekitUITests: XCTestCase {
         app.menuItems["DXVK (Direct3D 10/11)"].click()
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXVK'"), object: app.staticTexts["selected-graphics-backend"])
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 30), .completed)
+        app.buttons["back-to-launchers"].click()
         app.buttons["library-all"].click()
         openGameInspector(123456, in: app)
         let gear = app.buttons["game-compatibility-123456"]
@@ -272,7 +296,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
-        openLaunchers(in: app)
+        openGameDefaults(in: app)
         let toggle = app.checkBoxes["shared-fullscreen-space"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         revealRecoveryButton(toggle, in: app)
@@ -282,7 +306,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
         let stored = try await RuntimeSettingsStore(store: store).sharedFullscreenSpace()
         XCTAssertTrue(stored)
-        app.terminate(); app.launch(); openLaunchers(in: app)
+        app.terminate(); app.launch(); openGameDefaults(in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? Int, 1)
     }
@@ -384,9 +408,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
-        openLaunchers(in: app)
-        XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
-        showResetOptions(in: app)
+        openStorage(in: app)
         let inspect = app.buttons["inspect-launcher-caches"]
         revealRecoveryButton(inspect, in: app); inspect.click()
         let remove = app.buttons["clean-launcher-cache-original/1234"]
@@ -433,7 +455,7 @@ final class GamekitUITests: XCTestCase {
         defer { app.terminate() }
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Archive cleanup fixture"].waitForExistence(timeout: 20))
-        showResetOptions(in: app)
+        openStorage(in: app)
         let inspect = app.buttons["inspect-recovery-archives"]
         revealRecoveryButton(inspect, in: app)
         inspect.click()
@@ -461,7 +483,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
-        openLaunchers(in: app)
+        openGameDefaults(in: app)
         let picker = app.popUpButtons["graphics-backend-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 20))
         revealRecoveryButton(picker, in: app)
@@ -479,7 +501,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(layout.graphicsBackend, .metal3)
         XCTAssertTrue((app.staticTexts["graphics-backend-scope"].value as? String ?? "").contains("all games"))
         app.terminate()
-        app.launch(); openLaunchers(in: app)
+        app.launch(); openGameDefaults(in: app)
         XCTAssertTrue(selected.waitForExistence(timeout: 20))
         let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 15), .completed)
@@ -503,6 +525,7 @@ final class GamekitUITests: XCTestCase {
         defer { app.terminate() }
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
+        openGameDefaults(in: app)
         XCTAssertFalse(app.popUpButtons["graphics-backend-picker"].isEnabled)
     }
 
@@ -872,6 +895,26 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 15))
         button.click()
         XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 15))
+    }
+
+    private func openGameDefaults(in app: XCUIApplication) {
+        let settings = app.buttons["nav-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 15))
+        settings.click()
+        let category = app.buttons["settings-Game defaults"]
+        XCTAssertTrue(category.waitForExistence(timeout: 10))
+        category.click()
+        XCTAssertTrue(app.popUpButtons["graphics-backend-picker"].waitForExistence(timeout: 15))
+    }
+
+    private func openStorage(in app: XCUIApplication) {
+        let settings = app.buttons["nav-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 15))
+        settings.click()
+        let category = app.buttons["settings-Storage"]
+        XCTAssertTrue(category.waitForExistence(timeout: 10))
+        category.click()
+        XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
     }
 
     private func openGameInspector(_ appID: UInt32, in app: XCUIApplication) {
