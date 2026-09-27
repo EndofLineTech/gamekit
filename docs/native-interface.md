@@ -4,10 +4,11 @@ E5.1/E5.2 keep the SwiftUI layer over the existing validated core APIs.
 
 ## Everyday workflow
 
-Gamekit opens to **All Installed Games**. **Launchers** holds managed Windows Steam
-Start/Show/Stop, installation and recovery; successful initial setup returns to
-the library. Setup lists host, Rosetta,
-runtime, graphics and storage checks with concrete next steps and official links.
+Gamekit opens to **All Installed Games**. **Settings → Launchers** holds managed
+Windows Steam Start/Show/Stop, installation, recovery, prerequisite checks and
+runtime selection in one place; successful initial setup returns to the library.
+Setup lists host, Rosetta, runtime, graphics and storage checks with concrete
+next steps and official links.
 Install and Launch require successful checks. **Refresh checks** (Command-Shift-R)
 clears stale readiness while it runs. In Launchers, Launch/Show is Command-L
 and Stop is Command-Shift-S.
@@ -25,10 +26,11 @@ old runtime has disappeared; uncertain or active ownership cannot.
 Storage paths and the 15 GiB working allowance are visible. Downloaded games remain
 inside the managed prefix unless Steam is configured with external libraries.
 Older recovery archives retain data and consume storage independently.
-**Settings** replaces the sidebar with General, Game defaults, Runtime and
-Storage; Command-comma enters the same in-window destination. Shared graphics
-and fullscreen-Space controls live only in Game defaults. Archive/cache cleanup
-is under Storage; reset confirmations stay in Launchers. Diagnostics has its own
+**Settings** replaces the sidebar with General, Game defaults, Launchers and
+Storage; Command-comma enters the same in-window destination. Back to Library
+restores the previous library filter. Shared graphics and fullscreen-Space
+controls live only in Game defaults. Archive/cache cleanup is under Storage;
+reset confirmations stay in Settings → Launchers. Diagnostics has its own
 destination and contextual links from persistent setup, Steam and library status.
 
 ## Controls and state

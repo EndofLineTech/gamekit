@@ -31,10 +31,12 @@ intended flow rather than opening a fully designed sheet.
   is a shortcut. Context-menu and arrow-key grid behavior remain implementation
   requirements rather than completed prototype interactions.
 - **Settings replaces the left library sidebar** with General, Game defaults,
-  Runtime and Storage. **Back to Launchers** returns to the launcher-management
-  destination. This owner-requested navigation supersedes the initial separate
-  Settings-window proposal. The macOS Settings menu/Command-comma should enter
-  this same destination in production.
+  Launchers and Storage. The owner later moved launcher management and the
+  formerly separate Runtime controls into the same **Settings → Launchers** page
+  to avoid duplicate setup/checks. **Back to Library** restores the library
+  filter. The Settings label has no ellipsis. The macOS Settings menu and
+  Command-comma enter this same in-window destination. The HTML prototype
+  retains the earlier navigation as a historical visual reference.
 - **Transparent launcher marks appear in the upper-left artwork corner**, without
   an opaque badge; favorites occupy the upper-right. Launcher text remains below
   covers and in list columns so meaning never relies on the mark alone.
@@ -68,8 +70,8 @@ view or new HTTP backend. Proposed names below are contracts, not existing APIs.
 | Library sidebar and toolbar | Application-scoped library snapshot, provider instances, local preferences | Filter installed entries by source/favorite/state; search and sort without triggering a new launch |
 | Cover grid / table | Stable installation ID, title, source, state, reported bytes, artwork reference | One selection model; unknown size distinct from zero; refresh cannot discard focus or selection |
 | Inspector | Selected installation, provider capabilities, resolved profile, saved overrides | Play enabled only by authoritative readiness; refresh/prepare/Cloud attention/process-created distinct; unsupported actions omitted |
-| Launchers | Provider-instance status and setup/show/start/stop/recovery capabilities | Explain Stop scope; future providers unavailable; absent launcher leads to setup, then library |
-| Settings | Local browsing preferences and shared runtime/game settings services | Preserve graphics, Space and cursor choices; enforce existing operation/session locks at service boundary |
+| Settings → Launchers | Managed Steam status, setup/checks, runtime selection, show/start/stop/recovery capabilities | One set of controls; explain Stop scope; absent launcher leads to setup, then library |
+| Settings | Local browsing preferences and shared game settings services | Preserve graphics, Space and cursor choices; enforce existing operation/session locks at service boundary |
 | Diagnostics | Existing private diagnostic store and safe summary exporter | Context link from failure; preserve redaction, capture lifecycle and ownership |
 | Artwork | Provider-aware cache keyed by installation and artwork kind | Portrait separate from header; no stretching; placeholder on failure; bounded memory/downloads |
 
@@ -186,8 +188,8 @@ The visual direction is approved; the shipping interaction contract follows.
   size and favorites locally without rewriting Steam manifests or profiles.
   Clearing filters clears the query and state filter, not favorites or sort.
 - Settings/Command-comma opens the **in-window** Settings destination and replaces
-  the *left sidebar* with General, Game defaults, Runtime and Storage. **Back to
-  Launchers** always opens launcher management. Library selection is retained
+  the *left sidebar* with General, Game defaults, Launchers and Storage. **Back to
+  Library** restores the previous library filter. Library selection is retained
   for return from other destinations; the inspector is visible only in library
   destinations. Command-F enters library search (navigating to All Installed
   Games first if needed), selects its text and does not launch anything.
@@ -256,18 +258,16 @@ The visual direction is approved; the shipping interaction contract follows.
 
 | Destination | Existing UI/service contract to carry forward |
 | --- | --- |
-| Launchers → Windows Steam | `SteamLifecycleView` status plus Launch/Show and Stop, using `SteamLifecycle.status/launch/show/stop` and the existing owned-window focus handoff. Explain Stop scope and ordinary Quit. Browse games opens the Steam filter. |
-| Launchers → Setup & recovery | `SetupView` prerequisite report/refresh and `SteamInstallationView` staged install, verification, retry and cancel. Keep stage/status feedback across navigation. Retry inspects saved state; it is not a reset. Preserve force-stop-interrupted-setup and its confirmation. |
-| Setup & recovery → reset options | Explicitly expand preserve-downloads versus delete-downloads choices before their *separate* destructive confirmations. Preserve the current messages about archived prefix, sign-in, saves, external libraries, incomplete operations and ownership locks. No automatic cleanup, reset or response to Steam prompts. |
+| Settings → Launchers | One `SteamLifecycleView` status plus Launch/Show and Stop, one `SetupView` prerequisite report/refresh and validated-runtime selection/rollback, one `SteamInstallationView` staged install, verification, retry and cancel, and one `EnvironmentSummaryView`. Browse games opens the Steam filter; successful setup returns to the library. Keep stage/status feedback across navigation, Stop scope, ordinary Quit and the owned-window focus handoff. Retry inspects saved state; it is not a reset. Preserve force-stop-interrupted-setup and its confirmation. |
+| Settings → Launchers → reset options | Explicitly expand preserve-downloads versus delete-downloads choices before their *separate* destructive confirmations. Preserve the current messages about archived prefix, sign-in, saves, external libraries, incomplete operations and ownership locks. No automatic cleanup, reset or response to Steam prompts. |
 | Settings → General | Local library preferences (view mode, sort, cover size). Startup remains All Installed Games. Follow system appearance; do not replace macOS appearance controls with the mockup's review toggle. |
 | Settings → Game defaults | Existing shared graphics backend and fullscreen Space in `SetupModel`/`RuntimeSettingsStore`; session and operation locks apply. Per-game settings remain in inspector/sheet and override shared choices. |
-| Settings → Runtime | `SetupView` validated-runtime selection, updated/text-input/original rollback choices, prerequisite refresh and links; retain saved environment details from `EnvironmentSummaryView`. |
-| Settings → Storage | Managed steamapps Finder shortcut; `RecoveryArchivesView` inspection and confirmed completed-archive cleanup; `LauncherCachesView` inspection and confirmed obsolete-cache cleanup. Show logical bytes as such. Keep recovery reset in Launchers → Setup & recovery, not an unlabeled storage cleanup. |
+| Settings → Storage | Managed steamapps Finder shortcut; `RecoveryArchivesView` inspection and confirmed completed-archive cleanup; `LauncherCachesView` inspection and confirmed obsolete-cache cleanup. Show logical bytes as such. Keep recovery reset in Settings → Launchers, not an unlabeled storage cleanup. |
 | Diagnostics | `DiagnosticsView` local summaries/output, debug capture toggle/stop, local log opening and safe JSON export with existing redaction. Route failures here without leaking raw logs into the library. |
 
 ### Loading, failures and announcements
 
-- Distinguish no registered Steam setup (route to Launchers), an installed Steam
+- Distinguish no registered Steam setup (route to Settings → Launchers), an installed Steam
   library with no games (open Steam to install), zero search/filter matches (clear
   filters), partial install/update and missing files (Show Steam), and unreadable
   manifests (warning, not an empty library). Initial scan has a progress label;

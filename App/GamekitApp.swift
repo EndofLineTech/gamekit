@@ -20,7 +20,7 @@ struct GamekitApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .appSettings) {
-                Button("Settings…") {
+                Button("Settings") {
                     NotificationCenter.default.post(name: .gamekitOpenSettings, object: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)

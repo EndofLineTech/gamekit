@@ -38,7 +38,7 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 ## First setup
 
-1. Gamekit opens to **All Installed Games**. Choose **Launchers** in the sidebar,
+1. Gamekit opens to **All Installed Games**. Choose **Settings → Launchers**,
    then review **Setup and prerequisites**. Each failed check explains its next step.
 2. Choose **Use updated runtime** for the prepared runtime with per-game
    driver-compatibility support (includes text-input 1). **Use text-input runtime
@@ -84,17 +84,18 @@ movement alone does not start a game. **Command-F** enters library search, and
 Escape collapses the inspector. Clicking a title or row once also selects;
 double-clicking a ready title requests Play once.
 
-**Settings…** (Command-comma) replaces the sidebar with **General**, **Game
-defaults**, **Runtime** and **Storage**. **Back to Launchers** opens launcher
-management. Its category sidebar appears even if you previously hid the library
-sidebar; collapsing Settings does not change the saved library preference, and
-Back to Launchers stays in the toolbar. Shared graphics and fullscreen-Space
-defaults are under **Game defaults**; prerequisite/runtime checks and rollback
-are under **Runtime**;
-archive/cache inspection and the steamapps Finder shortcut are under **Storage**.
-Steam setup/recovery and Launch/Show/Stop are under **Launchers**; logs and safe
-exports are under **Diagnostics**. Successful managed Steam setup returns from
-Launchers to the library; if it is empty, install games within Windows Steam.
+**Settings** (Command-comma) replaces the sidebar with **General**, **Game
+defaults**, **Launchers** and **Storage**. **Back to Library** returns to your
+previous library filter. The Settings category sidebar appears even if you hid
+the library sidebar; collapsing Settings does not change the saved library
+preference, and Back to Library stays in the toolbar. Shared graphics and
+fullscreen-Space defaults are under **Game defaults**. **Settings → Launchers**
+holds Steam setup/recovery, prerequisite checks, validated runtime selection
+and rollback, Launch/Show/Stop, and the managed environment summary together.
+Archive/cache inspection and the steamapps Finder shortcut are under **Storage**;
+logs and safe exports are under **Diagnostics**. Successful managed Steam setup
+returns from Settings → Launchers to the library; if it is empty, install games
+within Windows Steam.
 Changing destinations does not stop Steam or cancel a launch being observed.
 Setup, library and Steam status remain visible near their controls and in the
 window status area. **Diagnostics** beside a status routes to the related local
