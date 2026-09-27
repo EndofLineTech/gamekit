@@ -364,7 +364,7 @@ can show sensitive runtime text. **Export summary** emits a separate allowlisted
 summary without raw output, paths or session/account fields. Share the summary,
 not the whole prefix, archive or raw log directory.
 
-Under **Show reset options…**, choose **Inspect recovery archives** to list each
+Under **Settings → Storage**, choose **Inspect recovery archives** to list each
 archive's logical size and status:
 
 - **Completed**: recovery finished and the archived prefix is eligible for cleanup.
@@ -387,7 +387,7 @@ referenced by an unfinished recovery journal.
 
 ### Obsolete generated launchers
 
-Use **Show reset options… → Inspect launcher caches** to review game launcher
+Use **Settings → Storage → Inspect launcher caches** to review game launcher
 caches. Verified pre-`shared-pe-v2` bundles are **obsolete**; numeric probe folders
 containing only their lock file are **empty**. Both have an explicit confirmed
 cleanup action. **retained** marks the current `shared-pe-v2` layout, while
