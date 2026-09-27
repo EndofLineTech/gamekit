@@ -45,7 +45,13 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
-        app.buttons["nav-launchers"].click()
+        openLaunchers(in: app)
+        XCTAssertFalse(app.buttons["nav-launchers"].exists, "Launcher management is a Settings category")
+        XCTAssertFalse(app.buttons["settings-Runtime"].exists, "Prerequisites and runtime selection share Launchers")
+        XCTAssertEqual(app.buttons.matching(identifier: "refresh-prerequisites").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "use-original-runtime").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "install-steam").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "launch-steam").count, 1)
         let browse = app.buttons["browse-steam-games"]
         XCTAssertTrue(browse.waitForExistence(timeout: 10))
         browse.click()
@@ -53,6 +59,9 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(heading.waitForExistence(timeout: 10))
         XCTAssertEqual(heading.value as? String, "Windows Steam", heading.debugDescription)
         XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 10))
+        app.buttons["nav-settings"].click()
+        app.buttons["back-to-library"].click()
+        XCTAssertEqual(heading.value as? String, "Windows Steam", "Back restores the previous library filter")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path),
                        "Management navigation must not start a managed Steam session")
     }
@@ -64,16 +73,16 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.buttons["nav-launchers"].exists)
+        XCTAssertFalse(app.buttons["nav-settings"].exists)
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(app.buttons["settings-General"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
-        XCTAssertTrue(app.buttons["settings-Runtime"].exists)
+        XCTAssertTrue(app.buttons["settings-Launchers"].exists)
         XCTAssertTrue(app.buttons["settings-Storage"].exists)
         app.buttons["toggle-sidebar"].click()
         XCTAssertFalse(app.buttons["settings-General"].exists)
-        app.buttons["back-to-launchers"].click()
-        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 10))
+        app.buttons["back-to-library"].click()
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 10))
         let saved = try await LibraryPreferencesStore(root: root).load()
         XCTAssertFalse(saved.sidebarVisible, "Browsing sidebar preference must not be rewritten by Settings")
         app.buttons["toggle-sidebar"].click()
@@ -206,11 +215,11 @@ final class GamekitUITests: XCTestCase {
         app.buttons["nav-settings"].click()
         XCTAssertTrue(app.buttons["settings-General"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
-        XCTAssertTrue(app.buttons["settings-Runtime"].exists)
+        XCTAssertTrue(app.buttons["settings-Launchers"].exists)
         XCTAssertTrue(app.buttons["settings-Storage"].exists)
-        app.buttons["back-to-launchers"].click()
-        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 10))
-        app.buttons["library-all"].click()
+        app.buttons["settings-Launchers"].click()
+        XCTAssertTrue(app.buttons["refresh-prerequisites"].waitForExistence(timeout: 10))
+        app.buttons["back-to-library"].click()
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["launch-game-42"].exists, "Selection must survive navigation")
         app.buttons["favorite-game-42"].click()
@@ -242,9 +251,8 @@ final class GamekitUITests: XCTestCase {
         app.buttons["Clear filters"].click()
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         app.typeKey(",", modifierFlags: .command)
-        XCTAssertTrue(app.buttons["back-to-launchers"].waitForExistence(timeout: 10))
-        app.buttons["back-to-launchers"].click()
-        app.buttons["library-all"].click()
+        XCTAssertTrue(app.buttons["back-to-library"].waitForExistence(timeout: 10))
+        app.buttons["back-to-library"].click()
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
     }
@@ -284,8 +292,7 @@ final class GamekitUITests: XCTestCase {
         app.menuItems["DXVK (Direct3D 10/11)"].click()
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXVK'"), object: app.staticTexts["selected-graphics-backend"])
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 30), .completed)
-        app.buttons["back-to-launchers"].click()
-        app.buttons["library-all"].click()
+        app.buttons["back-to-library"].click()
         openGameInspector(123456, in: app)
         let gear = app.buttons["game-compatibility-123456"]
         revealRecoveryButton(gear, in: app); gear.click()
@@ -1019,10 +1026,18 @@ final class GamekitUITests: XCTestCase {
     }
 
     private func openLaunchers(in app: XCUIApplication) {
-        let button = app.buttons["nav-launchers"]
-        XCTAssertTrue(button.waitForExistence(timeout: 15))
-        button.click()
-        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 15))
+        let category = app.buttons["settings-Launchers"]
+        if !category.exists {
+            let settings = app.buttons["nav-settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 15))
+            XCTAssertEqual(settings.label, "Settings")
+            settings.click()
+        }
+        XCTAssertTrue(category.waitForExistence(timeout: 10))
+        category.click()
+        let heading = app.staticTexts["settings-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 15))
+        XCTAssertEqual(heading.label, "Launchers")
     }
 
     private func openGameDefaults(in app: XCUIApplication) {

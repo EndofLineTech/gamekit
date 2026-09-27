@@ -3,7 +3,7 @@ import GamekitCore
 import SwiftUI
 
 private enum LibraryDestination: Hashable {
-    case all, favorites, steam, launchers, diagnostics, settings
+    case all, favorites, steam, diagnostics, settings
     var isLibrary: Bool { self == .all || self == .favorites || self == .steam }
 }
 
@@ -12,7 +12,7 @@ private enum LibraryInstallationFilter: String, CaseIterable {
 }
 
 private enum SettingsCategory: String, CaseIterable {
-    case general = "General", gameDefaults = "Game defaults", runtime = "Runtime", storage = "Storage"
+    case general = "General", gameDefaults = "Game defaults", launchers = "Launchers", storage = "Storage"
 }
 
 /// Native library-first shell over the existing window-owned Steam models.
@@ -24,6 +24,7 @@ struct LibraryShellView: View {
     @EnvironmentObject private var steam: SteamLifecycleModel
     @EnvironmentObject private var installation: SteamInstallationModel
     @State private var destination: LibraryDestination = .all
+    @State private var lastLibraryDestination: LibraryDestination = .all
     @State private var category: SettingsCategory = .general
     @State private var preferences = LibraryBrowsingPreferences()
     @State private var preferencesWarning = false
@@ -64,7 +65,6 @@ struct LibraryShellView: View {
                 toolbar
                 Divider()
                 if destination.isLibrary { libraryBody }
-                else if destination == .launchers { launchersBody }
                 else if destination == .diagnostics { diagnosticsBody }
                 else { settingsBody }
             }
@@ -79,7 +79,10 @@ struct LibraryShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in openSettings() }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in destination = .diagnostics }
         .onChange(of: installation.installedSuccessfully) { _, completed in
-            if completed && destination == .launchers { destination = .all }
+            if completed && destination == .settings && category == .launchers { destination = .all }
+        }
+        .onChange(of: destination) { _, current in
+            if current.isLibrary { lastLibraryDestination = current }
         }
         .onExitCommand {
             inspectorVisible = false
@@ -133,12 +136,12 @@ struct LibraryShellView: View {
             }
             .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 18)
             if destination == .settings {
-                navButton("Back to Launchers", symbol: "chevron.left", active: false, identifier: "back-to-launchers") {
-                    destination = .launchers
+                navButton("Back to Library", symbol: "chevron.left", active: false, identifier: "back-to-library") {
+                    destination = lastLibraryDestination
                 }
                 sidebarHeading("Settings")
                 ForEach(SettingsCategory.allCases, id: \.self) { option in
-                    navButton(option.rawValue, symbol: option == .general ? "gearshape" : option == .runtime ? "cpu" : option == .storage ? "externaldrive" : "gamecontroller",
+                    navButton(option.rawValue, symbol: option == .general ? "gearshape" : option == .launchers ? "square.stack" : option == .storage ? "externaldrive" : "gamecontroller",
                               active: category == option, identifier: "settings-\(option.rawValue)") { category = option }
                 }
             } else {
@@ -150,9 +153,8 @@ struct LibraryShellView: View {
                     navButton("Windows Steam", symbol: "gamecontroller", active: destination == .steam, identifier: "library-steam") { destination = .steam }
                 }
                 sidebarHeading("Management")
-                navButton("Launchers", symbol: "square.stack", active: destination == .launchers, identifier: "nav-launchers") { destination = .launchers }
                 navButton("Diagnostics", symbol: "waveform.path.ecg", active: destination == .diagnostics, identifier: "nav-diagnostics") { destination = .diagnostics }
-                navButton("Settings…", symbol: "gearshape", active: false, identifier: "nav-settings") { openSettings() }
+                navButton("Settings", symbol: "gearshape", active: false, identifier: "nav-settings") { openSettings() }
             }
             Spacer(minLength: 0)
             Text(steam.state == .running ? "Windows Steam running" : "Windows Steam · \(steam.state.rawValue)")
@@ -187,11 +189,11 @@ struct LibraryShellView: View {
                 Image(systemName: "sidebar.left").frame(width: 22)
             }
             .accessibilityLabel("Toggle sidebar").accessibilityIdentifier("toggle-sidebar")
-            Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : destination == .launchers ? "Launchers" : "Diagnostics")
+            Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : "Diagnostics")
                 .font(.subheadline.weight(.semibold))
             if destination == .settings && !settingsSidebarVisible {
-                Button("Back to Launchers") { destination = .launchers }
-                    .accessibilityIdentifier("back-to-launchers")
+                Button("Back to Library") { destination = lastLibraryDestination }
+                    .accessibilityIdentifier("back-to-library")
             }
             Spacer(minLength: 8)
             Button { focusSearch() } label: { Image(systemName: "magnifyingglass") }
@@ -433,9 +435,9 @@ struct LibraryShellView: View {
                          : "Set up Windows Steam, then install a game to see it here."
                      : "Try another search or clear the filters.")
                     .foregroundStyle(.secondary)
-                Button(favoritesEmpty ? "Browse all games" : initial ? "Open Launchers" : "Clear filters") {
+                Button(favoritesEmpty ? "Browse all games" : initial ? "Manage Windows Steam" : "Clear filters") {
                     if favoritesEmpty { destination = .all }
-                    else if initial { destination = .launchers }
+                    else if initial { openSettings(.launchers) }
                     else { query = ""; filter = .all }
                 }
             }
@@ -499,33 +501,6 @@ struct LibraryShellView: View {
             .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
     }
 
-    private var launchersBody: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Launchers").font(.largeTitle.bold()).accessibilityIdentifier("launchers-heading")
-                Text("Windows Steam · Managed environment").foregroundStyle(.secondary)
-                if setup.record?.installation != .installed {
-                    LibraryPanel {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Set up Windows Steam", systemImage: "square.and.arrow.down").font(.headline)
-                            Text("Choose a validated runtime and complete the setup checks below. After installation, browse your managed library and install games in Windows Steam.")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                SteamLifecycleView()
-                if setup.record?.installation == .installed {
-                    Button("Browse installed games") { destination = .steam }
-                        .accessibilityIdentifier("browse-steam-games")
-                }
-                SetupView()
-                SteamInstallationView()
-                EnvironmentSummaryView()
-            }
-            .padding(LibraryVisualStyle.contentSpacing)
-        }
-    }
-
     private var diagnosticsBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -580,8 +555,24 @@ struct LibraryShellView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                case .runtime:
+                case .launchers:
+                    Text("Windows Steam · Managed environment").foregroundStyle(.secondary)
+                    if setup.record?.installation != .installed {
+                        LibraryPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Set up Windows Steam", systemImage: "square.and.arrow.down").font(.headline)
+                                Text("Choose a validated runtime and complete the setup checks below. After installation, browse your managed library and install games in Windows Steam.")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    SteamLifecycleView()
+                    if setup.record?.installation == .installed {
+                        Button("Browse installed games") { destination = .steam }
+                            .accessibilityIdentifier("browse-steam-games")
+                    }
                     SetupView()
+                    SteamInstallationView()
                     EnvironmentSummaryView()
                 case .storage:
                     LibraryPanel {
@@ -682,7 +673,9 @@ struct LibraryShellView: View {
         }
     }
 
-    private func openSettings() {
+    private func openSettings(_ requested: SettingsCategory? = nil) {
+        if destination.isLibrary { lastLibraryDestination = destination }
+        if let requested { category = requested }
         settingsSidebarVisible = true
         destination = .settings
     }

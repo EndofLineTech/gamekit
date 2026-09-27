@@ -9,8 +9,10 @@ contains the task-specific source pointers and verification plan.
 
 The owner approved the look of the clickable prototype, then requested:
 
-- Settings replaces the left sidebar with its categories and includes **Back to
-  Launchers**, returning to the launcher-management destination.
+- Settings replaces the left sidebar with its categories. The latest owner
+  revision moves launcher management and runtime checks into **Settings →
+  Launchers**, removes the duplicate Runtime category, and changes **Back to
+  Launchers** to **Back to Library**. The Settings label has no ellipsis.
 - Transparent launcher icons in artwork corners, with no opaque background.
 - The game-case icon, refined with two analog sticks, four face buttons, D-pad
   and center buttons.
