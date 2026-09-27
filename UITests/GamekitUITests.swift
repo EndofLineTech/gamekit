@@ -939,12 +939,20 @@ final class GamekitUITests: XCTestCase {
             CommandRequest(executable: URL(fileURLWithPath: "/bin/sh"),
                            arguments: ["-c", "printf PRIVATE_UI_DIAGNOSTIC >&2; exit 23"]), stage: .bootstrap)
         let summary = try XCTUnwrap(result.summary)
+        let persistedSummaries = try await store.summaries()
+        XCTAssertTrue(persistedSummaries.contains(where: { $0.id == summary.id }),
+                      "The fixture summary must be readable from disk before the app starts")
         let app = XCUIApplication()
-        app.launchArguments = ["--metadata-root", root.path]
+        app.launchArguments = ["--metadata-root", root.path, "--diagnostics-root", logs.path]
         app.launch()
         defer { app.terminate() }
         app.buttons["nav-diagnostics"].click()
-        XCTAssertTrue(app.buttons["export-diagnostic-\(summary.id.uuidString)"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
+        let exportButton = app.buttons["export-diagnostic-\(summary.id.uuidString)"]
+        XCTAssertTrue(exportButton.waitForExistence(timeout: 15),
+                      "Expected the fixture summary; empty=\(app.staticTexts["No recorded operations yet."].exists), " +
+                      "storage unavailable=\(app.staticTexts["Diagnostics storage is unavailable."].exists), " +
+                      "read failed=\(app.staticTexts["Recorded diagnostics could not be read; files were preserved."].exists)")
         XCTAssertTrue(app.buttons["local-diagnostic-\(summary.id.uuidString)"].exists)
         let exported = try await store.exportSummary(summary.id)
         XCTAssertFalse(String(decoding: exported, as: UTF8.self).contains("PRIVATE_UI_DIAGNOSTIC"))
