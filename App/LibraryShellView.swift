@@ -81,7 +81,13 @@ struct LibraryShellView: View {
         .onChange(of: installation.installedSuccessfully) { _, completed in
             if completed && destination == .launchers { destination = .all }
         }
-        .onExitCommand { inspectorVisible = false }
+        .onExitCommand {
+            inspectorVisible = false
+            if let selectedGameID {
+                if preferences.viewMode == .grid { focusedGameID = selectedGameID }
+                else { focusedListID = selectedGameID }
+            }
+        }
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
                 self.selectedGameID = nil
@@ -188,7 +194,7 @@ struct LibraryShellView: View {
                     .accessibilityIdentifier("back-to-launchers")
             }
             Spacer(minLength: 8)
-            Button { destination = .all; searchFocused = true } label: { Image(systemName: "magnifyingglass") }
+            Button { focusSearch() } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
             if destination.isLibrary {
                 TextField("Search games", text: $query).textFieldStyle(.roundedBorder)
@@ -373,6 +379,8 @@ struct LibraryShellView: View {
                         return moveListSelection(press.key, modifiers: press.modifiers)
                     }
                     .accessibilityIdentifier("select-game-\(game.id)")
+                    .accessibilityLabel("\(game.name), Windows Steam, \(status(game)), Steam-reported size: \(size(game))")
+                    .accessibilityValue("\(selectedGameID == game.id ? "Selected" : "Not selected"), \(isFavorite(game) ? "favorite" : "not favorite")")
                     .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
                     .contextMenu { gameMenu(game) }
                     Button { toggleFavorite(game) } label: {
@@ -446,6 +454,7 @@ struct LibraryShellView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(game.state != .ready || games.pendingGame != nil || !(setup.actions.launch || setup.actions.show) || games.libraryStale)
                         .accessibilityIdentifier("launch-game-\(game.id)")
+                        .accessibilityHint(playHint(for: game))
                     Button(isFavorite(game) ? "Remove from Favorites" : "Add to Favorites") { toggleFavorite(game) }
                     LibraryInspectorSection(title: "Game actions") {
                         Button("Show Windows Steam") { steam.control(stop: false, diagnostics: diagnostics, setup: setup) }
@@ -614,6 +623,24 @@ struct LibraryShellView: View {
     private func play(_ game: InstalledSteamGame) {
         guard !games.libraryStale else { return }
         games.launch(game, setup: setup, diagnostics: diagnostics)
+    }
+
+    private func playHint(for game: InstalledSteamGame) -> String {
+        if games.libraryStale { return "The managed library is unreadable. Refresh its records before requesting Play." }
+        if game.state != .ready { return "Finish this game's installation or update in Windows Steam first." }
+        if games.pendingGame != nil { return "Another game launch is being observed. Check Windows Steam before retrying." }
+        if !(setup.actions.launch || setup.actions.show) { return "Complete Steam setup and runtime checks before requesting Play." }
+        return "Request this game once through managed Windows Steam. A launch request does not prove gameplay readiness."
+    }
+
+    private func focusSearch() {
+        destination = .all
+        searchFocused = true
+        DispatchQueue.main.async {
+            if let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isFieldEditor {
+                editor.selectAll(nil)
+            }
+        }
     }
 
     private func toggleFavorite(_ game: InstalledSteamGame) {

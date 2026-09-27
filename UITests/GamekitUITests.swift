@@ -973,6 +973,44 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
     }
 
+    func testKeyboardSearchAndInspectorFocusDoNotSendPlay() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Keyboard search fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Alpha"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Beta"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        for (appID, name) in [(42, "Alpha"), (43, "Beta")] {
+            let manifest = #""AppState" { "appid" "\#(appID)" "name" "\#(name)" "installdir" "\#(name)" "StateFlags" "4" }"#
+            try Data(manifest.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_\(appID).acf"))
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        let first = app.buttons["select-game-42"]
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+        first.click()
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertFalse(app.buttons["launch-game-42"].exists, "Escape collapses the inspector without cancelling work")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        app.buttons["library-view-list"].click()
+        let row = app.buttons["select-game-42"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("Windows Steam") && row.label.contains("Steam-reported size: Unavailable"), row.label)
+        let search = app.textFields["library-search"]
+        search.click(); search.typeText("Alpha")
+        app.typeKey("f", modifierFlags: .command)
+        search.typeText("Beta")
+        XCTAssertTrue(app.buttons["select-game-43"].waitForExistence(timeout: 10), "Command-F replaces the previous query")
+        XCTAssertFalse(app.buttons["select-game-42"].exists)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     private func temporaryRoot() throws -> URL {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
