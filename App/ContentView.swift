@@ -1,3 +1,4 @@
+import AppKit
 import GamekitCore
 import SwiftUI
 
@@ -43,9 +44,9 @@ struct ContentView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 16) {
-                Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(.tint)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .frame(width: 42, height: 42)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Gamekit")
