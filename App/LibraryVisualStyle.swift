@@ -87,6 +87,7 @@ struct LibraryGameTile<Mark: View>: View {
     let title: String
     let source: String
     let state: String
+    let needsAttention: Bool
     let reportedSize: String
     let portrait: NSImage?
     let selected: Bool
@@ -98,7 +99,7 @@ struct LibraryGameTile<Mark: View>: View {
             LibraryCover(title: title, portrait: portrait, selected: selected, favorite: favorite, mark: mark)
             Text(title).font(.headline).lineLimit(2)
             Text("\(source) · \(reportedSize)").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            if state != "Installed" {
+            if needsAttention {
                 Label(state, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -127,7 +128,7 @@ struct LibraryInspectorSection<Content: View>: View {
     LibraryPanel {
         HStack(alignment: .top, spacing: LibraryVisualStyle.contentSpacing) {
             LibraryGameTile(title: "Installed game", source: "Windows Steam", state: "Installed",
-                            reportedSize: "Unavailable", portrait: nil, selected: true, favorite: true,
+                            needsAttention: false, reportedSize: "Unavailable", portrait: nil, selected: true, favorite: true,
                             mark: Image(systemName: "gamecontroller.fill"))
                 .frame(width: 145)
             LibraryInspectorSection(title: "Installation") {
@@ -143,7 +144,7 @@ struct LibraryInspectorSection<Content: View>: View {
 #Preview("Library components · Dark") {
     LibraryPanel {
         LibraryGameTile(title: "Installed game", source: "Windows Steam", state: "Needs attention",
-                        reportedSize: "Unavailable", portrait: nil, selected: false, favorite: false,
+                        needsAttention: true, reportedSize: "Unavailable", portrait: nil, selected: false, favorite: false,
                         mark: Image(systemName: "gamecontroller.fill"))
             .frame(width: 125)
     }
