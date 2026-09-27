@@ -21,6 +21,21 @@ public struct SteamGameLibrarySnapshot: Equatable, Sendable {
 /// A read-only view of the managed client's own steamapps directory. An ACF
 /// receipt plus its common directory is installation evidence, not playability.
 public enum SteamGameLibrary {
+    /// Portrait library art is separate from Steam's landscape header cache.
+    /// Only a numeric AppID controls these fixed filenames; manifest URLs and
+    /// installed-game paths are never used to choose artwork sources.
+    public static func cachedPortrait(prefix: URL, steamExecutable: RelativePath = .steamDefault,
+                                      appID: UInt32) throws -> Data? {
+        guard appID > 0, var steam = try ManagedDirectory.openRoot(prefix, create: false) else { return nil }
+        for component in steamExecutable.rawValue.split(separator: "/").dropLast() {
+            guard let next = try steam.directory(String(component)) else { return nil }
+            steam = next
+        }
+        guard let cache = try steam.directory("appcache")?.directory("librarycache") else { return nil }
+        return (try? cache.directory(String(appID))?.read("library_600x900.jpg", maximumBytes: 1_048_576))
+            ?? (try? cache.read("\(appID)_library_600x900.jpg", maximumBytes: 1_048_576))
+    }
+
     public static func scan(prefix: URL, steamExecutable: RelativePath = .steamDefault) throws -> SteamGameLibrarySnapshot {
         let empty = SteamGameLibrarySnapshot(games: [], unreadableManifests: 0)
         guard var steam = try ManagedDirectory.openRoot(prefix, create: false) else { return empty }
