@@ -1,8 +1,10 @@
 # Gamekit library — design review 01
 
-Epic: `gamekit-vwq`; drafts for `.1` navigation, `.2` component/contracts and
-`.3` icon concepts. **Awaiting owner approval.** These are design artifacts, not
-a replacement Gamekit application or evidence of new launcher support.
+Epic: `gamekit-vwq`. **Owner approved the visual/navigation direction and the
+revised game-case icon.** Children `.1` and `.3` are closed; `.2` still covers
+implementation-detail specification. These are design artifacts, not a replacement
+Gamekit application or evidence of new launcher support. See [the implementation
+handoff](HANDOFF.md) before starting work.
 
 ## Open the mockup
 
@@ -48,6 +50,11 @@ intended flow rather than opening a fully designed sheet.
 - All cover compositions, game sizes, counts and operational states are sample
   design data. These are original geometric placeholders, not licensed box art
   or a scan of the user's machine. Real cover acquisition is a separate bead.
+- Delivery scope is **the existing Steam UI only**. Implement this visual design
+  using native SwiftUI/AppKit and current core services. Do not ship the mockup's
+  Ubisoft/Epic sample entries or add launcher integrations. Generalized provider
+  execution architecture is deferred; retain only the source-aware identity and
+  presentation boundaries useful to the redesign.
 
 ## Screens and service responsibilities
 
@@ -99,7 +106,7 @@ authentication or gameplay. Uninstall remains provider-mediated and confirmed.
 
 1. [Game case + controller](icon-case.svg) — owner-selected direction; library-first
    identity. Revised with two analog sticks, four face buttons, a D-pad and center
-   buttons at the owner's request. Detail refinement awaits review.
+   buttons at the owner's request; this revision is approved.
 2. [Collection](icon-stack.svg) — layered cases with a play motif.
 3. [Toolkit](icon-toolkit.svg) — emphasizes compatibility tooling.
 
@@ -135,5 +142,5 @@ recognition; explicit Play and provider-mediated uninstall preserve user control
 Remaining **major** specification work: full setup/recovery and compatibility
 sheets; **minor** work: native keyboard-grid behavior, remembered per-library
 scroll positions and detailed loading announcements. Browser checks do not replace
-VoiceOver, native window or packaged-app acceptance. These are approval drafts,
-and the epic and its children remain open for feedback.
+VoiceOver, native window or packaged-app acceptance. The visual direction is
+approved; remaining implementation-detail decisions belong to `gamekit-vwq.2`.
