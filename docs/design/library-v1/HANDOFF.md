@@ -16,6 +16,12 @@ The owner approved the look of the clickable prototype, then requested:
   and center buttons.
 - Implement the current Steam UI redesign first; additional launchers come later.
 
+After reviewing the packaged app, the owner clarified that the corner must show
+the **recognizable Steam launcher icon** for Steam games, not the abstract
+managed-window glyph. Its artwork overlay remains transparent; “Windows Steam”
+text remains below the cover and in the table. This supersedes the earlier
+nonbranded source-glyph interpretation in historic Beads notes.
+
 There is no approval to add Ubisoft, Epic, Battle.net or GOG integration in this
 work. Their order is recorded for later planning only. Do not transplant the
 prototype's fabricated library into the real application.

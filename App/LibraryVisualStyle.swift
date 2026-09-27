@@ -24,9 +24,9 @@ struct LibraryPanel<Content: View>: View {
     }
 }
 
-/// A 2:3 cover. `mark` is supplied by the Steam artwork task; no approximate
-/// launcher logo or opaque badge is generated here. Landscape headers never fill
-/// this portrait slot. Selection is a visible outline, not a Play affordance.
+/// A 2:3 cover. `mark` is the transparent launcher icon supplied by the caller;
+/// no opaque badge is generated here. Landscape headers never fill this portrait
+/// slot. Selection is a visible outline, not a Play affordance.
 struct LibraryCover<Mark: View>: View {
     let title: String
     let portrait: NSImage?
@@ -129,7 +129,7 @@ struct LibraryInspectorSection<Content: View>: View {
         HStack(alignment: .top, spacing: LibraryVisualStyle.contentSpacing) {
             LibraryGameTile(title: "Installed game", source: "Windows Steam", state: "Installed",
                             needsAttention: false, reportedSize: "Unavailable", portrait: nil, selected: true, favorite: true,
-                            mark: Image(systemName: "gamecontroller.fill"))
+                            mark: Image("SteamLauncherMark").resizable().frame(width: 25, height: 25))
                 .frame(width: 145)
             LibraryInspectorSection(title: "Installation") {
                 Text("Select a game to see its details.").foregroundStyle(.secondary)
@@ -145,7 +145,7 @@ struct LibraryInspectorSection<Content: View>: View {
     LibraryPanel {
         LibraryGameTile(title: "Installed game", source: "Windows Steam", state: "Needs attention",
                         needsAttention: true, reportedSize: "Unavailable", portrait: nil, selected: false, favorite: false,
-                        mark: Image(systemName: "gamecontroller.fill"))
+                        mark: Image("SteamLauncherMark").resizable().frame(width: 25, height: 25))
             .frame(width: 125)
     }
     .frame(width: 340)

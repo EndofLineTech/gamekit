@@ -40,9 +40,10 @@ Steamworks Common Redistributables (228980) are omitted.
 The art-led grid uses 2:3 portrait covers, readable titles, Windows Steam source
 text, installation status, Steam-reported size and a separate favorite control.
 The native table shows a compact portrait beside title, source, state and size.
-The upper-left artwork mark is an original transparent managed-window glyph,
-**not** the Valve logo. A single click selects and opens the inspector; Play is
-an explicit button or ready-game double-click. Moving focus with arrows or
+The upper-left artwork mark is the transparent Steam launcher icon. The
+**Windows Steam** text beneath the cover and in the table also identifies the
+source. A single click selects and opens the inspector; Play requires an
+explicit button or ready-game double-click. Moving focus with arrows or
 Home/End never sends Play; Return/Space selects a focused item. Search, source,
 installation filters, favorites and deterministic sorting are shared across
 both views. Unknown sizes sort after known sizes, including known zero.
