@@ -5,6 +5,7 @@ import SwiftUI
 final class SteamInstallationModel: ObservableObject {
     @Published var status: String?
     @Published var running = false
+    @Published private(set) var installedSuccessfully = false
     private var task: Task<Void, Never>?
     private var coordinator: SteamInstallationCoordinator?
     private var selectedBundle: URL?
@@ -13,6 +14,7 @@ final class SteamInstallationModel: ObservableObject {
         let allowed = recoveryRetry ? setup.actions.retry : verificationOnly ? setup.actions.verify : setup.actions.install
         guard task == nil, allowed, let token = setup.begin(recoveryRetry ? "Recovering installation" : "Installing Windows Steam") else { return }
         running = true
+        installedSuccessfully = false
         status = "Checking prerequisites…"
         task = Task { [self] in
             defer {
@@ -49,6 +51,7 @@ final class SteamInstallationModel: ObservableObject {
                     _ = try await SteamLifecycle(store: store, layout: setup.layout).launch()
                     status = "Steam installed and ready. Sign in or complete Steam Guard in Steam when requested."
                 } catch { status = "Setup completed, but Steam could not be reopened. " + AppFailure.message(error) }
+                installedSuccessfully = true
             } catch is CancellationError {
                 status = "Installation interrupted; existing files were preserved."
             } catch {
@@ -81,6 +84,7 @@ final class SteamInstallationModel: ObservableObject {
         guard task == nil, reset ? setup.actions.reset : setup.actions.stopInterrupted,
               let token = setup.begin(reset ? "Resetting the selected environment" : "Stopping interrupted setup") else { return }
         running = true
+        installedSuccessfully = false
         status = reset ? (deleteDownloads ? "Checking ownership and deleting the selected environment…" : "Checking ownership and archiving the environment while preserving downloads…") : "Stopping the interrupted setup's owned Wine processes…"
         task = Task { [self] in
             defer {
