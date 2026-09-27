@@ -56,9 +56,9 @@ public actor RuntimeSession {
     }
 
     private static func launch(lease: EnvironmentExecutionLease, layout: RuntimeLayout, arguments: [String],
-                                workingDirectory: URL?, timeout: TimeInterval,
-                                 onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil,
-                                 game: GameApplicationIdentity? = nil) async throws -> RuntimeSession {
+                               workingDirectory: URL?, timeout: TimeInterval,
+                                onOutput: (@Sendable (CommandOutput) -> Void)?, executable: URL? = nil,
+                                game: GameApplicationIdentity? = nil) async throws -> RuntimeSession {
         try Task.checkCancellation()
         let snapshot = try await completeSnapshot(lease: lease, layout: layout)
         guard snapshot.processes.isEmpty else { throw RuntimeSessionError.prefixBusy }
