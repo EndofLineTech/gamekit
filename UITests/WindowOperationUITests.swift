@@ -16,10 +16,14 @@ final class WindowOperationUITests: XCTestCase {
         XCTAssertTrue(launchers.waitForExistence(timeout: 10))
         launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
+        let back = app.buttons["back-to-library"]
+        let navigationY = back.frame.midY
         app.typeKey("r", modifierFlags: [.command, .shift])
         let activity = app.staticTexts["operation-status"]
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         XCTAssertTrue((activity.value as? String ?? "").contains("Checking prerequisites"))
+        XCTAssertEqual(back.frame.midY, navigationY, accuracy: 2,
+                       "An operation starting must not move navigation underneath a click")
         app.buttons["back-to-library"].click()
         XCTAssertTrue(activity.exists, "Leaving Settings must not cancel the pending operation")
         app.buttons["nav-diagnostics"].click()
@@ -31,6 +35,8 @@ final class WindowOperationUITests: XCTestCase {
         launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15),
                       "The original operation must complete after navigation")
+        XCTAssertEqual(back.frame.midY, navigationY, accuracy: 2,
+                       "An operation finishing must leave navigation in place")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path),
                        "Navigating never dispatches a managed Steam launch")
     }

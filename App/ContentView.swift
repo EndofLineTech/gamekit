@@ -12,13 +12,18 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         VStack(spacing: 0) {
-            if let activity = setup.activity {
-                HStack(spacing: 12) {
+            // Keep navigation at a stable screen position while an operation
+            // starts or finishes; removing this row during a click loses it.
+            HStack(spacing: 12) {
+                if let activity = setup.activity {
                     ProgressView().controlSize(.small)
-                    Text(activity).accessibilityIdentifier("operation-status")
-                    Spacer()
-                }.padding(16).background(.quaternary)
+                    Text(activity).lineLimit(1).accessibilityIdentifier("operation-status")
+                } else {
+                    Text("No operation in progress").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
             }
+            .padding(.horizontal, 16).frame(height: 36).background(.quaternary)
             LibraryShellView()
             if let problem = setup.problem {
                 statusBanner(problem, symbol: "exclamationmark.triangle", identifier: "persistent-setup-error")
