@@ -38,10 +38,11 @@ intended flow rather than opening a fully designed sheet.
 - **Transparent launcher marks appear in the upper-left artwork corner**, without
   an opaque badge; favorites occupy the upper-right. Launcher text remains below
   covers and in list columns so meaning never relies on the mark alone.
-- The marks in the mockup are illustrative vector approximations for review.
-  Production uses the owner-selected original managed-window source glyph,
-  not a Valve logo over game artwork; source text identifies Windows Steam.
-  The app-icon concepts are separate original editable SVG artwork.
+- The owner clarified after native review that the artwork mark should be the
+  actual launcher's icon, not an abstract source glyph. Production uses the
+  transparent Steam icon for Windows Steam in grid and table. The older mockup's
+  drawn marks remain illustrative; the app-icon concepts remain separate
+  original editable SVG artwork.
 - Configured launchers filter the library; launcher setup/lifecycle lives under
   Management. Only Windows Steam exists in the current product. Ubisoft and Epic
   entries in this prototype explicitly preview future integration. Delivery order
@@ -220,12 +221,12 @@ The visual direction is approved; the shipping interaction contract follows.
   selected/favorite state and available actions. Do not equate a sum of known
   Steam-reported sizes with physical disk use; unknown is not zero.
 
-  **Branding decision:** Valve's [Steam branding guidance](https://partner.steamgames.com/doc/marketing/branding)
-  says its logo must stand alone and not combine with photographs or graphics.
-  The owner chose an **original, nonbranded managed-window glyph** for the
-  transparent corner overlay; the source is explicitly labeled “Windows Steam”
-  below the art and in list/VoiceOver text. The original glyph lives in
-  `App/Assets.xcassets/ManagedSteamSource.imageset/`. It is not a Steam logo.
+  **Updated owner direction:** The corner mark identifies the actual launcher.
+  For this Steam-only release, `App/Assets.xcassets/SteamLauncherMark.imageset/`
+  contains the transparent Steam icon (from [Simple Icons, pinned SVG](https://github.com/simple-icons/simple-icons/blob/521c96fd04b0ea93034db8715eda5a4de27a58bb/icons/steam.svg),
+  CC0 1.0). The earlier nonbranded managed-window glyph was not recognizable
+  as Steam and is superseded. Keep “Windows Steam” text below the cover and in
+  table/VoiceOver text; the icon is not an action or status indicator.
   Portrait art is fetched by validated numeric AppID from Steam's own local
   cache or `https://cdn.akamai.steamstatic.com/steam/apps/{AppID}/library_600x900.jpg`;
   this 2:3 resource was checked against the live Steam CDN. No game artwork is

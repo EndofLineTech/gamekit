@@ -68,9 +68,10 @@ box-art grid and native table using the toolbar buttons; selection, search and f
 are shared. The toolbar Sort menu can order by name, launcher, state or
 Steam-reported size (unknown sizes sort last). Use the **Favorites** sidebar
 destination and the star in a cover's upper-right corner to keep a local list.
-Only managed Windows Steam is a configured launcher in this version. The
-original, transparent source glyph at a cover's upper-left is accompanied by
-the text **Windows Steam** below it. Gamekit remembers browsing preferences;
+Only managed Windows Steam is a configured launcher in this version. Its
+transparent Steam icon appears in the upper-left of each cover and compact
+table thumbnail, with the text **Windows Steam** beneath the cover and in the
+table. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
 [editable SVG](design/library-v1/icon-case.svg); its asset-generation instructions

@@ -698,7 +698,7 @@ private struct LibraryGridCell: View {
         LibraryGameTile(title: game.name, source: "Windows Steam", state: state,
                         needsAttention: game.state != .ready, reportedSize: reportedSize,
                         portrait: portrait, selected: selected, favorite: false,
-                        mark: Image("ManagedSteamSource").resizable().frame(width: 25, height: 25))
+                        mark: Image("SteamLauncherMark").resizable().frame(width: 25, height: 25))
             .task(id: game.id) {
                 portrait = nil
                 portrait = await portraits.image(for: .init(environmentID: SteamInstallationRecipe.environmentID,

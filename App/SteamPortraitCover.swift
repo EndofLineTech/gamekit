@@ -51,7 +51,7 @@ struct SteamPortraitCover: View {
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(alignment: .topLeading) {
-            Image("ManagedSteamSource").resizable().interpolation(.high)
+            Image("SteamLauncherMark").resizable().interpolation(.high)
                 .frame(width: markSize, height: markSize).shadow(color: .black.opacity(0.75), radius: 3)
                 .padding(markSize < 20 ? 4 : 9) // No backing plate: artwork stays visible.
         }

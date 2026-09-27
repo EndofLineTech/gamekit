@@ -1,6 +1,6 @@
 {
   "images": [
-    { "filename": "managed-steam.svg", "idiom": "universal" }
+    { "filename": "steam.svg", "idiom": "universal" }
   ],
   "info": { "author": "xcode", "version": 1 },
   "properties": { "preserves-vector-representation": true }
