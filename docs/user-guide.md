@@ -76,8 +76,9 @@ table thumbnail, with the text **Windows Steam** beneath the cover and in the
 table. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
-[editable SVG](design/library-v1/icon-case.svg); its asset-generation instructions
-are in the [design README](design/library-v1/README.md#icon-review).
+[editable SVG](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/icon-case.svg);
+its asset-generation instructions are in the
+[design README](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/README.md#icon-review).
 Use arrow keys to move between focused covers or adjacent table rows; Home/End
 move to the first/last game. Return or Space selects and opens the inspector;
 movement alone does not start a game. **Command-F** enters library search, and

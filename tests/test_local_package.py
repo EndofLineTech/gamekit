@@ -79,6 +79,16 @@ class LocalPackageTests(unittest.TestCase):
             (root / "diagnostics/process_counters.c").write_text("shipped helper source", encoding="utf-8")
             self.assertNotEqual(before_counter, MODULE.source_fingerprint(root))
 
+    def test_packaged_guide_links_resolve_before_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = pathlib.Path(temporary)
+            (stage / "USER-GUIDE.md").write_text(
+                "[Included](reference.md) [Online](https://example.org/reference)\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "reference.md"):
+                MODULE.validate_guide_links(stage)
+            (stage / "reference.md").write_text("# Reference\n", encoding="utf-8")
+            MODULE.validate_guide_links(stage)
+
 
 if __name__ == "__main__":
     unittest.main()
