@@ -29,6 +29,7 @@ final class AppDiagnosticsModel: ObservableObject {
     let store: DiagnosticStore?
     @Published var refreshID = UUID()
     @Published var environmentRefreshID = UUID()
+    @Published private(set) var requestedOperationID: UUID?
     @Published var recordingProblem = false
     @Published private(set) var debugMode = false
     @Published private(set) var debugCapturing = false
@@ -38,6 +39,11 @@ final class AppDiagnosticsModel: ObservableObject {
     init() {
         store = try? DiagnosticStore(base: AppStorageLocations.diagnostics)
         recordingProblem = store == nil
+    }
+
+    func open(operationID: UUID? = nil) {
+        requestedOperationID = operationID
+        NotificationCenter.default.post(name: .gamekitOpenDiagnostics, object: nil)
     }
 
     func setDebugMode(_ enabled: Bool) {

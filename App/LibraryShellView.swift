@@ -86,6 +86,7 @@ struct LibraryShellView: View {
             preferencesWarning = restored.savedPreferencesUnavailable
         }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in destination = .settings }
+        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in destination = .diagnostics }
         .onExitCommand { inspectorVisible = false }
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
@@ -237,7 +238,14 @@ struct LibraryShellView: View {
                         }
                     }
                     if preferencesWarning { Text("Saved library preferences could not be read; showing defaults. Your saved file was preserved.").foregroundStyle(.orange) }
-                    if let warning = games.warning { Text(warning).foregroundStyle(.orange) }
+                    if let warning = games.warning {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(warning, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                            Button("View diagnostics") { diagnostics.open() }
+                                .accessibilityIdentifier("library-diagnostics-link")
+                        }
+                    }
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
                     else if visibleGames.isEmpty { emptyLibrary }
                     else if preferences.viewMode == .grid {
@@ -452,6 +460,7 @@ struct LibraryShellView: View {
             VStack(alignment: .leading, spacing: 22) {
                 Text("Diagnostics").font(.largeTitle.bold()).accessibilityIdentifier("diagnostics-heading")
                 DiagnosticsView()
+                EnvironmentSummaryView()
             }.padding(LibraryVisualStyle.contentSpacing)
         }
     }
