@@ -2,6 +2,36 @@ import Foundation
 
 public enum LibraryViewMode: String, Codable, Sendable { case grid, list }
 public enum LibrarySortOrder: String, Codable, Sendable { case name, source, state, reportedSize }
+
+public extension LibrarySortOrder {
+    /// Same order in the grid and table. Unknown Steam-reported sizes follow
+    /// known sizes, including a known zero; AppID breaks duplicate-title ties.
+    func sorted(_ games: [InstalledSteamGame]) -> [InstalledSteamGame] {
+        games.sorted { lhs, rhs in
+            switch self {
+            case .name, .source: break // Managed Windows Steam is the only source.
+            case .state:
+                func rank(_ state: SteamGameInstallState) -> Int {
+                    switch state {
+                    case .ready: 0
+                    case .updating: 1
+                    case .missingFiles: 2
+                    }
+                }
+                if lhs.state != rhs.state { return rank(lhs.state) < rank(rhs.state) }
+            case .reportedSize:
+                switch (lhs.sizeOnDiskBytes, rhs.sizeOnDiskBytes) {
+                case (.some(let first), .some(let second)) where first != second: return first > second
+                case (.some, .none): return true
+                case (.none, .some): return false
+                default: break
+                }
+            }
+            let title = lhs.name.localizedStandardCompare(rhs.name)
+            return title == .orderedSame ? lhs.id < rhs.id : title == .orderedAscending
+        }
+    }
+}
 public enum LibraryPreferencesError: Error, Equatable { case invalidDocument, invalidCoverSize, invalidFavorite }
 
 public struct LibraryPreferencesSnapshot: Sendable {
