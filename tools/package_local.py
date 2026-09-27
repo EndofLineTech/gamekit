@@ -9,8 +9,10 @@ import json
 import pathlib
 import os
 import plistlib
+import re
 import subprocess
 import tempfile
+from urllib.parse import urlsplit
 
 
 def command(*arguments):
@@ -69,6 +71,17 @@ def validate_destination(destination):
         raise FileExistsError("Package output already exists; choose a new destination")
     if not destination.parent.is_dir():
         raise ValueError("Package parent directory must exist")
+
+
+def validate_guide_links(stage):
+    guide = (stage / "USER-GUIDE.md").read_text(encoding="utf-8")
+    for link in re.findall(r"\]\(([^)]+)\)", guide):
+        url = urlsplit(link)
+        if url.scheme or not url.path:
+            continue
+        relative = pathlib.PurePosixPath(url.path)
+        if relative.is_absolute() or ".." in relative.parts or not (stage / relative).is_file():
+            raise ValueError(f"Packaged guide link has no local target: {link}")
 
 
 def publish(stage, destination):
@@ -135,8 +148,14 @@ def package(app, destination, root):
             raise ValueError("Copied process counter helper changed")
         (stage / "build-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
-        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md", "debug-performance-capture.md", "helldivers-startup-hitches.md", "per-game-graphics-backends.md", "cold-steam-game-launch.md", "graphics-backends.md", "graphics-backend-research.md", "uninstall-games.md"):
+        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md",
+                      "debug-performance-capture.md", "helldivers-startup-hitches.md",
+                      "per-game-graphics-backends.md", "cold-steam-game-launch.md",
+                      "graphics-backends.md", "graphics-backend-research.md", "uninstall-games.md",
+                      "runtime-text-input-delivery.md", "persistent-graphics-backend.md",
+                      "satisfactory-backend-gameplay.md", "helldivers-dx11-backends.md"):
             command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
+        validate_guide_links(stage)
         for source in ("DXMTCompatibility", "DXVKCompatibility"):
             command("/usr/bin/ditto", str(root / "Sources" / source), str(stage / "renderer-sources" / source))
         # A no-clobber directory move; existing output is never removed or replaced.

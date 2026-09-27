@@ -76,8 +76,9 @@ table thumbnail, with the text **Windows Steam** beneath the cover and in the
 table. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
-[editable SVG](design/library-v1/icon-case.svg); its asset-generation instructions
-are in the [design README](design/library-v1/README.md#icon-review).
+[editable SVG](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/icon-case.svg);
+its asset-generation instructions are in the
+[design README](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/README.md#icon-review).
 Use arrow keys to move between focused covers or adjacent table rows; Home/End
 move to the first/last game. Return or Space selects and opens the inspector;
 movement alone does not start a game. **Command-F** enters library search, and
@@ -363,7 +364,7 @@ can show sensitive runtime text. **Export summary** emits a separate allowlisted
 summary without raw output, paths or session/account fields. Share the summary,
 not the whole prefix, archive or raw log directory.
 
-Under **Show reset options…**, choose **Inspect recovery archives** to list each
+Under **Settings → Storage**, choose **Inspect recovery archives** to list each
 archive's logical size and status:
 
 - **Completed**: recovery finished and the archived prefix is eligible for cleanup.
@@ -386,7 +387,7 @@ referenced by an unfinished recovery journal.
 
 ### Obsolete generated launchers
 
-Use **Show reset options… → Inspect launcher caches** to review game launcher
+Use **Settings → Storage → Inspect launcher caches** to review game launcher
 caches. Verified pre-`shared-pe-v2` bundles are **obsolete**; numeric probe folders
 containing only their lock file are **empty**. Both have an explicit confirmed
 cleanup action. **retained** marks the current `shared-pe-v2` layout, while
