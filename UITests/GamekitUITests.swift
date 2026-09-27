@@ -3,6 +3,48 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testNativeLibraryShellNavigationNeverLaunchesOnSelection() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Library fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
+            .write(to: steam.appendingPathComponent("steamapps/appmanifest_42.acf"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["nav-ubisoft"].exists)
+        let item = app.buttons["select-game-42"]
+        XCTAssertTrue(item.waitForExistence(timeout: 20))
+        item.click()
+        XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["launch-game-42"].isEnabled)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+        app.buttons["nav-diagnostics"].click()
+        XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
+        app.buttons["nav-settings"].click()
+        XCTAssertTrue(app.buttons["settings-General"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
+        XCTAssertTrue(app.buttons["settings-Runtime"].exists)
+        XCTAssertTrue(app.buttons["settings-Storage"].exists)
+        app.buttons["back-to-launchers"].click()
+        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 10))
+        app.buttons["library-all"].click()
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["launch-game-42"].exists, "Selection must survive navigation")
+        let search = app.textFields["library-search"]
+        search.click(); search.typeText("no match")
+        XCTAssertTrue(app.staticTexts["No matching games"].waitForExistence(timeout: 10))
+        app.buttons["Clear filters"].click()
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     func testInstalledAlternativeBackendsAreSelectableAndIndependent() async throws {
         guard let primary = ProcessInfo.processInfo.environment["GAMEKIT_UI_PRIMARY_ROOT"] else {
             throw XCTSkip("Set TEST_RUNNER_GAMEKIT_UI_PRIMARY_ROOT for local pinned-payload acceptance")
@@ -26,6 +68,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
+        openLaunchers(in: app)
         let shared = app.popUpButtons["graphics-backend-picker"]
         XCTAssertTrue(shared.waitForExistence(timeout: 30))
         revealRecoveryButton(shared, in: app)
@@ -37,6 +80,8 @@ final class GamekitUITests: XCTestCase {
         app.menuItems["DXVK (Direct3D 10/11)"].click()
         let saved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXVK'"), object: app.staticTexts["selected-graphics-backend"])
         XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 30), .completed)
+        app.buttons["library-all"].click()
+        openGameInspector(123456, in: app)
         let gear = app.buttons["game-compatibility-123456"]
         revealRecoveryButton(gear, in: app); gear.click()
         let gamePicker = app.popUpButtons["game-graphics-backend-picker"]
@@ -47,6 +92,7 @@ final class GamekitUITests: XCTestCase {
         let effective = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXMT'"), object: app.staticTexts["game-effective-backend"])
         XCTAssertEqual(XCTWaiter.wait(for: [effective], timeout: 20), .completed)
         app.terminate(); app.launch()
+        openGameInspector(123456, in: app)
         XCTAssertTrue(gear.waitForExistence(timeout: 30)); revealRecoveryButton(gear, in: app); gear.click()
         XCTAssertTrue(gamePicker.waitForExistence(timeout: 20))
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS 'DXMT'"), object: app.staticTexts["game-effective-backend"])], timeout: 20), .completed)
@@ -67,6 +113,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
         func openPanel() {
+            openGameInspector(123456, in: app)
             let gear = app.buttons["game-compatibility-123456"]
             XCTAssertTrue(gear.waitForExistence(timeout: 20)); revealRecoveryButton(gear, in: app); gear.click()
             XCTAssertTrue(app.popUpButtons["game-graphics-backend-picker"].waitForExistence(timeout: 15))
@@ -98,6 +145,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch(); defer { app.terminate() }
+        openLaunchers(in: app)
         let toggle = app.checkBoxes["shared-fullscreen-space"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         revealRecoveryButton(toggle, in: app)
@@ -107,7 +155,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
         let stored = try await RuntimeSettingsStore(store: store).sharedFullscreenSpace()
         XCTAssertTrue(stored)
-        app.terminate(); app.launch()
+        app.terminate(); app.launch(); openLaunchers(in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? Int, 1)
     }
@@ -117,6 +165,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
+        app.buttons["nav-diagnostics"].click()
         let toggle = app.checkBoxes["debug-performance-mode"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         revealRecoveryButton(toggle, in: app)
@@ -124,7 +173,7 @@ final class GamekitUITests: XCTestCase {
         toggle.click()
         XCTAssertEqual(toggle.value as? Int, 1)
         XCTAssertFalse(app.buttons["stop-debug-capture"].isEnabled)
-        app.terminate(); app.launch()
+        app.terminate(); app.launch(); app.buttons["nav-diagnostics"].click()
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? Int, 0)
     }
@@ -154,6 +203,7 @@ final class GamekitUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         func openSettings() {
+            openGameInspector(42, in: app)
             let open = app.buttons["game-compatibility-42"]
             XCTAssertTrue(open.waitForExistence(timeout: 20))
             revealRecoveryButton(open, in: app); open.click()
@@ -207,6 +257,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
         showResetOptions(in: app)
         let inspect = app.buttons["inspect-launcher-caches"]
@@ -253,6 +304,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Archive cleanup fixture"].waitForExistence(timeout: 20))
         showResetOptions(in: app)
         let inspect = app.buttons["inspect-recovery-archives"]
@@ -282,6 +334,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         let picker = app.popUpButtons["graphics-backend-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 20))
         revealRecoveryButton(picker, in: app)
@@ -299,7 +352,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(layout.graphicsBackend, .metal3)
         XCTAssertTrue((app.staticTexts["graphics-backend-scope"].value as? String ?? "").contains("all games"))
         app.terminate()
-        app.launch()
+        app.launch(); openLaunchers(in: app)
         XCTAssertTrue(selected.waitForExistence(timeout: 20))
         let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Metal 3 compatibility"), object: selected)
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 15), .completed)
@@ -321,6 +374,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.popUpButtons["graphics-backend-picker"].isEnabled)
     }
@@ -342,10 +396,12 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
         app.launch()
         defer { app.terminate() }
+        openGameInspector(413150, in: app)
         let game = app.buttons["launch-game-413150"]
         XCTAssertTrue(game.waitForExistence(timeout: 20))
-        XCTAssertEqual(game.label, "Launch Stardew Valley")
-        XCTAssertTrue((game.value as? String)?.contains("Steam-reported size: 123") == true)
+        XCTAssertEqual(game.label, "Play")
+        let reported = ByteCountFormatter.string(fromByteCount: 123_456_789, countStyle: .file)
+        XCTAssertTrue(app.staticTexts["Steam-reported size: \(reported)"].exists)
         XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")
         let uninstall = app.buttons["uninstall-game-413150"]
         XCTAssertTrue(uninstall.exists)
@@ -381,6 +437,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
         app.launch()
         defer { app.terminate() }
+        openGameInspector(game.appId, in: app)
         let gear = app.buttons["game-compatibility-\(game.appId)"]
         XCTAssertTrue(gear.waitForExistence(timeout: 20))
         gear.click()
@@ -442,6 +499,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-with-delay"]
         app.launch()
         defer { app.terminate() }
+        openGameInspector(42, in: app)
         let uninstall = app.buttons["uninstall-game-42"]
         XCTAssertTrue(uninstall.waitForExistence(timeout: 20))
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: uninstall)
@@ -456,11 +514,15 @@ final class GamekitUITests: XCTestCase {
         dialog.buttons["Cancel"].click()
         XCTAssertEqual(try Data(contentsOf: manifest), original)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path), "Cancel must not launch Steam or send a request")
+        openLaunchers(in: app)
         app.typeKey("r", modifierFlags: [.command, .shift])
         XCTAssertTrue(app.staticTexts["Checking prerequisites"].waitForExistence(timeout: 5))
+        app.buttons["library-all"].click()
         XCTAssertFalse(uninstall.isEnabled)
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
         try FileManager.default.removeItem(at: manifest)
+        app.buttons["library-all"].click()
         XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 15))
         XCTAssertFalse(uninstall.exists)
     }
@@ -470,6 +532,7 @@ final class GamekitUITests: XCTestCase {
         let path = try XCTUnwrap(ProcessInfo.processInfo.environment["GAMEKIT_PACKAGE_APP"])
         let app = XCUIApplication(url: URL(fileURLWithPath: path))
         app.launch()
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 45))
         XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 15))
         let launch = app.buttons["launch-steam"]
@@ -481,6 +544,7 @@ final class GamekitUITests: XCTestCase {
         app.typeKey("q", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
         _ = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: [path]))
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 45))
         let stop = app.buttons["stop-steam"]
         let stoppable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: stop)
@@ -497,6 +561,7 @@ final class GamekitUITests: XCTestCase {
             let app = XCUIApplication()
             app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", scenario]
             app.launch()
+            openLaunchers(in: app)
             XCTAssertTrue(app.staticTexts[explanation].waitForExistence(timeout: 15))
             XCTAssertFalse(app.buttons["install-steam"].isEnabled)
             app.terminate()
@@ -508,6 +573,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "ready-after-refresh"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Resolve the checks below before installation"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.buttons["install-steam"].isEnabled)
         let refresh = app.buttons["refresh-prerequisites"]
@@ -522,6 +588,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "ready-with-delay"]
         app.launch()
         defer { app.terminate() }
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
         app.activate()
         app.typeKey("r", modifierFlags: [.command, .shift])
@@ -547,6 +614,7 @@ final class GamekitUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         app.activate()
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Disposable clean reset"].waitForExistence(timeout: 15))
         showResetOptions(in: app)
         let reset = app.buttons["reset-delete-downloads"]
@@ -572,6 +640,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root, "--launch-steam"]
         app.launch()
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 60))
         app.activate()
         app.typeKey("q", modifierFlags: .command)
@@ -579,6 +648,7 @@ final class GamekitUITests: XCTestCase {
         let opened = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/open"), arguments: [appPath], timeout: 10))
         XCTAssertEqual(opened.termination, .exited(0))
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "Ordinary Launch Services reopen must work while Steam remains alive")
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Steam: running"].waitForExistence(timeout: 30))
         app.buttons["stop-steam"].click()
         XCTAssertTrue(app.staticTexts["Steam: stopped"].waitForExistence(timeout: 60))
@@ -627,6 +697,7 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root, "--diagnostics-root", logs.path, "--launch-steam"]
         app.launch()
+        openLaunchers(in: app)
         let running = app.staticTexts["Steam: running"]
         XCTAssertTrue(running.waitForExistence(timeout: 60))
         let receiptURL = store.root.appendingPathComponent("Metadata/Lifecycle/steam.json")
@@ -636,6 +707,7 @@ final class GamekitUITests: XCTestCase {
         // The relaunched app must observe the existing session without a launch flag.
         app.launchArguments = ["--metadata-root", root, "--diagnostics-root", logs.path]
         app.launch()
+        openLaunchers(in: app)
         XCTAssertTrue(running.waitForExistence(timeout: 30))
         XCTAssertEqual(try Data(contentsOf: receiptURL), receiptBeforeQuit)
         app.buttons["stop-steam"].click()
@@ -654,6 +726,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path]
         app.launch()
         defer { app.terminate() }
+        app.buttons["nav-diagnostics"].click()
         XCTAssertTrue(app.buttons["export-diagnostic-\(summary.id.uuidString)"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["local-diagnostic-\(summary.id.uuidString)"].exists)
         let exported = try await store.exportSummary(summary.id)
@@ -667,9 +740,24 @@ final class GamekitUITests: XCTestCase {
         return parent.appendingPathComponent("Gamekit")
     }
 
+    private func openLaunchers(in app: XCUIApplication) {
+        let button = app.buttons["nav-launchers"]
+        XCTAssertTrue(button.waitForExistence(timeout: 15))
+        button.click()
+        XCTAssertTrue(app.staticTexts["launchers-heading"].waitForExistence(timeout: 15))
+    }
+
+    private func openGameInspector(_ appID: UInt32, in app: XCUIApplication) {
+        let tile = app.buttons["select-game-\(appID)"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 20))
+        tile.click()
+        XCTAssertTrue(app.buttons["game-compatibility-\(appID)"].waitForExistence(timeout: 10))
+    }
+
     private func revealRecoveryButton(_ button: XCUIElement, in app: XCUIApplication) {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
+        if button.isHittable && app.windows["Gamekit"].frame.insetBy(dx: 0, dy: 8).contains(button.frame) { return }
         let scroll = app.scrollViews.firstMatch
         // A partially clipped button can report hittable while its center is
         // outside the scroll viewport. Avoid clicking during startup layout shifts.
@@ -681,6 +769,7 @@ final class GamekitUITests: XCTestCase {
     }
 
     private func showResetOptions(in app: XCUIApplication) {
+        openLaunchers(in: app)
         let button = app.buttons["show-reset-options"]
         XCTAssertTrue(button.waitForExistence(timeout: 15))
         revealRecoveryButton(button, in: app)
@@ -694,8 +783,9 @@ final class GamekitUITests: XCTestCase {
         defer { app.terminate() }
 
         XCTAssertTrue(app.windows["Gamekit"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["runtime-recipe"].exists)
-        XCTAssertTrue(app.staticTexts["host-scope"].exists)
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["games-empty"].exists)
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["metadata-empty"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["install-steam"].exists)
         XCTAssertTrue(app.buttons["verify-steam"].exists)
@@ -712,6 +802,7 @@ final class GamekitUITests: XCTestCase {
         defer { app.terminate() }
         for _ in 0..<2 {
             app.launch()
+            openLaunchers(in: app)
             XCTAssertTrue(app.staticTexts["UI fixture Steam"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["Not checked"].exists)
             app.terminate()
@@ -730,6 +821,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path]
         defer { app.terminate() }
         app.launch()
+        openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["metadata-error"].waitForExistence(timeout: 10))
         XCTAssertEqual(try Data(contentsOf: path), original)
     }
