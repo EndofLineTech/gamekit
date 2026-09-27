@@ -36,12 +36,15 @@ struct SteamPortraitCover: View {
                 LinearGradient(colors: [.indigo, .teal], startPoint: .topLeading, endPoint: .bottomTrailing)
                 VStack {
                     Spacer()
-                    Image(systemName: "gamecontroller.fill").font(.title).accessibilityHidden(true)
-                    Text(game.title).font(.headline).lineLimit(3).minimumScaleFactor(0.75)
+                    Image(systemName: "gamecontroller.fill")
+                        .font(markSize < 20 ? .caption2 : .title).accessibilityHidden(true)
+                    if markSize >= 20 {
+                        Text(game.title).font(.headline).lineLimit(3).minimumScaleFactor(0.75)
+                    }
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+                .padding(markSize < 20 ? 3 : 12)
             }
         }
         .aspectRatio(2 / 3, contentMode: .fit)
