@@ -86,6 +86,18 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await games.refresh(setup: setup) } }
         }
+        .onChange(of: setup.activity) { _, activity in
+            if let activity { AccessibilityNotification.Announcement(activity).post() }
+        }
+        .onChange(of: games.message) { _, message in
+            if let message { AccessibilityNotification.Announcement(message).post() }
+        }
+        .onChange(of: games.warning) { _, warning in
+            if let warning { AccessibilityNotification.Announcement(warning).post() }
+        }
+        .onChange(of: steam.message) { _, message in
+            if let message { AccessibilityNotification.Announcement(message).post() }
+        }
     }
 
     private func statusBanner(_ message: String, symbol: String, identifier: String, operationID: UUID? = nil) -> some View {
