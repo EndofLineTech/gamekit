@@ -3,7 +3,7 @@ import GamekitCore
 import SwiftUI
 
 @MainActor
-private final class InstalledGamesModel: ObservableObject {
+final class InstalledGamesModel: ObservableObject {
     @Published private(set) var games: [InstalledSteamGame] = []
     @Published private(set) var refreshing = false
     @Published private(set) var warning: String?
@@ -166,8 +166,7 @@ private final class InstalledGamesModel: ObservableObject {
 struct InstalledGamesView: View {
     @EnvironmentObject private var setup: SetupModel
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = InstalledGamesModel()
+    @EnvironmentObject private var model: InstalledGamesModel
     @State private var compatibilityGame: InstalledSteamGame?
     @State private var uninstallGame: InstalledSteamGame?
     @State private var confirmUninstall = false
@@ -250,15 +249,6 @@ struct InstalledGamesView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-        }
-        .task(id: setup.selectionRevision) {
-            while !Task.isCancelled {
-                await model.refresh(setup: setup)
-                do { try await Task.sleep(for: .seconds(3)) } catch { return }
-            }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refresh(setup: setup) } }
         }
         .sheet(item: $compatibilityGame) { game in GameCompatibilityView(game: game) }
         .confirmationDialog("Uninstall \(uninstallGame?.name ?? "game")?", isPresented: $confirmUninstall, titleVisibility: .visible) {

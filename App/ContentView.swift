@@ -4,6 +4,10 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var diagnostics = AppDiagnosticsModel()
     @StateObject private var setup = SetupModel()
+    @StateObject private var games = InstalledGamesModel()
+    @StateObject private var steam = SteamLifecycleModel()
+    @StateObject private var installation = SteamInstallationModel()
+    @Environment(\.scenePhase) private var scenePhase
     private let operatingSystem = ProcessInfo.processInfo.operatingSystemVersion
 
     private var architecture: HostArchitecture {
@@ -37,7 +41,42 @@ struct ContentView: View {
         .frame(minWidth: 640, minHeight: 620)
         .environmentObject(diagnostics)
         .environmentObject(setup)
-        .task { setup.refresh(diagnostics: diagnostics) }
+        .environmentObject(games)
+        .environmentObject(steam)
+        .environmentObject(installation)
+        .task {
+            setup.refresh(diagnostics: diagnostics)
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--install-steam") || arguments.contains("--verify-steam") || arguments.contains("--launch-steam") {
+                while (setup.report == nil || setup.isBusy) && setup.problem == nil && !Task.isCancelled {
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                }
+                guard !Task.isCancelled else { return }
+                if arguments.contains("--install-steam") || arguments.contains("--verify-steam") {
+                    installation.start(diagnostics: diagnostics, setup: setup, verificationOnly: arguments.contains("--verify-steam"))
+                } else {
+                    await steam.refresh(setup: setup)
+                    steam.control(stop: false, diagnostics: diagnostics, setup: setup)
+                }
+            }
+            #endif
+        }
+        .task(id: setup.selectionRevision) {
+            while !Task.isCancelled {
+                await games.refresh(setup: setup)
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            }
+        }
+        .task(id: setup.selectionRevision) {
+            while !Task.isCancelled {
+                await steam.refresh(setup: setup)
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await games.refresh(setup: setup) } }
+        }
     }
 
     private var content: some View {

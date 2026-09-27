@@ -2,7 +2,7 @@ import GamekitCore
 import SwiftUI
 
 @MainActor
-private final class SteamLifecycleModel: ObservableObject {
+final class SteamLifecycleModel: ObservableObject {
     @Published var state: SteamLifecycleState = .unverified
     @Published var busy = false
     @Published var message: String?
@@ -70,7 +70,7 @@ private final class SteamLifecycleModel: ObservableObject {
 struct SteamLifecycleView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @EnvironmentObject private var setup: SetupModel
-    @StateObject private var model = SteamLifecycleModel()
+    @EnvironmentObject private var model: SteamLifecycleModel
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
@@ -89,22 +89,6 @@ struct SteamLifecycleView: View {
                 Text("Quit Gamekit to leave Steam and games running. Stop waits up to 30 seconds before forcing Steam and games in the managed environment to close.")
                     .font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-        }
-        .task(id: setup.selectionRevision) {
-            await model.refresh(setup: setup)
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--launch-steam") {
-                while (setup.report == nil || setup.isBusy) && setup.problem == nil && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
-                if !Task.isCancelled {
-                    await model.refresh(setup: setup)
-                    model.control(stop: false, diagnostics: diagnostics, setup: setup)
-                }
-            }
-            #endif
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
-                await model.refresh(setup: setup)
-            }
         }
     }
 }

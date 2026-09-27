@@ -2,7 +2,7 @@ import GamekitCore
 import SwiftUI
 
 @MainActor
-private final class SteamInstallationModel: ObservableObject {
+final class SteamInstallationModel: ObservableObject {
     @Published var status: String?
     @Published var running = false
     private var task: Task<Void, Never>?
@@ -117,7 +117,7 @@ private final class SteamInstallationModel: ObservableObject {
 struct SteamInstallationView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @EnvironmentObject private var setup: SetupModel
-    @StateObject private var model = SteamInstallationModel()
+    @EnvironmentObject private var model: SteamInstallationModel
     @State private var confirmReset = false
     @State private var confirmStop = false
     @State private var confirmDelete = false
@@ -179,15 +179,6 @@ struct SteamInstallationView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Closes the selected managed environment's interrupted Wine session. Its installation files and downloaded games are preserved. For an installed Steam session, use Stop Windows Steam instead.")
-        }
-        .task {
-            #if DEBUG
-            let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("--install-steam") || arguments.contains("--verify-steam") {
-                while (setup.report == nil || setup.isBusy) && setup.problem == nil && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
-                if !Task.isCancelled { model.start(diagnostics: diagnostics, setup: setup, verificationOnly: arguments.contains("--verify-steam")) }
-            }
-            #endif
         }
     }
 
