@@ -34,6 +34,7 @@ struct LibraryShellView: View {
     @State private var uninstallGame: InstalledSteamGame?
     @State private var confirmingUninstall = false
     @FocusState private var searchFocused: Bool
+    @FocusState private var focusedListID: UInt32?
     private let preferenceStore = LibraryPreferencesStore(root: AppStorageLocations.metadata)
 
     private var selectedGame: InstalledSteamGame? { games.games.first { $0.id == selectedGameID } }
@@ -44,22 +45,7 @@ struct LibraryShellView: View {
                 && (filter == .all || filter == .ready && game.state == .ready || filter == .attention && game.state != .ready)
                 && (query.isEmpty || game.name.localizedStandardContains(query))
         }
-        return matches.sorted { lhs, rhs in
-            switch preferences.sortOrder {
-            case .name: break
-            case .source: break // Only managed Windows Steam exists today.
-            case .state:
-                if lhs.state != rhs.state { return lhs.state.rawValue < rhs.state.rawValue }
-            case .reportedSize:
-                if lhs.sizeOnDiskBytes != rhs.sizeOnDiskBytes {
-                    guard let first = lhs.sizeOnDiskBytes else { return false }
-                    guard let second = rhs.sizeOnDiskBytes else { return true }
-                    return first > second
-                }
-            }
-            let title = lhs.name.localizedStandardCompare(rhs.name)
-            return title == .orderedSame ? lhs.id < rhs.id : title == .orderedAscending
-        }
+        return preferences.sortOrder.sorted(matches)
     }
 
     var body: some View {
@@ -89,6 +75,12 @@ struct LibraryShellView: View {
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
                 self.selectedGameID = nil
+            }
+        }
+        .onChange(of: selectedGameID) { _, id in
+            if let id {
+                inspectorVisible = true
+                if preferences.viewMode == .list { focusedListID = id }
             }
         }
         .sheet(item: $compatibilityGame) { GameCompatibilityView(game: $0) }
@@ -232,7 +224,7 @@ struct LibraryShellView: View {
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
                     else if visibleGames.isEmpty { emptyLibrary }
                     else if preferences.viewMode == .grid { coverGrid }
-                    else { gameList }
+                    else { gameList.frame(height: max(250, geometry.size.height - 220)) }
                     if let message = games.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
                 }
                 .padding(LibraryVisualStyle.contentSpacing)
@@ -246,10 +238,10 @@ struct LibraryShellView: View {
             .overlay(alignment: .trailing) {
                 if inspectorVisible && geometry.size.width < 920 {
                     inspector
-                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 155))
+                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 185))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(color: .black.opacity(0.35), radius: 20, x: -8)
-                        .padding(.top, 130).padding(.trailing, 12)
+                        .padding(.top, 185).padding(.trailing, 12)
                 }
             }
         }
@@ -283,34 +275,63 @@ struct LibraryShellView: View {
     }
 
     private var gameList: some View {
-        LazyVStack(spacing: 4) {
-            HStack {
-                Text("Game").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Launcher").frame(width: 120, alignment: .leading)
-                Text("State").frame(width: 125, alignment: .leading)
-                Text("Reported size").frame(width: 115, alignment: .trailing)
-            }
-            .font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 12)
-            ForEach(visibleGames) { game in
-                Button { select(game) } label: {
-                    HStack(spacing: 10) {
-                        SteamPortraitCover(game: SteamLibraryGame(installed: game,
-                            environmentID: SteamInstallationRecipe.environmentID), markSize: 14)
-                            .frame(width: 32, height: 48)
-                        Text(game.name).fontWeight(.medium).frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Windows Steam").frame(width: 120, alignment: .leading)
-                        Text(status(game)).frame(width: 125, alignment: .leading)
-                        Text(size(game)).frame(width: 115, alignment: .trailing)
+        Table(visibleGames, selection: $selectedGameID) {
+            TableColumn("Game") { game in
+                HStack(spacing: 8) {
+                    Button { select(game) } label: {
+                        HStack(spacing: 8) {
+                            SteamPortraitCover(game: SteamLibraryGame(installed: game,
+                                environmentID: SteamInstallationRecipe.environmentID), markSize: 14)
+                                .frame(width: 32, height: 48).clipped()
+                            Text(game.name).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
-                    .font(.callout).padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(selectedGameID == game.id ? LibraryVisualStyle.accent.opacity(0.19) : LibraryVisualStyle.panel,
-                                in: RoundedRectangle(cornerRadius: 7))
+                    .buttonStyle(.plain)
+                    .focusable()
+                    .focused($focusedListID, equals: game.id)
+                    .onKeyPress { press in
+                        if (press.key == .return || press.key == .space),
+                           press.modifiers.intersection([.command, .option, .control]).isEmpty {
+                            select(game)
+                            return .handled
+                        }
+                        return moveListSelection(press.key, modifiers: press.modifiers)
+                    }
+                    .accessibilityIdentifier("select-game-\(game.id)")
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
+                    .contextMenu { gameMenu(game) }
+                    Button { toggleFavorite(game) } label: {
+                        Image(systemName: isFavorite(game) ? "star.fill" : "star")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isFavorite(game) ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
+                    .accessibilityIdentifier("favorite-game-\(game.id)")
                 }
-                .buttonStyle(.plain).accessibilityIdentifier("select-game-\(game.id)")
-                .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
-                .contextMenu { gameMenu(game) }
             }
+            .width(min: 145, ideal: 175)
+            TableColumn("Launcher") { _ in Text("Windows Steam").lineLimit(1) }
+                .width(min: 90, ideal: 95)
+            TableColumn("State") { game in Text(status(game)).lineLimit(1) }
+                .width(min: 95, ideal: 105)
+            TableColumn("Reported size") { game in Text(size(game)).lineLimit(1) }
+                .width(min: 90, ideal: 95)
         }
+        .accessibilityIdentifier("library-game-table")
+    }
+
+    private func moveListSelection(_ key: KeyEquivalent, modifiers: EventModifiers) -> KeyPress.Result {
+        guard modifiers.intersection([.command, .option, .control]).isEmpty,
+              let focused = focusedListID, let index = visibleGames.firstIndex(where: { $0.id == focused }) else { return .ignored }
+        let target: Int
+        switch key {
+        case .upArrow: target = index - 1
+        case .downArrow: target = index + 1
+        case .home: target = 0
+        case .end: target = visibleGames.count - 1
+        default: return .ignored
+        }
+        select(visibleGames[min(max(target, 0), visibleGames.count - 1)])
+        return .handled
     }
 
     private var emptyLibrary: some View {
@@ -479,7 +500,12 @@ struct LibraryShellView: View {
         preferences.favorites.contains(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
     }
 
-    private func select(_ game: InstalledSteamGame) { selectedGameID = game.id; inspectorVisible = true }
+    private func select(_ game: InstalledSteamGame) {
+        selectedGameID = game.id
+        searchFocused = false
+        if preferences.viewMode == .list { focusedListID = game.id }
+        inspectorVisible = true
+    }
 
     private func play(_ game: InstalledSteamGame) {
         guard !games.libraryStale else { return }

@@ -3,6 +3,58 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testNativeTableSortsKnownZeroAndUnknownSizesWithoutLosingSelection() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Table fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam, withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        for (appID, title, size, filesPresent) in [(42, "Alpha", nil, true), (43, "Beta", "0", true),
+                                                    (44, "Charlie", "500000", true), (45, "Delta", nil, false)] {
+            if filesPresent {
+                try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/\(title)"), withIntermediateDirectories: true)
+            }
+            let receipt = #""AppState" { "appid" "\#(appID)" "name" "\#(title)" "installdir" "\#(title)" "StateFlags" "4" "SizeOnDisk" "\#(size ?? "")" }"#
+            try Data(receipt.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_\(appID).acf"))
+        }
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.buttons["select-game-42"].waitForExistence(timeout: 20))
+        app.buttons["library-view-list"].click()
+        let table = app.outlines["library-game-table"]
+        XCTAssertTrue(table.waitForExistence(timeout: 10))
+        let rows = table.descendants(matching: .outlineRow)
+        XCTAssertTrue(rows.element(boundBy: 0).buttons["select-game-42"].exists)
+        app.buttons["select-game-43"].click()
+        XCTAssertTrue(app.buttons["launch-game-43"].waitForExistence(timeout: 10))
+        app.typeKey(.downArrow, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-44"].waitForExistence(timeout: 10), "The native table moves selection by row")
+        app.typeKey(.upArrow, modifierFlags: [])
+        XCTAssertTrue(app.buttons["launch-game-43"].waitForExistence(timeout: 10))
+        app.buttons["toggle-inspector"].click()
+        let lastHeader = table.buttons["Reported size"]
+        XCTAssertTrue(lastHeader.exists)
+        XCTAssertLessThanOrEqual(lastHeader.frame.maxX, table.frame.maxX, "All columns fit at compact width")
+        let sort = app.popUpButtons["library-sort"]
+        sort.click(); app.menuItems["Reported size"].click()
+        let compactList = XCTAttachment(screenshot: app.screenshot())
+        compactList.name = "native-library-table-compact"
+        compactList.lifetime = .keepAlways
+        add(compactList)
+        XCTAssertTrue(rows.element(boundBy: 0).buttons["select-game-44"].waitForExistence(timeout: 10))
+        XCTAssertTrue(rows.element(boundBy: 1).buttons["select-game-43"].exists, "A reported zero sorts ahead of unknown sizes")
+        app.buttons["library-view-grid"].click()
+        app.buttons["library-view-list"].click()
+        XCTAssertTrue(rows.element(boundBy: 0).buttons["select-game-44"].waitForExistence(timeout: 10))
+        app.buttons["toggle-inspector"].click()
+        XCTAssertTrue(app.buttons["launch-game-43"].waitForExistence(timeout: 10), "Both views retain the same selected installation")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     func testNativeLibraryShellNavigationNeverLaunchesOnSelection() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)
