@@ -35,6 +35,16 @@ class LocalPackageTests(unittest.TestCase):
                 MODULE.validate_app(app)
             counter.unlink()
             counter.write_bytes(b"counter fixture")
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            icon = app / "Contents/Resources/AppIcon.icns"
+            icon.parent.mkdir()
+            icon.write_bytes(b"icon fixture")
+            with self.assertRaises(ValueError):
+                MODULE.validate_app(app)
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit", "CFBundleExecutable": "Gamekit",
+                               "CFBundleIconFile": "AppIcon"}, handle)
             self.assertEqual(MODULE.validate_app(app)["CFBundleExecutable"], "Gamekit")
 
     def test_refuses_existing_destination_and_wrong_app(self):

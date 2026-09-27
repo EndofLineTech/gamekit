@@ -47,6 +47,9 @@ def validate_app(app):
         info = plistlib.load(handle)
     if info.get("CFBundleIdentifier") != "tech.endofline.gamekit" or info.get("CFBundleExecutable") != "Gamekit":
         raise ValueError("Unexpected application identity")
+    icon = app / "Contents/Resources/AppIcon.icns"
+    if info.get("CFBundleIconFile") != "AppIcon" or icon.is_symlink() or not icon.is_file():
+        raise ValueError("Expected the native Gamekit app icon")
     binary = app / "Contents/MacOS/Gamekit"
     if binary.is_symlink() or not binary.is_file():
         raise ValueError("Expected the native Gamekit executable")

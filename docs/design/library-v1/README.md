@@ -115,6 +115,21 @@ backgrounds. These are concept vectors, not final macOS icon assets. Production
 requires small-size optical refinements, appropriate macOS variants, and a
 current-Xcode/Icon Composer assessment before asset catalog/build integration.
 
+The approved vector now generates the macOS `AppIcon` asset catalog at
+`App/Assets.xcassets/AppIcon.appiconset/`. Regenerate after editing the vector:
+
+```sh
+NODE_PATH="$PWD/.build/wiki-browser/node_modules" \
+  GAMEKIT_DESIGN_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  node tools/generate_app_icon.cjs
+```
+
+Playwright and Chrome are used only to render the checked-in PNGs; neither is
+bundled with the application. Xcode 27 includes Icon Composer, but the approved
+single-layer SVG does not require an Icon Composer document to ship a standard
+macOS asset catalog. Keep the SVG as the source and inspect the built app icon
+at Finder/Dock/Command-Tab sizes in both appearances after building.
+
 ## Verification and remaining design gaps
 
 `capture.cjs` exercises navigation, launcher filtering, search including duplicate
