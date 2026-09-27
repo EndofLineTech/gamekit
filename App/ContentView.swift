@@ -8,26 +8,8 @@ struct ContentView: View {
     @StateObject private var games = InstalledGamesModel()
     @StateObject private var steam = SteamLifecycleModel()
     @StateObject private var installation = SteamInstallationModel()
+    @StateObject private var portraits = SteamPortraitModel()
     @Environment(\.scenePhase) private var scenePhase
-    private let operatingSystem = ProcessInfo.processInfo.operatingSystemVersion
-
-    private var architecture: HostArchitecture {
-        #if arch(arm64)
-        .arm64
-        #elseif arch(x86_64)
-        .x86_64
-        #else
-        .unknown
-        #endif
-    }
-
-    private var hostMatchesScope: Bool {
-        PrototypeHostPolicy.failures(
-            macOSMajorVersion: operatingSystem.majorVersion,
-            architecture: architecture
-        ).isEmpty
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             if let activity = setup.activity {
@@ -37,14 +19,28 @@ struct ContentView: View {
                     Spacer()
                 }.padding(16).background(.quaternary)
             }
-            ScrollView { content }
+            LibraryShellView()
+            if let message = games.message {
+                HStack(spacing: 10) {
+                    Image(systemName: "info.circle")
+                    Text(message).font(.callout).accessibilityIdentifier("persistent-game-status")
+                    Spacer()
+                    Button("Show Windows Steam") {
+                        steam.control(stop: false, diagnostics: diagnostics, setup: setup)
+                    }
+                    .disabled(!(setup.actions.launch || setup.actions.show))
+                }
+                .padding(.horizontal, 18).padding(.vertical, 9)
+                .background(LibraryVisualStyle.panel)
+            }
         }
-        .frame(minWidth: 640, minHeight: 620)
+        .frame(minWidth: 850, minHeight: 620)
         .environmentObject(diagnostics)
         .environmentObject(setup)
         .environmentObject(games)
         .environmentObject(steam)
         .environmentObject(installation)
+        .environmentObject(portraits)
         .task {
             setup.refresh(diagnostics: diagnostics)
             #if DEBUG
@@ -80,50 +76,4 @@ struct ContentView: View {
         }
     }
 
-    private var content: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 16) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable()
-                    .frame(width: 42, height: 42)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Gamekit")
-                        .font(.largeTitle.bold())
-                    Text("Windows Steam on macOS")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("Personal prototype")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
-            }
-
-            Text("Sikarugir Wine 10.0 revision 6 + Apple D3DMetal 4.0b2")
-                .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("runtime-recipe")
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Prototype target: Apple silicon · macOS \(PrototypeHostPolicy.macOSMajorVersion)")
-                    .font(.headline)
-                Label(
-                    hostMatchesScope ? "Host is in prototype scope" : "Host is outside the evaluated scope",
-                    systemImage: hostMatchesScope ? "checkmark.circle" : "info.circle"
-                )
-                .accessibilityIdentifier("host-scope")
-                Text("The checks below inspect Rosetta and the installed runtime. Setup uses a dedicated managed Steam environment.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            SteamLifecycleView()
-            InstalledGamesView()
-            SetupView()
-            EnvironmentSummaryView()
-            SteamInstallationView()
-            DiagnosticsView()
-            Spacer(minLength: 0)
-        }
-        .padding(32)
-    }
 }

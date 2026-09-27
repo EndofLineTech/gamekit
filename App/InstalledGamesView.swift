@@ -7,6 +7,7 @@ final class InstalledGamesModel: ObservableObject {
     @Published private(set) var games: [InstalledSteamGame] = []
     @Published private(set) var refreshing = false
     @Published private(set) var warning: String?
+    @Published private(set) var libraryStale = false
     @Published private(set) var message: String?
     @Published private(set) var pendingGame: UInt32?
     private var launchObservation: Task<Void, Never>?
@@ -22,14 +23,23 @@ final class InstalledGamesModel: ObservableObject {
         do {
             let store = try EnvironmentStore(root: AppStorageLocations.metadata)
             guard let record = try await store.load(SteamInstallationRecipe.environmentID), record.installation == .installed else {
-                games = []; warning = nil; return
+                games = []; warning = nil; libraryStale = false; return
             }
             let service = SteamLibraryService(store: store, layout: setup.layout)
             let result = try await Task.detached(priority: .utility) {
                 try await service.scan()
             }.value
             guard !setup.isBusy, !Task.isCancelled else { return }
-            if games != result.installedGames { games = result.installedGames; namesNeedRefresh = true }
+            libraryStale = result.unreadableManifests > 0
+            var refreshed = result.installedGames
+            if libraryStale {
+                refreshed += games.filter { old in !refreshed.contains(where: { $0.id == old.id }) }
+                refreshed.sort {
+                    let order = $0.name.localizedStandardCompare($1.name)
+                    return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+                }
+            }
+            if games != refreshed { games = refreshed; namesNeedRefresh = true }
             if profileRefresh == nil {
                 let ids = result.games.map(\.id.appID)
                 profileRefresh = Task { [weak self, profiles] in
@@ -58,13 +68,14 @@ final class InstalledGamesModel: ObservableObject {
                 }
             }
         } catch {
-            games = []
-            warning = "The managed game library could not be read. Refresh after checking Steam and the environment."
+            guard !Task.isCancelled else { return }
+            libraryStale = true
+            warning = "The managed game library could not be read. Last known entries are shown without Play or uninstall. Refresh after checking Steam and the environment."
         }
     }
 
     func launch(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
-        guard pendingGame == nil, game.state == .ready, setup.actions.launch || setup.actions.show,
+        guard pendingGame == nil, !libraryStale, game.state == .ready, setup.actions.launch || setup.actions.show,
               let token = setup.begin("Launching \(game.name)") else { return }
         message = "Requesting \(game.name)…"
         Task { [self] in
@@ -111,7 +122,7 @@ final class InstalledGamesModel: ObservableObject {
     }
 
     func uninstall(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
-        guard pendingGame == nil, setup.actions.launch || setup.actions.show,
+        guard pendingGame == nil, !libraryStale, setup.actions.launch || setup.actions.show,
               let token = setup.begin("Requesting uninstall for \(game.name)") else { return }
         message = "Opening uninstall for \(game.name) in Windows Steam…"
         Task { [self] in
