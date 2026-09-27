@@ -818,6 +818,12 @@ final class GamekitUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         app.activate()
+        // Reset requires a settled prerequisite/metadata snapshot. On a fresh
+        // macOS runner the first sidebar click can race the startup refresh.
+        let startupFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: app.staticTexts["operation-status"])
+        XCTAssertEqual(XCTWaiter.wait(for: [startupFinished], timeout: 45), .completed,
+                       "Wait for the initial checks before entering the reset flow")
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Disposable clean reset"].waitForExistence(timeout: 15))
         showResetOptions(in: app)
