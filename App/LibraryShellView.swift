@@ -254,10 +254,10 @@ struct LibraryShellView: View {
             .overlay(alignment: .trailing) {
                 if inspectorVisible && geometry.size.width < 920 {
                     inspector
-                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 185))
+                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 155))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(color: .black.opacity(0.35), radius: 20, x: -8)
-                        .padding(.top, 185).padding(.trailing, 12)
+                        .padding(.top, 130).padding(.trailing, 12)
                 }
             }
         }
