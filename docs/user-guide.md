@@ -64,7 +64,7 @@ bar shows the current stage, with no invented progress percentages.
 ## Everyday use
 
 The sidebar opens to **All Installed Games** on every app launch. Switch between
-box-art grid and list using the toolbar buttons; selection, search and filters
+box-art grid and native table using the toolbar buttons; selection, search and filters
 are shared. The toolbar Sort menu can order by name, launcher, state or
 Steam-reported size (unknown sizes sort last). Use the **Favorites** sidebar
 destination and the star in a cover's upper-right corner to keep a local list.
@@ -72,15 +72,30 @@ Only managed Windows Steam is a configured launcher in this version. The
 original, transparent source glyph at a cover's upper-left is accompanied by
 the text **Windows Steam** below it. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
+The original game-case app icon comes from the approved
+[editable SVG](design/library-v1/icon-case.svg); its asset-generation instructions
+are in the [design README](design/library-v1/README.md#icon-review).
+Use arrow keys to move between focused covers or adjacent table rows; Home/End
+move to the first/last game. Return or Space selects and opens the inspector;
+movement alone does not start a game. **Command-F** enters library search, and
+Escape collapses the inspector. Clicking a title or row once also selects;
+double-clicking a ready title requests Play once.
 
 **Settings…** (Command-comma) replaces the sidebar with **General**, **Game
 defaults**, **Runtime** and **Storage**. **Back to Launchers** opens launcher
-management. Shared graphics and fullscreen-Space defaults are under **Game
-defaults**; prerequisite/runtime checks and rollback are under **Runtime**;
+management. Its category sidebar appears even if you previously hid the library
+sidebar; collapsing Settings does not change the saved library preference, and
+Back to Launchers stays in the toolbar. Shared graphics and fullscreen-Space
+defaults are under **Game defaults**; prerequisite/runtime checks and rollback
+are under **Runtime**;
 archive/cache inspection and the steamapps Finder shortcut are under **Storage**.
 Steam setup/recovery and Launch/Show/Stop are under **Launchers**; logs and safe
-exports are under **Diagnostics**. Changing destinations does not stop Steam or
-cancel a launch being observed.
+exports are under **Diagnostics**. Successful managed Steam setup returns from
+Launchers to the library; if it is empty, install games within Windows Steam.
+Changing destinations does not stop Steam or cancel a launch being observed.
+Setup, library and Steam status remain visible near their controls and in the
+window status area. **Diagnostics** beside a status routes to the related local
+operation when one was recorded, without putting raw logs in the library.
 
 ### Debug capture
 
@@ -194,12 +209,17 @@ are missing, or if Steam has not recorded a valid size. It is not a measurement
 of saves, shader caches or other files outside the game directory. The list
 refreshes every three seconds, when Gamekit becomes active, or with **Refresh**.
 On a library read error, last-known entries may remain visible as stale, but
-Play and uninstall stay disabled until a successful refresh. Uninstalled titles
-disappear after a complete scan.
+Play, uninstall and file-reveal actions stay disabled until a successful refresh.
+Use **View diagnostics** for further context. Uninstalled titles disappear after
+a complete scan.
 
 **Open steamapps folder** under **Settings → Storage** opens the managed Windows
 Steam library directory in Finder. Installed game files are under its `common`
 subfolder. Windows Steam does not need to be running to use this button.
+For a ready individual game, **Open game files in Finder** in its inspector or
+context menu rechecks the current managed manifest and folder first. Per-game
+graphics and fullscreen-Space choices are summarized as **next launch** values
+in the inspector; **All compatibility settings…** opens the full editable sheet.
 
 To uninstall, select the game and click **Uninstall…** in its inspector (or use
 the game's context menu), then choose **Continue in Windows Steam**. Steam opens
