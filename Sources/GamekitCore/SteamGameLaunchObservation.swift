@@ -123,6 +123,12 @@ public actor SteamGameLaunchObservation {
     }
 
     #if DEBUG
+    public static func hasUIFixtureMarker(at root: URL) -> Bool {
+        guard let directory = try? ManagedDirectory.openRoot(root, create: false),
+              let marker = try? directory.read("UIFixtureLaunch.marker") else { return false }
+        return marker == Data("queued-game-launch-fixture-v1".utf8)
+    }
+
     /// Isolated native UI fixtures exercise the real bounded log parser and
     /// observation loop without dispatching Wine or touching a user's Steam.
     public static func uiFixture(appID: UInt32, logDirectory: URL) throws -> SteamGameLaunchObservation {

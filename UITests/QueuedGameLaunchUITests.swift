@@ -12,6 +12,7 @@ final class QueuedGameLaunchUITests: XCTestCase {
         let id = SteamInstallationRecipe.environmentID
         _ = try await store.create(.init(id: id, name: "Pending game fixture", runtime: RuntimeProfile.sikarugir.identity,
                                          installation: .installed, installationRecipeVersion: 1))
+        try Data("queued-game-launch-fixture-v1".utf8).write(to: root.appendingPathComponent("UIFixtureLaunch.marker"))
         let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
         try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
@@ -31,11 +32,17 @@ final class QueuedGameLaunchUITests: XCTestCase {
         let play = app.buttons["launch-game-42"]
         XCTAssertTrue(play.waitForExistence(timeout: 10))
         let canPlay = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: play)
-        XCTAssertEqual(XCTWaiter.wait(for: [canPlay], timeout: 20), .completed)
+        guard XCTWaiter.wait(for: [canPlay], timeout: 20) == .completed else {
+            XCTFail("The isolated game never became launchable: \(play.debugDescription)")
+            return
+        }
         play.click()
         let status = app.staticTexts["persistent-game-status"]
         let pending = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Waiting for Steam to acknowledge"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [pending], timeout: 15), .completed)
+        guard XCTWaiter.wait(for: [pending], timeout: 15) == .completed else {
+            XCTFail("Queued launch status never appeared: \(status.debugDescription)")
+            return
+        }
         XCTAssertFalse(play.isEnabled, "A pending observation cannot send Play again")
 
         app.buttons["library-view-list"].click()

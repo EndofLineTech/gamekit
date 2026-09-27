@@ -20,8 +20,7 @@ enum AppStorageLocations {
               let scenarioIndex = arguments.firstIndex(of: "--ui-test-scenario"), arguments.indices.contains(scenarioIndex + 1),
               arguments[scenarioIndex + 1] == "queued-game-launch" else { return nil }
         let root = URL(fileURLWithPath: arguments[rootIndex + 1], isDirectory: true).standardizedFileURL
-        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"
-        return root.path.hasPrefix(temporary) ? root : nil
+        return SteamGameLaunchObservation.hasUIFixtureMarker(at: root) ? root : nil
     }
     #endif
     private static func override(_ flag: String) -> URL? {
