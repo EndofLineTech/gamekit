@@ -32,14 +32,16 @@ final class QueuedGameLaunchUITests: XCTestCase {
         let play = app.buttons["launch-game-42"]
         XCTAssertTrue(play.waitForExistence(timeout: 10))
         let canPlay = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: play)
-        guard XCTWaiter.wait(for: [canPlay], timeout: 20) == .completed else {
+        await fulfillment(of: [canPlay], timeout: 20)
+        guard play.isEnabled else {
             XCTFail("The isolated game never became launchable: \(play.debugDescription)")
             return
         }
         play.click()
         let status = app.staticTexts["persistent-game-status"]
         let pending = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Waiting for Steam to acknowledge"), object: status)
-        guard XCTWaiter.wait(for: [pending], timeout: 15) == .completed else {
+        await fulfillment(of: [pending], timeout: 15)
+        guard (status.value as? String)?.contains("Waiting for Steam to acknowledge") == true else {
             XCTFail("Queued launch status never appeared: \(status.debugDescription)")
             return
         }
@@ -63,7 +65,8 @@ final class QueuedGameLaunchUITests: XCTestCase {
         try handle.write(contentsOf: Data("[2026-09-27 00:00:01] GameAction [AppID 42, ActionID 1] : LaunchApp waiting for user response to SynchronizingCloud fixture\n".utf8))
         try handle.close()
         let attention = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Steam Cloud needs your attention"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [attention], timeout: 10), .completed)
+        await fulfillment(of: [attention], timeout: 10)
+        XCTAssertTrue((status.value as? String)?.contains("Steam Cloud needs your attention") == true)
         XCTAssertFalse(play.isEnabled, "Gamekit leaves the Cloud decision to the user")
 
         let finished = try FileHandle(forWritingTo: log)
@@ -71,7 +74,8 @@ final class QueuedGameLaunchUITests: XCTestCase {
         try finished.write(contentsOf: Data("[2026-09-27 00:00:02] Game process added : AppID 42 fixture\n".utf8))
         try finished.close()
         let created = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Steam created a game process"), object: status)
-        XCTAssertEqual(XCTWaiter.wait(for: [created], timeout: 10), .completed)
+        await fulfillment(of: [created], timeout: 10)
+        XCTAssertTrue((status.value as? String)?.contains("Steam created a game process") == true)
         let summaries = try await DiagnosticStore(base: parent.appendingPathComponent("GamekitLogs")).summaries()
         XCTAssertEqual(summaries.filter { $0.stage == .launch && $0.component == .steam }.count, 1,
                        "Selection, navigation and Cloud attention cannot generate another request")
