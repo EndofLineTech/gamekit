@@ -55,8 +55,9 @@ final class InstalledGamesModel: ObservableObject {
                 message = "\(requested.name) is no longer listed as installed in Windows Steam."
                 requestedUninstall = nil
             }
-            warning = result.unreadableManifests == 0 ? nil :
-                "\(result.unreadableManifests) Steam installation records could not be read. Let Steam finish its changes, then refresh."
+            let unreadable = result.unreadableManifests
+            warning = unreadable == 0 ? nil :
+                "\(unreadable) Steam installation \(unreadable == 1 ? "record" : "records") could not be read. Let Steam finish its changes, then refresh."
             if namesNeedRefresh {
                 do {
                     try await SteamLifecycle(store: store, layout: setup.layout).refreshGameNames()
