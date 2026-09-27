@@ -1,8 +1,8 @@
 # Installed Windows Steam games
 
-User-requested feature `gamekit-cmm`, introduced while starting E6.2. The native
-list reads the registered managed Windows Steam environment; gameplay evaluation
-remains a separate outcome.
+The native **All Installed Games** grid and table read the registered managed
+Windows Steam environment. Selection, installation evidence and gameplay
+evaluation remain separate outcomes.
 
 ## Detection contract
 
@@ -21,11 +21,13 @@ Steamworks Common Redistributables (228980) are omitted.
 - Descriptor-relative reads refuse symlinked roots, directories and manifests.
   Manifests are bounded to 1 MiB, nesting to 16 levels, and a scan to 512 ACF
   entries. Duplicate keys and malformed input are rejected. Individual bad
-  records produce a visible count while valid records remain available; an
-  unreadable library clears the list and reports the problem.
-- The native model scans off the main actor every three seconds, on app activation
-  and on explicit refresh. It pauses while a shared operation is active. Names
-  sort naturally, and removal of a manifest removes the corresponding tile.
+  records produce a warning while valid records remain available. The window
+  retains last-known entries on an unreadable or partially unreadable scan, marks
+  the library stale, and disables Play/uninstall until a successful full scan.
+- The window-owned model scans off the main actor every three seconds, on app
+  activation and on explicit refresh. It pauses while a shared operation is
+  active. A complete scan removes uninstalled entries; a temporarily unreadable
+  manifest does not discard its last-known selection.
 - A tile shows Steam's `SizeOnDisk` receipt value as a formatted, decimal byte
   count for complete installs whose game directory exists. Missing, invalid or
   out-of-range sizes and incomplete/missing-file installs show **unavailable**.
@@ -35,18 +37,32 @@ Steamworks Common Redistributables (228980) are omitted.
 
 ## Artwork and interaction
 
-Tiles contain a game title, installation state, Steam-reported size, header image
-and play symbol, with a named accessible button and native keyboard focus. Images
-are decorative to accessibility because the button already names the game.
+The art-led grid uses 2:3 portrait covers, readable titles, Windows Steam source
+text, installation status, Steam-reported size and a separate favorite control.
+The native table shows a compact portrait beside title, source, state and size.
+The upper-left artwork mark is an original transparent managed-window glyph,
+**not** the Valve logo. A single click selects and opens the inspector; Play is
+an explicit button or ready-game double-click. Moving focus with arrows or
+Home/End never sends Play; Return/Space selects a focused item. Search, source,
+installation filters, favorites and deterministic sorting are shared across
+both views. Unknown sizes sort after known sizes, including known zero.
 
-Artwork is read from `appcache/librarycache/<AppID>/header.jpg`, falling back to
-the older `<AppID>_header.jpg` cache naming. Each local image read is bounded to
-256 KiB and uses the same no-follow file access. Missing, oversized or undecodable
-artwork falls back to an HTTPS request for
-`https://cdn.akamai.steamstatic.com/steam/apps/<AppID>/header.jpg`. Only a numeric
-AppID selects the remote resource; manifests cannot supply arbitrary URLs. A
-controller symbol plus title remains usable when artwork cannot load. Remote
-artwork uses the platform image loader and its normal caching behavior.
+Portraits are read separately from Steam's landscape headers, from
+`appcache/librarycache/<AppID>/library_600x900.jpg` or the flat cache naming,
+with no-follow reads bounded to 1 MiB. Missing or invalid local art may load
+from the fixed numeric-AppID-only Steam CDN portrait URL. The shared portrait
+cache bounds concurrent downloads, decoded dimensions and retained entries;
+failure or offline access leaves the original title fallback and never blocks
+Play. Legacy `header.jpg` artwork remains separate and is never stretched into
+a portrait.
+
+The inspector reads effective shared and per-game graphics/Space choices for
+the **next** launch. The full compatibility sheet retains profile source,
+import/export/update, explicit overrides (including Off), cursor-guard and
+profile-gated options. A ready game's **Open game files in Finder** action
+rechecks the manifest and directory under the managed prefix before opening
+Finder; unavailable, stale or redirected locations are not offered. Gamekit
+does not expose per-game Stop without an authoritative owned-game control.
 
 ## Launch contract
 
@@ -76,11 +92,14 @@ launch route.
 
 ## Verification
 
-Core regressions cover nested/escaped KeyValues, ambiguous/malformed/oversized
-records, AppID mismatches, installation flags, reported sizes, missing directories,
-redirected paths, local artwork, uninstall refresh and scoped launch dispatch/refusal.
-Native UI regression covers named game tiles, prerequisite gating and disappearance
-after uninstall. Read-only real-library inspection can be run with:
+Core regressions cover nested/escaped KeyValues, malformed/oversized records,
+AppID mismatches, installation flags, reported sizes, missing directories,
+redirected paths, bounded portrait artwork, safe Finder folder resolution,
+uninstall refresh and scoped launch dispatch/refusal. Synthetic libraries
+exercise 512 manifest scans and 128-title native search/sort/stale retention
+without touching a user's games. Native UI regressions cover grid/table keyboard
+selection, filters, favorites, readiness gating and disappearance after uninstall.
+Read-only real-library inspection can be run with:
 
 ```bash
 GAMEKIT_LIBRARY_INSPECTION=1 swift test --filter SteamGameLibraryTests.liveLibrary

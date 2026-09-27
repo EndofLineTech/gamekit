@@ -159,6 +159,43 @@ struct SteamGameLibraryTests {
         #expect(throws: SteamGameLibraryError.invalidManifest) { try SteamKeyValues.parse(Data(nested.utf8)) }
     }
 
+    @Test("Maximum-size synthetic library keeps identity, degraded states and bounded scan cost observable")
+    func largeLibrary() throws {
+        let fixture = try GameLibraryFixture(); defer { fixture.remove() }
+        let count = 512
+        for index in 0..<count {
+            let id = String(100_000 + index)
+            let name = index.isMultiple(of: 8) ? "Shared title" : "Fixture \(index)"
+            try fixture.manifest(id, name: name, flags: index.isMultiple(of: 7) ? "1026" : "4",
+                                 directory: "entry-\(index)", createFiles: !index.isMultiple(of: 11),
+                                 sizeOnDisk: index.isMultiple(of: 5) ? nil : String(index * 1024))
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        let first = try SteamGameLibrary.scan(prefix: fixture.prefix)
+        let firstScan = started.duration(to: clock.now)
+        #expect(first.games.count == count && first.unreadableManifests == 0)
+        #expect(Set(first.games.map(\.id)).count == count)
+        #expect(first.games.contains(where: { $0.state == .ready && $0.sizeOnDiskBytes != nil }))
+        #expect(first.games.contains(where: { $0.state == .updating && $0.sizeOnDiskBytes == nil }))
+        #expect(first.games.contains(where: { $0.state == .missingFiles && $0.sizeOnDiskBytes == nil }))
+        let second = try SteamGameLibrary.scan(prefix: fixture.prefix)
+        let secondScan = started.duration(to: clock.now) - firstScan
+        #expect(first.games.map(\.id) == second.games.map(\.id))
+        let sortStarted = clock.now
+        let sorted = LibrarySortOrder.reportedSize.sorted(second.games)
+        let sortTime = sortStarted.duration(to: clock.now)
+        #expect(sorted.first?.sizeOnDiskBytes != nil && sorted.last?.sizeOnDiskBytes == nil)
+        print("Synthetic 512-manifest scan: first=\(firstScan), repeat=\(secondScan), reported-size sort=\(sortTime)")
+
+        // An unreadable receipt is a warning, not an empty library or removal
+        // of the other known installations. UI stale retention is tested apart.
+        try Data("incomplete".utf8).write(to: fixture.steam.appendingPathComponent("steamapps/appmanifest_100000.acf"))
+        let degraded = try SteamGameLibrary.scan(prefix: fixture.prefix)
+        #expect(degraded.games.count == count - 1 && degraded.unreadableManifests == 1)
+        #expect(degraded.games.contains(where: { $0.id == 100_001 }))
+    }
+
     @Test("An AppID mismatch is rejected and a new download does not need a common directory")
     func mismatchedIdentity() throws {
         let fixture = try GameLibraryFixture(); defer { fixture.remove() }
