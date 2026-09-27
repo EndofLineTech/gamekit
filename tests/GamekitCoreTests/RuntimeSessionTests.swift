@@ -70,6 +70,15 @@ private struct SessionFixture: Sendable {
         }
         try? FileManager.default.removeItem(at: parent)
     }
+
+    func completeSnapshot(of session: RuntimeSession) async throws -> RuntimeProcessSnapshot {
+        for attempt in 0..<5 {
+            let result = try await session.snapshot()
+            if result.complete { return result }
+            if attempt < 4 { try await Task.sleep(for: .milliseconds(80)) }
+        }
+        throw RuntimeSessionError.observationUnavailable
+    }
 }
 
 @Suite("Managed Wine session ownership")
@@ -109,13 +118,13 @@ struct RuntimeSessionTests {
         let second = try await RuntimeSession.startFixture(store: fixture.store, id: fixture.records[1].id, layout: fixture.layout, arguments: ["handoff"])
         #expect(await first.command.result().termination == .exited(0))
         #expect(await second.command.result().termination == .exited(0))
-        let snapshot = try await first.snapshot()
+        let snapshot = try await fixture.completeSnapshot(of: first)
         #expect(snapshot.complete)
         #expect(snapshot.processes.count == 1)
         #expect(snapshot.processes.allSatisfy { $0.identity.pid != first.command.pid && $0.sessionID == first.sessionID })
         _ = try await first.stop()
-        #expect(try await first.snapshot().processes.isEmpty)
-        #expect(try await second.snapshot().processes.count == 1)
+        #expect(try await fixture.completeSnapshot(of: first).processes.isEmpty)
+        #expect(try await fixture.completeSnapshot(of: second).processes.count == 1)
         _ = try await second.stop()
     }
 
