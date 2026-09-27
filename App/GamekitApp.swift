@@ -31,4 +31,5 @@ struct GamekitApp: App {
 
 extension Notification.Name {
     static let gamekitOpenSettings = Notification.Name("GamekitOpenSettings")
+    static let gamekitOpenDiagnostics = Notification.Name("GamekitOpenDiagnostics")
 }

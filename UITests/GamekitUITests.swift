@@ -860,6 +860,36 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(String(decoding: exported, as: UTF8.self).contains("PRIVATE_UI_DIAGNOSTIC"))
     }
 
+    func testUnreadableLibraryKeepsSelectionAndRoutesToDiagnostics() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Library warning fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "4" }"#.utf8)
+            .write(to: steam.appendingPathComponent("steamapps/appmanifest_42.acf"))
+        try Data("invalid receipt".utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_43.acf"))
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        let warning = app.staticTexts["persistent-library-warning"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 20))
+        let tile = app.buttons["select-game-42"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        tile.click()
+        XCTAssertFalse(app.buttons["launch-game-42"].isEnabled, "Unreadable records make the library stale")
+        app.buttons["library-diagnostics-link"].click()
+        XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
+        XCTAssertTrue(warning.exists, "The actionable warning must survive navigation")
+        app.buttons["library-all"].click()
+        XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["launch-game-42"].exists, "The selected installation survives diagnostics routing")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     private func temporaryRoot() throws -> URL {
         let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
