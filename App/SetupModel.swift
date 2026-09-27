@@ -167,7 +167,7 @@ final class SetupModel: ObservableObject {
         case "missing-rosetta": missing = .rosetta
         case "low-disk": missing = .diskSpace
         case "invalid-runtime": missing = .runtime
-        case "ready", "ready-with-delay": missing = nil
+        case "ready", "ready-with-delay", "queued-game-launch": missing = nil
         case "ready-after-refresh": missing = fixtureReads == 1 ? .rosetta : nil
         default: return nil
         }

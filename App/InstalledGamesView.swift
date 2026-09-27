@@ -85,7 +85,21 @@ final class InstalledGamesModel: ObservableObject {
             lastDiagnosticID = operation?.id
             do {
                 let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
-                let observation = try await service.launch(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
+                let observation: SteamGameLaunchObservation
+                #if DEBUG
+                if let root = AppStorageLocations.queuedLaunchFixtureRoot {
+                    let fresh = try await service.scan()
+                    guard fresh.unreadableManifests == 0,
+                          fresh.installedGames.contains(where: { $0.id == game.id && $0.state == .ready })
+                    else { throw SteamGameLibraryError.notInstalled }
+                    observation = try SteamGameLaunchObservation.uiFixture(appID: game.id,
+                        logDirectory: root.appendingPathComponent("UIFixtureLaunch", isDirectory: true))
+                } else {
+                    observation = try await service.launch(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
+                }
+                #else
+                observation = try await service.launch(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
+                #endif
                 diagnostics.captureGameIfEnabled(game, layout: setup.layout)
                 watch(observation, game: game)
                 if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }

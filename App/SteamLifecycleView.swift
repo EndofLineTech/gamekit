@@ -25,6 +25,13 @@ final class SteamLifecycleModel: ObservableObject {
     func refresh(setup: SetupModel) async {
         guard !busy, !setup.isBusy else { return }
         do {
+            #if DEBUG
+            if AppStorageLocations.queuedLaunchFixtureRoot != nil {
+                state = .stopped
+                await setup.refreshFacts(lifecycle: .stopped)
+                return
+            }
+            #endif
             let observed = try await controller(layout: setup.layout).status()
             guard !busy, !setup.isBusy else { return }
             state = observed
