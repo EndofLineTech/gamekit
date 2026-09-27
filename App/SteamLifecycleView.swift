@@ -6,6 +6,7 @@ final class SteamLifecycleModel: ObservableObject {
     @Published var state: SteamLifecycleState = .unverified
     @Published var busy = false
     @Published var message: String?
+    @Published private(set) var lastDiagnosticID: UUID?
     private var lifecycle: SteamLifecycle?
     private var selectedBundle: URL?
     private var selectedRevision: RuntimeRevision?
@@ -28,7 +29,7 @@ final class SteamLifecycleModel: ObservableObject {
             guard !busy, !setup.isBusy else { return }
             state = observed
             await setup.refreshFacts(lifecycle: observed)
-        } catch { state = .unverified; message = AppFailure.message(error) }
+        } catch { state = .unverified; lastDiagnosticID = nil; message = AppFailure.message(error) }
     }
     func control(stop: Bool, diagnostics: AppDiagnosticsModel, setup: SetupModel) {
         guard !busy, stop ? setup.actions.stop : (setup.actions.launch || setup.actions.show),
@@ -37,6 +38,7 @@ final class SteamLifecycleModel: ObservableObject {
         message = stop ? "Requesting shutdown; forced stop follows after 30 seconds if needed…" : "Starting managed Windows Steam…"
         Task { [self] in
             let operation = try? await diagnostics.store?.begin(stage: stop ? .shutdown : .launch, context: .init(component: .steam))
+            lastDiagnosticID = operation?.id
             do {
                 if stop {
                     switch try await controller(layout: setup.layout).stop() {
@@ -84,7 +86,14 @@ struct SteamLifecycleView: View {
                         .disabled(model.busy || !setup.actions.stop).accessibilityIdentifier("stop-steam")
                         .keyboardShortcut("s", modifiers: [.command, .shift])
                 }
-                if let message = model.message { Text(message).font(.callout) }
+                if let message = model.message {
+                    HStack {
+                        Text(message).font(.callout)
+                        Spacer()
+                        Button("View diagnostics") { diagnostics.open(operationID: model.lastDiagnosticID) }
+                        .accessibilityIdentifier("steam-diagnostics-link")
+                    }
+                }
                 if model.state == .unverified { Text("Status is not verified. Refresh prerequisites and review the selected runtime before continuing.").font(.caption) }
                 Text("Quit Gamekit to leave Steam and games running. Stop waits up to 30 seconds before forcing Steam and games in the managed environment to close.")
                     .font(.caption).foregroundStyle(.secondary)

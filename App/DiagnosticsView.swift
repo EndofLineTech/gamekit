@@ -17,11 +17,19 @@ private struct DiagnosticExportDocument: FileDocument {
 struct DiagnosticsView: View {
     @EnvironmentObject private var model: AppDiagnosticsModel
     @State private var summaries: [DiagnosticSummary] = []
+    @State private var hasLoadedSummaries = false
     @State private var errorMessage: String?
     @State private var exporting = false
     @State private var exportDocument = DiagnosticExportDocument(data: Data())
     @State private var localOutput: DiagnosticLocalOutput?
     @State private var showingOutput = false
+
+    private var orderedSummaries: [DiagnosticSummary] {
+        guard let id = model.requestedOperationID, let index = summaries.firstIndex(where: { $0.id == id }) else { return summaries }
+        var ordered = summaries
+        ordered.insert(ordered.remove(at: index), at: 0)
+        return ordered
+    }
 
     var body: some View {
         GroupBox {
@@ -50,11 +58,19 @@ struct DiagnosticsView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.secondary) }
+                if hasLoadedSummaries, let id = model.requestedOperationID, !summaries.contains(where: { $0.id == id }) {
+                    Text("The related operation is not in local diagnostics. Recent summaries and environment details remain available below.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 if summaries.isEmpty {
                     Text("No recorded operations yet.").foregroundStyle(.secondary)
                 }
-                ForEach(summaries) { summary in
+                ForEach(orderedSummaries) { summary in
                     VStack(alignment: .leading, spacing: 6) {
+                        if summary.id == model.requestedOperationID {
+                            Label("Related operation", systemImage: "arrow.turn.down.right")
+                                .foregroundStyle(.secondary).accessibilityIdentifier("related-diagnostic-operation")
+                        }
                         Text("\(summary.stage.rawValue) · \(summary.component.rawValue) · \(summary.category.rawValue)")
                             .font(.subheadline.weight(.semibold))
                         Text(summary.recommendation).font(.caption).foregroundStyle(.secondary)
@@ -98,14 +114,15 @@ struct DiagnosticsView: View {
     }
 
     private func reload() async {
-        guard let store = model.store else { errorMessage = "Diagnostics storage is unavailable."; return }
+        guard let store = model.store else { errorMessage = "Diagnostics storage is unavailable."; hasLoadedSummaries = true; return }
         do {
             let loaded = try await store.summaries()
             try Task.checkCancellation()
-            summaries = loaded; errorMessage = nil
+            summaries = loaded; hasLoadedSummaries = true; errorMessage = nil
         } catch is CancellationError {} catch {
             guard !Task.isCancelled else { return }
             errorMessage = "Recorded diagnostics could not be read; files were preserved."
+            hasLoadedSummaries = true
         }
     }
     private func showLocal(_ id: UUID) async {

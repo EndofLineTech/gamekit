@@ -20,6 +20,12 @@ struct ContentView: View {
                 }.padding(16).background(.quaternary)
             }
             LibraryShellView()
+            if let problem = setup.problem {
+                statusBanner(problem, symbol: "exclamationmark.triangle", identifier: "persistent-setup-error")
+            }
+            if let warning = games.warning {
+                statusBanner(warning, symbol: "exclamationmark.triangle", identifier: "persistent-library-warning")
+            }
             if let message = games.message {
                 HStack(spacing: 10) {
                     Image(systemName: "info.circle")
@@ -29,9 +35,15 @@ struct ContentView: View {
                         steam.control(stop: false, diagnostics: diagnostics, setup: setup)
                     }
                     .disabled(!(setup.actions.launch || setup.actions.show))
+                    Button("Diagnostics") { diagnostics.open(operationID: games.lastDiagnosticID) }
+                        .accessibilityIdentifier("game-diagnostics-link")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 9)
                 .background(LibraryVisualStyle.panel)
+            }
+            if let message = steam.message {
+                statusBanner(message, symbol: "info.circle", identifier: "persistent-steam-status",
+                             operationID: steam.lastDiagnosticID)
             }
         }
         .frame(minWidth: 850, minHeight: 620)
@@ -74,6 +86,18 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await games.refresh(setup: setup) } }
         }
+    }
+
+    private func statusBanner(_ message: String, symbol: String, identifier: String, operationID: UUID? = nil) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).accessibilityHidden(true)
+            Text(message).font(.callout).frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier(identifier)
+            Button("Diagnostics") { diagnostics.open(operationID: operationID) }
+                .accessibilityIdentifier("\(identifier)-diagnostics")
+        }
+        .padding(.horizontal, 18).padding(.vertical, 9)
+        .background(LibraryVisualStyle.panel)
     }
 
 }
