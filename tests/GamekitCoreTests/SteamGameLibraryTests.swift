@@ -11,9 +11,9 @@ private struct GameLibraryFixture {
         try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common"), withIntermediateDirectories: true)
     }
     func remove() { try? FileManager.default.removeItem(at: prefix) }
-    func manifest(_ id: String = "413150", flags: String = "4", directory: String = "Stardew Valley", createFiles: Bool = true, sizeOnDisk: String? = nil) throws {
+    func manifest(_ id: String = "413150", name: String = "Stardew Valley", flags: String = "4", directory: String = "Stardew Valley", createFiles: Bool = true, sizeOnDisk: String? = nil) throws {
         let size = sizeOnDisk.map { "\"SizeOnDisk\" \"\($0)\"" } ?? ""
-        let text = "\"AppState\" { \"appid\" \"\(id)\" \"name\" \"Stardew Valley\" \"StateFlags\" \"\(flags)\" \"installdir\" \"\(directory)\" \"buildid\" \"16826371\" \(size) \"InstalledDepots\" { \"413151\" { \"manifest\" \"4278718763097142923\" } } }"
+        let text = "\"AppState\" { \"appid\" \"\(id)\" \"name\" \"\(name)\" \"StateFlags\" \"\(flags)\" \"installdir\" \"\(directory)\" \"buildid\" \"16826371\" \(size) \"InstalledDepots\" { \"413151\" { \"manifest\" \"4278718763097142923\" } } }"
         try Data(text.utf8).write(to: steam.appendingPathComponent("steamapps/appmanifest_\(id).acf"))
         if createFiles { try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/\(directory)"), withIntermediateDirectories: true) }
     }
@@ -21,6 +21,55 @@ private struct GameLibraryFixture {
 
 @Suite("Installed Windows Steam games")
 struct SteamGameLibraryTests {
+    @Test("Presentation IDs distinguish same-title Steam installations and survive a new scan")
+    func presentationIdentity() throws {
+        let fixture = try GameLibraryFixture(); defer { fixture.remove() }
+        try fixture.manifest("111", name: "Shared title", directory: "first")
+        try fixture.manifest("222", name: "Shared title", directory: "second")
+        let environment = try EnvironmentID("windows-steam")
+        let entries = try SteamGameLibrary.scan(prefix: fixture.prefix).games.map {
+            SteamLibraryGame(installed: $0, environmentID: environment)
+        }
+        #expect(entries.count == 2)
+        #expect(entries[0].title == entries[1].title)
+        #expect(entries[0].id != entries[1].id)
+        #expect(Set(entries.map(\.id)).count == 2)
+        #expect(entries[0].source == .windowsSteam)
+        #expect(entries[0].state == .ready)
+        #expect(entries[0].reportedSizeBytes == nil)
+        #expect(entries.map(\.id) == (try SteamGameLibrary.scan(prefix: fixture.prefix).games.map {
+            SteamLibraryGame(installed: $0, environmentID: environment).id
+        }))
+        #expect(SteamGameInstallationID(environmentID: try EnvironmentID("another-steam"), appID: 111) != entries[0].id)
+        let encoded = try JSONEncoder().encode(entries[0].id)
+        #expect(String(decoding: encoded, as: UTF8.self).contains("windows-steam"))
+        #expect(!String(decoding: encoded, as: UTF8.self).contains("first"))
+        #expect(try JSONDecoder().decode(SteamGameInstallationID.self, from: encoded) == entries[0].id)
+    }
+
+    @Test("Presentation preserves reported bytes, header and incomplete or missing-file states")
+    func presentationState() throws {
+        let fixture = try GameLibraryFixture(); defer { fixture.remove() }
+        let environment = try EnvironmentID("steam")
+        try fixture.manifest(sizeOnDisk: "0")
+        let cache = fixture.steam.appendingPathComponent("appcache/librarycache/413150")
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: cache.appendingPathComponent("header.jpg"))
+        func entry() throws -> SteamLibraryGame {
+            SteamLibraryGame(installed: try #require(SteamGameLibrary.scan(prefix: fixture.prefix).games.first), environmentID: environment)
+        }
+        let ready = try entry()
+        #expect(ready.reportedSizeBytes == 0)
+        #expect(ready.landscapeHeader == Data([1, 2, 3]))
+        try fixture.manifest(flags: "1026", sizeOnDisk: "100")
+        let updating = try entry()
+        #expect(updating.id == ready.id && updating.state == .updating && updating.reportedSizeBytes == nil)
+        try fixture.manifest(flags: "4", createFiles: false, sizeOnDisk: "100")
+        try FileManager.default.removeItem(at: fixture.steam.appendingPathComponent("steamapps/common/Stardew Valley"))
+        let missing = try entry()
+        #expect(missing.id == ready.id && missing.state == .missingFiles && missing.reportedSizeBytes == nil)
+    }
+
     @Test("Discovers installed game identity and local artwork, then reflects uninstall")
     func installedAndRemoved() throws {
         let fixture = try GameLibraryFixture(); defer { fixture.remove() }
