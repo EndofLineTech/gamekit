@@ -13,6 +13,17 @@ enum AppStorageLocations {
         }
         return DiagnosticStore.defaultBase
     }
+    #if DEBUG
+    static var queuedLaunchFixtureRoot: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let rootIndex = arguments.firstIndex(of: "--metadata-root"), arguments.indices.contains(rootIndex + 1),
+              let scenarioIndex = arguments.firstIndex(of: "--ui-test-scenario"), arguments.indices.contains(scenarioIndex + 1),
+              arguments[scenarioIndex + 1] == "queued-game-launch" else { return nil }
+        let root = URL(fileURLWithPath: arguments[rootIndex + 1], isDirectory: true).standardizedFileURL
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"
+        return root.path.hasPrefix(temporary) ? root : nil
+    }
+    #endif
     private static func override(_ flag: String) -> URL? {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments

@@ -87,7 +87,7 @@ final class InstalledGamesModel: ObservableObject {
                 let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
                 let observation: SteamGameLaunchObservation
                 #if DEBUG
-                if let root = Self.queuedLaunchFixtureRoot {
+                if let root = AppStorageLocations.queuedLaunchFixtureRoot {
                     let fresh = try await service.scan()
                     guard fresh.unreadableManifests == 0,
                           fresh.installedGames.contains(where: { $0.id == game.id && $0.state == .ready })
@@ -115,19 +115,6 @@ final class InstalledGamesModel: ObservableObject {
             diagnostics.refreshID = UUID()
         }
     }
-
-    #if DEBUG
-    private static var queuedLaunchFixtureRoot: URL? {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let rootIndex = arguments.firstIndex(of: "--metadata-root"), arguments.indices.contains(rootIndex + 1),
-              let scenarioIndex = arguments.firstIndex(of: "--ui-test-scenario"), arguments.indices.contains(scenarioIndex + 1),
-              arguments[scenarioIndex + 1] == "queued-game-launch" else { return nil }
-        let root = URL(fileURLWithPath: arguments[rootIndex + 1], isDirectory: true).standardizedFileURL
-        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL.path + "/"
-        guard root.path.hasPrefix(temporary) else { return nil }
-        return root
-    }
-    #endif
 
     private func watch(_ observation: SteamGameLaunchObservation, game: InstalledSteamGame) {
         pendingGame = game.id
