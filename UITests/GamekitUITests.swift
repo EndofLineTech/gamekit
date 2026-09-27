@@ -3,6 +3,35 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testInspectorSummarizesSavedChoicesAndGatesManagedGameFiles() async throws {
+        let root = try temporaryRoot()
+        let store = try EnvironmentStore(root: root)
+        let id = SteamInstallationRecipe.environmentID
+        _ = try await store.create(.init(id: id, name: "Inspector fixture", runtime: RuntimeProfile.sikarugir.identity,
+                                         installation: .installed, installationRecipeVersion: 1))
+        let steam = store.prefixURL(for: id).appendingPathComponent(RelativePath.steamDefault.rawValue).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: steam.appendingPathComponent("steamapps/common/Fixture"), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: steam.appendingPathComponent("Steam.exe"))
+        let manifest = steam.appendingPathComponent("steamapps/appmanifest_42.acf")
+        func writeManifest(flags: Int) throws {
+            try Data(#""AppState" { "appid" "42" "name" "Fixture" "installdir" "Fixture" "StateFlags" "\#(flags)" }"#.utf8)
+                .write(to: manifest)
+        }
+        try writeManifest(flags: 4)
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        openGameInspector(42, in: app)
+        XCTAssertTrue(app.staticTexts["inspector-graphics-42"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["inspector-space-42"].exists)
+        let files = app.buttons["game-files-42"]
+        XCTAssertTrue(files.exists && files.isEnabled, "Revealing a ready folder does not require launching Wine")
+        try writeManifest(flags: 1026)
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: files)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 15), .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
+    }
+
     func testLauncherManagementBrowsesOnlyAnInstalledSteamLibrary() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

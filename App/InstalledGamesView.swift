@@ -175,6 +175,23 @@ final class InstalledGamesModel: ObservableObject {
             }
         }
     }
+
+    func openGameFiles(_ game: InstalledSteamGame, setup: SetupModel) {
+        guard !libraryStale, game.state == .ready,
+              let token = setup.begin("Opening \(game.name)'s files") else { return }
+        Task { [self] in
+            defer { setup.end(token) }
+            do {
+                let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                let folder = try await service.gameFiles(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
+                if !NSWorkspace.shared.open(folder) { message = "Finder could not open this game's managed installation folder." }
+            } catch SteamGameLibraryError.notInstalled {
+                message = "This game is no longer ready in the managed library. Check Windows Steam before revealing its files."
+            } catch {
+                message = AppFailure.message(error)
+            }
+        }
+    }
 }
 
 struct InstalledGamesView: View {
