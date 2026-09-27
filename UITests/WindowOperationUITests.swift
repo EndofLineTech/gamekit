@@ -12,7 +12,9 @@ final class WindowOperationUITests: XCTestCase {
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
         app.buttons["nav-settings"].click()
-        app.buttons["settings-Launchers"].click()
+        let launchers = app.buttons["settings-Launchers"]
+        XCTAssertTrue(launchers.waitForExistence(timeout: 10))
+        launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
         app.typeKey("r", modifierFlags: [.command, .shift])
         let activity = app.staticTexts["operation-status"]
@@ -23,8 +25,10 @@ final class WindowOperationUITests: XCTestCase {
         app.buttons["nav-diagnostics"].click()
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
         XCTAssertTrue(activity.exists, "Leaving setup must not cancel or hide the window's pending operation")
+        app.activate()
         app.buttons["nav-settings"].click()
-        app.buttons["settings-Launchers"].click()
+        XCTAssertTrue(launchers.waitForExistence(timeout: 10))
+        launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15),
                       "The original operation must complete after navigation")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path),

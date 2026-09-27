@@ -728,12 +728,12 @@ final class GamekitUITests: XCTestCase {
         openLaunchers(in: app)
         app.typeKey("r", modifierFlags: [.command, .shift])
         XCTAssertTrue(app.staticTexts["Checking prerequisites"].waitForExistence(timeout: 5))
-        app.buttons["library-all"].click()
+        app.buttons["back-to-library"].click()
         XCTAssertFalse(uninstall.isEnabled)
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15))
         try FileManager.default.removeItem(at: manifest)
-        app.buttons["library-all"].click()
+        app.buttons["back-to-library"].click()
         XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 15))
         XCTAssertFalse(uninstall.exists)
     }
@@ -1035,26 +1035,28 @@ final class GamekitUITests: XCTestCase {
         }
         XCTAssertTrue(category.waitForExistence(timeout: 10))
         category.click()
-        let heading = app.staticTexts["settings-heading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 15))
-        XCTAssertEqual(heading.label, "Launchers")
+        XCTAssertTrue(app.buttons["refresh-prerequisites"].waitForExistence(timeout: 15))
     }
 
     private func openGameDefaults(in app: XCUIApplication) {
-        let settings = app.buttons["nav-settings"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 15))
-        settings.click()
         let category = app.buttons["settings-Game defaults"]
+        if !category.exists {
+            let settings = app.buttons["nav-settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 15))
+            settings.click()
+        }
         XCTAssertTrue(category.waitForExistence(timeout: 10))
         category.click()
         XCTAssertTrue(app.popUpButtons["graphics-backend-picker"].waitForExistence(timeout: 15))
     }
 
     private func openStorage(in app: XCUIApplication) {
-        let settings = app.buttons["nav-settings"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 15))
-        settings.click()
         let category = app.buttons["settings-Storage"]
+        if !category.exists {
+            let settings = app.buttons["nav-settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 15))
+            settings.click()
+        }
         XCTAssertTrue(category.waitForExistence(timeout: 10))
         category.click()
         XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
