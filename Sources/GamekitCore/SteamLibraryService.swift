@@ -8,6 +8,11 @@ public struct SteamLibraryEntries: Sendable {
     public let installedGames: [InstalledSteamGame]
 }
 
+public struct SteamGameProcessStatus: Sendable {
+    public let runningIDs: Set<UInt32>
+    public let hasUnidentifiedProcesses: Bool
+}
+
 /// A Steam-only UI boundary. Execution remains with SteamLifecycle, including
 /// its fresh manifest checks, runtime preflight, session ownership and leases.
 public struct SteamLibraryService: Sendable {
@@ -36,6 +41,17 @@ public struct SteamLibraryService: Sendable {
     public func launch(_ id: SteamGameInstallationID) async throws -> SteamGameLaunchObservation {
         try validate(id)
         return try await lifecycle.launchGame(appID: id.appID)
+    }
+
+    public func observeGames() async throws -> SteamGameProcessStatus {
+        let snapshot = try await lifecycle.gameProcesses()
+        return .init(runningIDs: Set(snapshot.processes.compactMap(\.gameAppID)),
+                     hasUnidentifiedProcesses: snapshot.processes.contains { $0.role == .other && $0.gameAppID == nil })
+    }
+
+    public func stopGame(_ id: SteamGameInstallationID) async throws -> SteamGameStopResult {
+        try validate(id)
+        return try await lifecycle.stopGame(appID: id.appID)
     }
 
     /// The application must still present Steam's confirmation and bring its

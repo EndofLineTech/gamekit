@@ -41,15 +41,25 @@ struct ProcessObservationTests {
         #expect(env["ROSETTA_ADVERTISE_AVX"] == "1", "Managed launches advertise the instruction extensions supported by the validated translator")
         #expect(env["WINEDLLOVERRIDES"] == "msvcp140,msvcp140_1,msvcp140_2,msvcp140_atomic_wait,vcruntime140,vcruntime140_1,concrt140=n,b")
     }
-    @Test("Kernel argument parsing retains only the prefix and session environment keys")
+    @Test("Kernel argument parsing retains only prefix and session, not inherited Steam AppIDs")
     func argumentParsing() {
         var count: Int32 = 2
         var bytes = withUnsafeBytes(of: &count) { Data($0) }
-        bytes.append(Data("/runtime/wine\0\0wine\0C:\\Program Files (x86)\\Steam\\Steam.exe\0PRIVATE_TOKEN=do-not-retain\0WINEPREFIX=/prefix with spaces\0GAMEKIT_SESSION_ID=nonce\0\0".utf8))
+        bytes.append(Data("/runtime/wine\0\0wine\0C:\\Program Files (x86)\\Steam\\Steam.exe\0PRIVATE_TOKEN=do-not-retain\0WINEPREFIX=/prefix with spaces\0GAMEKIT_SESSION_ID=nonce\0SteamAppId=43\0\0".utf8))
         let parsed = KernelArguments(bytes: bytes)
         #expect(parsed?.prefix == "/prefix with spaces")
         #expect(parsed?.session == "nonce")
         #expect(parsed?.arguments.count == 2)
+        if let parsed {
+            let mapping = GameDockNames(schemaVersion: 1, prefix: "/prefix with spaces", sessionID: "nonce",
+                                        games: ["42": "Fixture"], directories: ["42": "c:\\games\\fixture\\"])
+            #expect(RuntimeProcessObserver.attributedGameID(parsed, role: .other,
+                                                             mapping: mapping, prefix: URL(fileURLWithPath: "/prefix with spaces")) == nil,
+                    "An inherited Steam AppID without a matching game image is not a Stop target")
+            #expect(RuntimeProcessObserver.attributedGameID(parsed, role: .steam,
+                                                             mapping: mapping, prefix: URL(fileURLWithPath: "/prefix with spaces")) == nil,
+                    "A Steam service inheriting a game identity cannot become a per-game Stop target")
+        }
         #expect(KernelArguments(bytes: Data([0, 0])) == nil)
     }
 
@@ -86,4 +96,5 @@ struct ProcessObservationTests {
         #expect(RuntimeProcessSnapshot(processes: [service], complete: true).observation(installation: .installing(.bootstrappingSteam)) == .notChecked)
         #expect(RuntimeProcessSnapshot(processes: [], complete: true).observation(installation: .installed) == .idle)
     }
+
 }

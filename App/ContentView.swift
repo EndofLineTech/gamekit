@@ -36,10 +36,6 @@ struct ContentView: View {
                     Image(systemName: "info.circle")
                     Text(message).font(.callout).accessibilityIdentifier("persistent-game-status")
                     Spacer()
-                    Button("Show Windows Steam") {
-                        steam.control(stop: false, diagnostics: diagnostics, setup: setup)
-                    }
-                    .disabled(!(setup.actions.launch || setup.actions.show))
                     Button("Diagnostics") { diagnostics.open(operationID: games.lastDiagnosticID) }
                         .accessibilityIdentifier("game-diagnostics-link")
                 }
