@@ -42,8 +42,17 @@ struct LibraryShellView: View {
     @FocusState private var focusedListID: UInt32?
     @FocusState private var focusedGameID: UInt32?
     private let preferenceStore = LibraryPreferencesStore(root: AppStorageLocations.metadata)
+    // Keep headings and cover artwork clear of the native toolbar's scroll-edge effect.
+    private let scrollTopClearance: CGFloat = 36
 
     private var sidebarVisible: Bool { destination == .settings ? settingsSidebarVisible : preferences.sidebarVisible }
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(get: { sidebarVisible ? .all : .detailOnly }, set: { visibility in
+            let visible = visibility != .detailOnly
+            if destination == .settings { settingsSidebarVisible = visible }
+            else if visible != preferences.sidebarVisible { setSidebar(visible) }
+        })
+    }
 
     private var selectedGame: InstalledSteamGame? { games.games.first { $0.id == selectedGameID } }
 
@@ -57,21 +66,22 @@ struct LibraryShellView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if sidebarVisible {
-                sidebar.frame(width: 220)
-                Divider()
-            }
-            VStack(spacing: 0) {
-                toolbar
-                Divider()
+        NavigationSplitView(columnVisibility: columnVisibility) {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            Group {
                 if destination.isLibrary { libraryBody }
                 else if destination == .diagnostics { diagnosticsBody }
                 else { settingsBody }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .toolbar(removing: .sidebarToggle)
         }
-        .background(LibraryVisualStyle.canvas)
+        .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
+        .toolbar { windowToolbar }
         .task {
             let restored = await preferenceStore.loadForBrowsing()
             preferences = restored.preferences
@@ -85,13 +95,7 @@ struct LibraryShellView: View {
         .onChange(of: destination) { _, current in
             if current.isLibrary { lastLibraryDestination = current }
         }
-        .onExitCommand {
-            inspectorVisible = false
-            if let selectedGameID {
-                if preferences.viewMode == .grid { focusedGameID = selectedGameID }
-                else { focusedListID = selectedGameID }
-            }
-        }
+        .onExitCommand { dismissInspector() }
         .onChange(of: games.games) { _, current in
             if let selectedGameID, !current.contains(where: { $0.id == selectedGameID }), !games.libraryStale {
                 self.selectedGameID = nil
@@ -176,7 +180,6 @@ struct LibraryShellView: View {
                 .font(.caption).foregroundStyle(.secondary).padding(12)
         }
         .padding(.horizontal, 9)
-        .background(Color(nsColor: .underPageBackgroundColor))
     }
 
     private func sidebarHeading(_ title: String) -> some View {
@@ -196,8 +199,8 @@ struct LibraryShellView: View {
         .help(title == "Back to Library" ? "Return to the previous library view" : "Open \(title)")
     }
 
-    private var toolbar: some View {
-        HStack(spacing: LibraryVisualStyle.controlSpacing) {
+    @ToolbarContentBuilder private var windowToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
             Button {
                 if destination == .settings { settingsSidebarVisible.toggle() }
                 else { setSidebar(!preferences.sidebarVisible) }
@@ -206,43 +209,37 @@ struct LibraryShellView: View {
             }
             .accessibilityLabel("Toggle sidebar").accessibilityIdentifier("toggle-sidebar")
             .help(sidebarVisible ? "Hide the sidebar" : "Show the sidebar")
-            Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : "Diagnostics")
-                .font(.subheadline.weight(.semibold))
-            if destination == .settings && !settingsSidebarVisible {
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if destination == .settings && !sidebarVisible {
                 Button("Back to Library") { destination = lastLibraryDestination }
                     .accessibilityIdentifier("back-to-library")
                     .help("Return to the previous library view")
             }
-            Spacer(minLength: 8)
             Button { focusSearch() } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
                 .help("Search installed games (⌘F)")
             if destination.isLibrary {
                 TextField("Search games", text: $query).textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 230).focused($searchFocused).accessibilityIdentifier("library-search")
-                HStack(spacing: 2) {
-                    Button { setViewMode(.grid) } label: { Image(systemName: "square.grid.2x2") }
-                        .accessibilityLabel("Box art view").accessibilityIdentifier("library-view-grid")
-                        .tint(preferences.viewMode == .grid ? LibraryVisualStyle.accent : nil)
-                        .help("Show games as box-art covers")
-                    Button { setViewMode(.list) } label: { Image(systemName: "list.bullet") }
-                        .accessibilityLabel("List view").accessibilityIdentifier("library-view-list")
-                        .tint(preferences.viewMode == .list ? LibraryVisualStyle.accent : nil)
-                        .help("Show games in a sortable list")
-                }
-                .buttonStyle(.bordered)
+                    .frame(width: 190).focused($searchFocused).accessibilityIdentifier("library-search")
+                Button { setViewMode(.grid) } label: { Image(systemName: "square.grid.2x2") }
+                    .accessibilityLabel("Box art view").accessibilityIdentifier("library-view-grid")
+                    .tint(preferences.viewMode == .grid ? LibraryVisualStyle.accent : nil)
+                    .help("Show games as box-art covers")
+                Button { setViewMode(.list) } label: { Image(systemName: "list.bullet") }
+                    .accessibilityLabel("List view").accessibilityIdentifier("library-view-list")
+                    .tint(preferences.viewMode == .list ? LibraryVisualStyle.accent : nil)
+                    .help("Show games in a sortable list")
                 Button { inspectorVisible.toggle() } label: { Image(systemName: "info.circle") }
                     .accessibilityLabel("Toggle game inspector").accessibilityIdentifier("toggle-inspector")
                     .help(inspectorVisible ? "Hide game details" : "Show game details")
             }
         }
-        .padding(.horizontal, 22).frame(height: 58)
     }
 
     private var libraryBody: some View {
         GeometryReader { geometry in
-            HStack(spacing: 0) {
-                ScrollView {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 5) {
@@ -297,29 +294,18 @@ struct LibraryShellView: View {
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
                     else if visibleGames.isEmpty { emptyLibrary }
                     else if preferences.viewMode == .grid {
-                        coverGrid(width: geometry.size.width - (inspectorVisible && geometry.size.width >= 920 ? 320 : 0)
-                                  - 2 * LibraryVisualStyle.contentSpacing)
+                        coverGrid(width: geometry.size.width - 2 * LibraryVisualStyle.contentSpacing)
                     }
                     else { gameList.frame(height: max(250, geometry.size.height - 220)) }
                     if let message = games.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
                 }
                 .padding(LibraryVisualStyle.contentSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if inspectorVisible && geometry.size.width >= 920 {
-                    Divider()
-                    inspector.frame(minWidth: 255, idealWidth: 290, maxWidth: 320)
-                }
             }
-            .overlay(alignment: .trailing) {
-                if inspectorVisible && geometry.size.width < 920 {
-                    inspector
-                        .frame(width: min(290, geometry.size.width * 0.65), height: max(300, geometry.size.height - 155))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(color: .black.opacity(0.35), radius: 20, x: -8)
-                        .padding(.top, 130).padding(.trailing, 12)
-                }
-            }
+            .contentMargins(.top, scrollTopClearance, for: .scrollContent)
+        }
+        .inspector(isPresented: $inspectorVisible) {
+            inspector.inspectorColumnWidth(min: 255, ideal: 290, max: 320)
         }
     }
 
@@ -347,6 +333,7 @@ struct LibraryShellView: View {
                         }
                         return moveGridFocus(press.key, modifiers: press.modifiers, columns: columnCount)
                     }
+                    .onKeyPress(.escape) { dismissInspector(); return .handled }
                     .accessibilityIdentifier("select-game-\(game.id)")
                     .accessibilityValue(favorite ? "Favorite" : "Not favorite")
                     .help("Select \(game.name); double-click to request Play")
@@ -369,12 +356,10 @@ struct LibraryShellView: View {
                             let running = games.runningGames.contains(game.id)
                             Button { if running { stop(game) } else { play(game) } } label: {
                                 Image(systemName: running ? "stop.fill" : "play.fill")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 42, height: 42)
-                                    .background(LibraryVisualStyle.accent, in: Circle())
-                                    .shadow(color: .black.opacity(0.45), radius: 5)
+                                    .frame(width: 30, height: 30)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                            .tint(LibraryVisualStyle.accent)
                             .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale
                                       || setup.isBusy || (!running && !(setup.actions.launch || setup.actions.show)))
                             .accessibilityLabel("\(running ? "Stop" : "Play") \(game.name)")
@@ -441,6 +426,7 @@ struct LibraryShellView: View {
                         }
                         return moveListSelection(press.key, modifiers: press.modifiers)
                     }
+                    .onKeyPress(.escape) { dismissInspector(); return .handled }
                     .accessibilityIdentifier("select-game-\(game.id)")
                     .accessibilityLabel("\(game.name), Windows Steam, \(status(game)), Steam-reported size: \(size(game))")
                     .accessibilityValue("\(selectedGameID == game.id ? "Selected" : "Not selected"), \(isFavorite(game) ? "favorite" : "not favorite")")
@@ -521,7 +507,7 @@ struct LibraryShellView: View {
                             Button { stop(game) } label: {
                                 Image(systemName: "stop.fill").frame(width: 36, height: 30)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale || setup.isBusy)
                             .accessibilityLabel("Stop \(game.name)")
                             .accessibilityHint("Stop this managed game without stopping Windows Steam or other games.")
@@ -531,7 +517,7 @@ struct LibraryShellView: View {
                             Button { play(game) } label: {
                                 Image(systemName: "play.fill").frame(width: 36, height: 30)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .disabled(game.state != .ready || games.pendingGame != nil || !games.gameObservationAvailable
                                       || !(setup.actions.launch || setup.actions.show) || games.libraryStale)
                             .accessibilityLabel("Play \(game.name)")
@@ -583,7 +569,8 @@ struct LibraryShellView: View {
             }
             .padding(22).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(LibraryVisualStyle.panel)
+        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
+        .onExitCommand { dismissInspector() }
     }
 
     @ViewBuilder private func gameMenu(_ game: InstalledSteamGame) -> some View {
@@ -620,6 +607,7 @@ struct LibraryShellView: View {
                 EnvironmentSummaryView()
             }.padding(LibraryVisualStyle.contentSpacing)
         }
+        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
     }
 
     private var settingsBody: some View {
@@ -703,6 +691,7 @@ struct LibraryShellView: View {
             .padding(LibraryVisualStyle.contentSpacing)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
     }
 
     private func status(_ game: InstalledSteamGame) -> String {
@@ -728,6 +717,14 @@ struct LibraryShellView: View {
         if preferences.viewMode == .list { focusedListID = game.id }
         else { focusedGameID = game.id }
         inspectorVisible = true
+    }
+
+    private func dismissInspector() {
+        inspectorVisible = false
+        if let selectedGameID {
+            if preferences.viewMode == .grid { focusedGameID = selectedGameID }
+            else { focusedListID = selectedGameID }
+        }
     }
 
     private func play(_ game: InstalledSteamGame) {

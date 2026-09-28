@@ -65,6 +65,12 @@ Named accessibility identifiers support UI regressions; dynamic status is readab
 as text and is not conveyed by color alone. Full screen-reader usability remains
 part of hands-on release acceptance.
 
+The macOS 27 library uses `NavigationSplitView` and the system inspector for
+sidebar/game-detail layout. Window controls live in the native toolbar; primary
+game actions use the system prominent glass button style, while artwork and
+content panels stay legible and do not carry decorative glass overlays. The
+sidebar, inspector and accent follow macOS appearance and accessibility settings.
+
 ## Tests
 
 Core tests cover persisted selection, redirected paths, ownership locks, missing

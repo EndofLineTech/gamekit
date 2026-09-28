@@ -63,7 +63,10 @@ bar shows the current stage, with no invented progress percentages.
 
 ## Everyday use
 
-The sidebar opens to **All Installed Games** on every app launch. Switch between
+The native macOS sidebar opens to **All Installed Games** on every app launch.
+Use the sidebar button in the window toolbar to show or hide it; the game-details
+inspector opens when you select a game or press the toolbar's info button. Both
+panes follow your system appearance and accessibility settings. Switch between
 box-art grid and native table using the toolbar buttons; selection, search and filters
 are shared. **Cover size** sets the width of grid artwork; resizing the window
 rearranges columns without stretching the covers. The toolbar Sort menu can

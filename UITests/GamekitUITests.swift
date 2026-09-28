@@ -1022,7 +1022,9 @@ final class GamekitUITests: XCTestCase {
         first.click()
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
         app.typeKey(.escape, modifierFlags: [])
-        XCTAssertFalse(app.buttons["launch-game-42"].exists, "Escape collapses the inspector without cancelling work")
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["launch-game-42"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed,
+                       "Escape collapses the inspector without cancelling work")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
         app.buttons["library-view-list"].click()
