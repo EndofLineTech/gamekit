@@ -253,7 +253,9 @@ struct LibraryShellView: View {
                         }
                         Spacer()
                         Button("Refresh") { Task { await games.refresh(setup: setup) } }
-                            .disabled(games.refreshing || setup.isBusy).accessibilityIdentifier("refresh-games")
+                            // Background polling already coalesces in refresh(); toggling
+                            // this button's disabled state every poll makes it flash.
+                            .disabled(setup.isBusy).accessibilityIdentifier("refresh-games")
                             .help("Refresh installed games from managed Windows Steam")
                     }
                     HStack(spacing: 8) {
