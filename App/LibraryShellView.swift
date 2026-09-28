@@ -135,12 +135,6 @@ struct LibraryShellView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 10) {
-                Image(nsImage: NSApplication.shared.applicationIconImage).resizable().frame(width: 36, height: 36)
-                    .accessibilityHidden(true)
-                Text("Gamekit").font(.title3.bold())
-            }
-            .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 18)
             if destination == .settings {
                 navButton("Back to Library", symbol: "chevron.left", active: false, identifier: "back-to-library") {
                     returnToLibrary()

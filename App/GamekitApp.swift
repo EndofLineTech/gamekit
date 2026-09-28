@@ -15,6 +15,7 @@ struct GamekitApp: App {
     var body: some Scene {
         Window("Gamekit", id: "main") {
             ContentView()
+                .background(WindowTitleHider().frame(width: 0, height: 0))
         }
         .defaultSize(width: startingSize.width, height: startingSize.height)
         .windowResizability(.contentMinSize)
@@ -32,6 +33,22 @@ struct GamekitApp: App {
                 }
                 .keyboardShortcut("f", modifiers: .command)
             }
+        }
+    }
+}
+
+/// Keep the window's accessible title while leaving its titlebar visually clear.
+private struct WindowTitleHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleHidingView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        view.window?.titleVisibility = .hidden
+    }
+
+    private final class TitleHidingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
         }
     }
 }
