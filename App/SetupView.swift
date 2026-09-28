@@ -13,6 +13,7 @@ struct SetupView: View {
                     Button("Refresh checks") { setup.refresh(diagnostics: diagnostics) }
                         .disabled(setup.isBusy).keyboardShortcut("r", modifiers: [.command, .shift])
                         .accessibilityIdentifier("refresh-prerequisites")
+                        .help("Recheck host, runtime and storage prerequisites (⇧⌘R)")
                 }
                 Text(setup.isReady ? "Ready to install and launch" : setup.report == nil ? "Prerequisites not yet verified" : "Resolve the checks below before installation")
                     .accessibilityIdentifier("prerequisite-status")
@@ -27,14 +28,18 @@ struct SetupView: View {
                 }
                 HStack {
                     Button("Choose runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
+                        .help("Choose a validated runtime app from disk")
                     Button("Use updated runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .driverVersion1) }
                         .accessibilityIdentifier("use-driver-compatibility-runtime")
+                        .help("Select the prepared runtime with per-game compatibility support")
                 }.disabled(setup.isBusy || setup.selectionLocked)
                 HStack {
                     Button("Use text-input runtime (rollback)") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .textInput1) }
                         .accessibilityIdentifier("use-text-input-runtime")
+                        .help("Roll back to the prepared text-input runtime revision")
                     Button("Use original runtime") { setup.chooseRuntime(diagnostics: diagnostics, useDefault: true, revision: .original) }
                         .accessibilityIdentifier("use-original-runtime")
+                        .help("Select the original validated runtime revision")
                 }.disabled(setup.isBusy || setup.selectionLocked)
                 if setup.selectionLocked { Text("Stop the recorded Steam session before changing runtimes.").font(.caption) }
                 Text("Selected runtime: \(setup.layout.bundle.path)").font(.caption).textSelection(.enabled)
@@ -47,8 +52,11 @@ struct SetupView: View {
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)
                 HStack {
                     Link("Rosetta help", destination: URL(string: "https://support.apple.com/en-us/102527")!)
+                        .help("Open Apple's Rosetta installation instructions")
                     Link("Apple GPTK downloads", destination: URL(string: "https://developer.apple.com/download/all/?q=Game%20Porting%20Toolkit")!)
+                        .help("Open Apple's Game Porting Toolkit downloads")
                     Link("Runtime setup guide", destination: URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!)
+                        .help("Open the validated Gamekit runtime setup guide")
                 }.font(.caption)
                 if let checked = setup.checkedAt { Text("Last checked \(checked.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(12)

@@ -29,11 +29,14 @@ struct GameProfileTransferControls: View {
             HStack {
                 Button("Import JSON…") { importing = true }
                     .accessibilityIdentifier("import-game-profile")
+                    .help("Import a validated JSON profile for \(game.name)")
                 Button("Export JSON…") { exportProfile() }
                     .accessibilityIdentifier("export-game-profile")
+                    .help("Save a portable JSON profile for \(game.name)")
                 if isLocal {
                     Button("Use automatic profile") { restoreAutomatic() }
                         .accessibilityIdentifier("restore-automatic-game-profile")
+                        .help("Remove the imported profile and use the latest available profile or defaults")
                 }
             }.disabled(working || setup.isBusy)
             Text(isLocal

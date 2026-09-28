@@ -16,6 +16,7 @@ struct RecoveryArchivesView: View {
                 .font(.caption).foregroundStyle(.secondary)
             Button("Inspect recovery archives") { run() }
                 .disabled(setup.isBusy).accessibilityIdentifier("inspect-recovery-archives")
+                .help("List retained recovery archives and their cleanup eligibility")
             Text(status).font(.caption).accessibilityIdentifier("recovery-archives-status")
             ForEach(archives) { archive in
                 HStack(alignment: .top) {
@@ -29,6 +30,7 @@ struct RecoveryArchivesView: View {
                         Button("Clean up archive…") { selected = archive; confirmCleanup = true }
                             .disabled(setup.isBusy || !setup.actions.reset)
                             .accessibilityIdentifier("clean-recovery-archive-\(archive.id)")
+                            .help("Review permanent cleanup of this completed recovery archive")
                     }
                 }
             }
@@ -37,7 +39,9 @@ struct RecoveryArchivesView: View {
         }
         .confirmationDialog("Permanently clean up this recovery archive?", isPresented: $confirmCleanup, titleVisibility: .visible, presenting: selected) { archive in
             Button("Delete archived prefix", role: .destructive) { run(cleaning: archive.id) }
+                .help("Permanently remove this archived prefix, keeping the current environment")
             Button("Cancel", role: .cancel) {}
+                .help("Keep this recovery archive")
         } message: { archive in
             Text("Archive \(archive.id): deletes its old settings, sign-in data and remaining local saves. Restored downloads, external libraries and the current environment are preserved. This cannot be undone.")
         }

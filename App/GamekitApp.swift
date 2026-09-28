@@ -24,6 +24,7 @@ struct GamekitApp: App {
                     NotificationCenter.default.post(name: .gamekitOpenSettings, object: nil)
                 }
                 .keyboardShortcut(",", modifiers: .command)
+                .help("Open Gamekit Settings (⌘,)")
             }
         }
     }

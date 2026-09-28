@@ -122,7 +122,9 @@ struct LibraryShellView: View {
                 if let uninstallGame { games.uninstall(uninstallGame, setup: setup, diagnostics: diagnostics) }
                 uninstallGame = nil
             }
+            .help("Open this game's uninstall confirmation in Windows Steam")
             Button("Cancel", role: .cancel) { uninstallGame = nil }
+                .help("Keep this game installed")
         } message: {
             Text("Windows Steam handles removal. Review and confirm it there; Gamekit refreshes the library afterward.")
         }
@@ -160,6 +162,7 @@ struct LibraryShellView: View {
                                 in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain).accessibilityIdentifier("library-favorites")
+                .help("Show your favorite games")
                 if setup.record?.installation == .installed {
                     sidebarHeading("Launchers")
                     navButton("Windows Steam", symbol: "gamecontroller", active: destination == .steam, identifier: "library-steam") { destination = .steam }
@@ -190,6 +193,7 @@ struct LibraryShellView: View {
                             in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain).accessibilityIdentifier(identifier)
+        .help(title == "Back to Library" ? "Return to the previous library view" : "Open \(title)")
     }
 
     private var toolbar: some View {
@@ -201,15 +205,18 @@ struct LibraryShellView: View {
                 Image(systemName: "sidebar.left").frame(width: 22)
             }
             .accessibilityLabel("Toggle sidebar").accessibilityIdentifier("toggle-sidebar")
+            .help(sidebarVisible ? "Hide the sidebar" : "Show the sidebar")
             Text(destination.isLibrary ? "Library" : destination == .settings ? "Settings" : "Diagnostics")
                 .font(.subheadline.weight(.semibold))
             if destination == .settings && !settingsSidebarVisible {
                 Button("Back to Library") { destination = lastLibraryDestination }
                     .accessibilityIdentifier("back-to-library")
+                    .help("Return to the previous library view")
             }
             Spacer(minLength: 8)
             Button { focusSearch() } label: { Image(systemName: "magnifyingglass") }
                 .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
+                .help("Search installed games (⌘F)")
             if destination.isLibrary {
                 TextField("Search games", text: $query).textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 230).focused($searchFocused).accessibilityIdentifier("library-search")
@@ -217,13 +224,16 @@ struct LibraryShellView: View {
                     Button { setViewMode(.grid) } label: { Image(systemName: "square.grid.2x2") }
                         .accessibilityLabel("Box art view").accessibilityIdentifier("library-view-grid")
                         .tint(preferences.viewMode == .grid ? LibraryVisualStyle.accent : nil)
+                        .help("Show games as box-art covers")
                     Button { setViewMode(.list) } label: { Image(systemName: "list.bullet") }
                         .accessibilityLabel("List view").accessibilityIdentifier("library-view-list")
                         .tint(preferences.viewMode == .list ? LibraryVisualStyle.accent : nil)
+                        .help("Show games in a sortable list")
                 }
                 .buttonStyle(.bordered)
                 Button { inspectorVisible.toggle() } label: { Image(systemName: "info.circle") }
                     .accessibilityLabel("Toggle game inspector").accessibilityIdentifier("toggle-inspector")
+                    .help(inspectorVisible ? "Hide game details" : "Show game details")
             }
         }
         .padding(.horizontal, 22).frame(height: 58)
@@ -244,11 +254,13 @@ struct LibraryShellView: View {
                         Spacer()
                         Button("Refresh") { Task { await games.refresh(setup: setup) } }
                             .disabled(games.refreshing || setup.isBusy).accessibilityIdentifier("refresh-games")
+                            .help("Refresh installed games from managed Windows Steam")
                     }
                     HStack(spacing: 8) {
                         ForEach(LibraryInstallationFilter.allCases, id: \.self) { choice in
                             Button(choice.rawValue) { filter = choice }
                                 .buttonStyle(.bordered).tint(filter == choice ? LibraryVisualStyle.accent : nil)
+                                .help("Filter library: \(choice.rawValue)")
                         }
                         Spacer(minLength: 8)
                         Picker("Sort", selection: Binding(get: { preferences.sortOrder }, set: { setSortOrder($0) })) {
@@ -258,6 +270,7 @@ struct LibraryShellView: View {
                             Text("Reported size").tag(LibrarySortOrder.reportedSize)
                         }
                         .frame(width: 160).accessibilityIdentifier("library-sort")
+                        .help("Choose how installed games are sorted")
                     }
                     if preferences.viewMode == .grid {
                         HStack(spacing: 10) {
@@ -265,6 +278,7 @@ struct LibraryShellView: View {
                             Slider(value: Binding(get: { Double(preferences.coverSize) },
                                                   set: { setCoverSize(Int($0)) }), in: 125...220)
                                 .frame(width: 135).accessibilityIdentifier("library-cover-size")
+                                .help("Adjust the size of box-art covers")
                             Spacer()
                         }
                     }
@@ -275,6 +289,7 @@ struct LibraryShellView: View {
                                 .foregroundStyle(.orange)
                             Button("View diagnostics") { diagnostics.open() }
                                 .accessibilityIdentifier("library-diagnostics-link")
+                                .help("Open local diagnostics for this library warning")
                         }
                     }
                     if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
@@ -332,6 +347,7 @@ struct LibraryShellView: View {
                     }
                     .accessibilityIdentifier("select-game-\(game.id)")
                     .accessibilityValue(favorite ? "Favorite" : "Not favorite")
+                    .help("Select \(game.name); double-click to request Play")
                     .overlay(alignment: .topTrailing) {
                         if favorite || selectedGameID == game.id || hoveredGameID == game.id {
                             Button { toggleFavorite(game) } label: {
@@ -342,6 +358,7 @@ struct LibraryShellView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
                             .accessibilityIdentifier("favorite-game-\(game.id)")
+                            .help(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
                             .padding(7)
                         }
                     }
@@ -425,6 +442,7 @@ struct LibraryShellView: View {
                     .accessibilityIdentifier("select-game-\(game.id)")
                     .accessibilityLabel("\(game.name), Windows Steam, \(status(game)), Steam-reported size: \(size(game))")
                     .accessibilityValue("\(selectedGameID == game.id ? "Selected" : "Not selected"), \(isFavorite(game) ? "favorite" : "not favorite")")
+                    .help("Select \(game.name); double-click to request Play")
                     .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
                     .contextMenu { gameMenu(game) }
                     Button { toggleFavorite(game) } label: {
@@ -433,6 +451,7 @@ struct LibraryShellView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(isFavorite(game) ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
                     .accessibilityIdentifier("favorite-game-\(game.id)")
+                    .help(isFavorite(game) ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
                 }
             }
             .width(min: 145, ideal: 175)
@@ -480,6 +499,7 @@ struct LibraryShellView: View {
                     else if initial { openSettings(.launchers) }
                     else { query = ""; filter = .all }
                 }
+                .help(favoritesEmpty ? "Return to all installed games" : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
             }
         }
     }
@@ -568,20 +588,26 @@ struct LibraryShellView: View {
         if games.runningGames.contains(game.id) {
             Button("Stop \(game.name)") { stop(game) }
                 .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale || setup.isBusy)
+                .help("Stop this game without stopping Windows Steam")
         } else if game.state == .ready {
             Button("Play") { play(game) }
                 .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale
                           || !(setup.actions.launch || setup.actions.show))
+                .help("Request Play for \(game.name) through managed Windows Steam")
         }
         Button("Compatibility settings…") { compatibilityGame = game }
+            .help("Open compatibility settings for \(game.name)")
         if game.state == .ready {
             Button("Open game files in Finder") { games.openGameFiles(game, setup: setup) }
                 .disabled(games.libraryStale || setup.isBusy)
+                .help("Reveal \(game.name)'s managed installation in Finder")
         }
         Button(isFavorite(game) ? "Remove Favorite" : "Add Favorite") { toggleFavorite(game) }
+            .help(isFavorite(game) ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
         Divider()
         Button("Uninstall…") { uninstallGame = game; confirmingUninstall = true }
             .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
+            .help("Request uninstall of \(game.name) through Windows Steam")
     }
 
     private var diagnosticsBody: some View {
@@ -607,15 +633,18 @@ struct LibraryShellView: View {
                                 Text("Box art").tag(LibraryViewMode.grid)
                                 Text("List").tag(LibraryViewMode.list)
                             }
+                            .help("Choose the default library layout")
                             Picker("Sort games by", selection: Binding(get: { preferences.sortOrder }, set: { setSortOrder($0) })) {
                                 Text("Name").tag(LibrarySortOrder.name)
                                 Text("Launcher").tag(LibrarySortOrder.source)
                                 Text("State").tag(LibrarySortOrder.state)
                                 Text("Reported size").tag(LibrarySortOrder.reportedSize)
                             }
+                            .help("Set the saved game sort order")
                             Slider(value: Binding(get: { Double(preferences.coverSize) }, set: { setCoverSize(Int($0)) }), in: 125...220) {
                                 Text("Cover size")
                             }
+                            .help("Set the saved width of box-art covers")
                         }
                     }
                 case .gameDefaults:
@@ -634,6 +663,7 @@ struct LibraryShellView: View {
                                 set: { setup.chooseSharedFullscreenSpace($0, diagnostics: diagnostics) }))
                                 .disabled(setup.isBusy || setup.selectionLocked)
                                 .accessibilityIdentifier("shared-fullscreen-space")
+                                .help("Use a separate macOS Space for eligible full-display games; per-game choices take precedence")
                             Text("Individual game overrides take precedence. Stop Windows Steam before changing defaults.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -653,6 +683,7 @@ struct LibraryShellView: View {
                     if setup.record?.installation == .installed {
                         Button("Browse installed games") { destination = .steam }
                             .accessibilityIdentifier("browse-steam-games")
+                            .help("Show games installed in managed Windows Steam")
                     }
                     SetupView()
                     SteamInstallationView()
@@ -661,6 +692,7 @@ struct LibraryShellView: View {
                     LibraryPanel {
                         Button("Open steamapps folder") { games.openSteamapps(setup: setup) }
                             .disabled(setup.isBusy || setup.record?.installation != .installed)
+                            .help("Open the managed Windows Steam library folder in Finder")
                         RecoveryArchivesView()
                         LauncherCachesView()
                     }

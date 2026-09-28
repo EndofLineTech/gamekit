@@ -89,9 +89,11 @@ struct SteamLifecycleView: View {
                     Button(model.state == .running ? "Show Windows Steam" : "Launch Windows Steam") { model.control(stop: false, diagnostics: diagnostics, setup: setup) }
                         .disabled(model.busy || !(setup.actions.launch || setup.actions.show)).accessibilityIdentifier("launch-steam")
                         .keyboardShortcut("l", modifiers: .command)
+                        .help(model.state == .running ? "Bring the managed Windows Steam window forward (⌘L)" : "Launch managed Windows Steam (⌘L)")
                     Button("Stop Windows Steam") { model.control(stop: true, diagnostics: diagnostics, setup: setup) }
                         .disabled(model.busy || !setup.actions.stop).accessibilityIdentifier("stop-steam")
                         .keyboardShortcut("s", modifiers: [.command, .shift])
+                        .help("Stop Windows Steam and games in its managed environment (⇧⌘S)")
                 }
                 if let message = model.message {
                     HStack {
@@ -99,6 +101,7 @@ struct SteamLifecycleView: View {
                         Spacer()
                         Button("View diagnostics") { diagnostics.open(operationID: model.lastDiagnosticID) }
                         .accessibilityIdentifier("steam-diagnostics-link")
+                        .help("Open diagnostics for this Steam operation")
                     }
                 }
                 if model.state == .unverified { Text("Status is not verified. Refresh prerequisites and review the selected runtime before continuing.").font(.caption) }

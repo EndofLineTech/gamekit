@@ -38,20 +38,24 @@ struct DiagnosticsView: View {
                     Label("Local diagnostics", systemImage: "doc.text.magnifyingglass").font(.headline)
                     Spacer()
                     Button("Reload logs") { model.refreshID = UUID() }
+                        .help("Reload recent local diagnostic summaries")
                 }
                 Text("Summary exports exclude captured output, paths and session fields.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Debug mode — capture game startup performance", isOn: Binding(
                     get: { model.debugMode }, set: { model.setDebugMode($0) }))
                     .accessibilityIdentifier("debug-performance-mode")
+                    .help("Enable read-only startup performance capture for the next Gamekit Play request")
                 Text("Off by default when Gamekit starts. For games launched from Gamekit, records up to 60 seconds of read-only CPU, memory and disk-I/O counters for one identified game process. No screenshots, file contents or shader hooks. Captures can add overhead.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text(model.debugStatus).font(.callout).accessibilityIdentifier("debug-capture-status")
                 HStack {
                     Button("Stop debug capture") { model.stopDebugCapture() }
                         .disabled(!model.debugCapturing).accessibilityIdentifier("stop-debug-capture")
+                        .help("Stop the performance sampler without stopping the game")
                     Button("Open local logs") { NSWorkspace.shared.open(AppStorageLocations.diagnostics) }
                         .accessibilityIdentifier("open-debug-logs")
+                        .help("Open the private diagnostics folder in Finder")
                 }
                 if model.recordingProblem {
                     Text("Some diagnostic output could not be saved. Runtime results are reported separately.")
@@ -85,8 +89,10 @@ struct DiagnosticsView: View {
                             Spacer()
                             Button("View local output") { Task { await showLocal(summary.id) } }
                                 .accessibilityIdentifier("local-diagnostic-\(summary.id.uuidString)")
+                                .help("Read this operation's private local output")
                             Button("Export summary") { Task { await export(summary.id) } }
                                 .accessibilityIdentifier("export-diagnostic-\(summary.id.uuidString)")
+                                .help("Export a redacted summary without raw output or account details")
                         }
                     }
                     .padding(.vertical, 6)
@@ -108,6 +114,7 @@ struct DiagnosticsView: View {
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }
                 Button("Close") { showingOutput = false }
+                    .help("Close local output and return to diagnostics")
             }
             .padding(20).frame(width: 760, height: 480)
         }

@@ -136,25 +136,35 @@ struct SteamInstallationView: View {
                 HStack {
                     Button("Install Steam") { model.start(diagnostics: diagnostics, setup: setup) }
                         .disabled(model.running || !setup.actions.install).accessibilityIdentifier("install-steam")
+                        .help("Install Windows Steam in the managed environment after prerequisite checks pass")
                     Button("Retry Steam verification") { model.start(diagnostics: diagnostics, setup: setup, verificationOnly: true) }
                         .disabled(model.running || !setup.actions.verify).accessibilityIdentifier("verify-steam")
-                    if model.running { Button("Cancel installation") { model.cancel() } }
+                        .help("Repeat Steam readiness checks without reinstalling")
+                    if model.running {
+                        Button("Cancel installation") { model.cancel() }
+                            .help("Cancel the current installation operation and retain recoverable progress")
+                    }
                 }
                 HStack {
                     Button("Retry interrupted install") { model.start(diagnostics: diagnostics, setup: setup, recoveryRetry: true) }
                         .disabled(model.running || !setup.actions.retry).accessibilityIdentifier("retry-installation")
+                        .help("Resume the saved installation stage without deleting downloaded games")
                     Button("Force-stop interrupted setup…") { confirmStop = true }
                         .disabled(model.running || !setup.actions.stopInterrupted)
+                        .help("Review a scoped stop of the interrupted setup session")
                 }
                 Button(showRecovery ? "Hide reset options" : "Show reset options…") { showRecovery.toggle() }
                     .disabled(setup.isBusy).accessibilityIdentifier("show-reset-options")
+                    .help(showRecovery ? "Hide reset and recovery choices" : "Review reset and recovery choices")
                 if showRecovery {
                     Text("Reset is separate from Retry. Review what each option retains or permanently deletes.").font(.caption)
                     HStack {
                         Button("Reset, preserve downloads…") { confirmReset = true }
                             .disabled(model.running || !setup.actions.reset).accessibilityIdentifier("reset-preserve-downloads")
+                            .help("Review an archive-and-reset that restores eligible Steam downloads")
                         Button("Reset and delete downloads…") { confirmDelete = true }
                             .disabled(model.running || !setup.actions.reset).accessibilityIdentifier("reset-delete-downloads")
+                            .help("Review permanent deletion of the managed environment and its downloads")
                     }
                     Text("Inspect completed archives and obsolete caches under Settings → Storage. Reset only affects the currently selected managed environment.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -166,19 +176,25 @@ struct SteamInstallationView: View {
         }
         .confirmationDialog("Reset Gamekit's steam environment?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Archive environment and preserve downloads", role: .destructive) { model.recover(reset: true, diagnostics: diagnostics, setup: setup) }
+                .help("Archive the current prefix and restore eligible downloads during setup")
             Button("Cancel", role: .cancel) {}
+                .help("Keep the current environment unchanged")
         } message: {
             Text("The old environment, settings and sign-in data stay in a private archive. After the installer succeeds, setup restores steamapps and depotcache before starting Steam. External libraries are left in place. Steam must be stopped first.")
         }
         .confirmationDialog("Delete the current steam environment and downloads?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete environment and downloads", role: .destructive) { model.recover(reset: true, deleteDownloads: true, diagnostics: diagnostics, setup: setup) }
+                .help("Permanently delete this managed Steam environment and its downloaded games")
             Button("Cancel", role: .cancel) {}
+                .help("Keep the current environment and downloads")
         } message: {
             Text("Permanently deletes the current managed Windows Steam prefix, including downloaded games, settings, sign-in data and saves inside it. Older recovery archives, external libraries, the runtime and diagnostic logs are retained. Steam must be stopped first.")
         }
         .confirmationDialog("Force-stop interrupted setup?", isPresented: $confirmStop, titleVisibility: .visible) {
             Button("Force-stop this setup", role: .destructive) { model.recover(reset: false, diagnostics: diagnostics, setup: setup) }
+                .help("Stop only the interrupted setup session and preserve its files")
             Button("Cancel", role: .cancel) {}
+                .help("Leave the interrupted setup session unchanged")
         } message: {
             Text("Closes the selected managed environment's interrupted Wine session. Its installation files and downloaded games are preserved. For an installed Steam session, use Stop Windows Steam instead.")
         }

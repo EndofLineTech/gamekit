@@ -17,6 +17,7 @@ struct EnvironmentSummaryView: View {
                         .font(.headline)
                     Spacer()
                     Button("Reload") { refresh += 1 }
+                        .help("Refresh saved environment and process status")
                 }
                 if failed {
                     Text("Environment checks could not be completed. Existing files have been preserved.")
