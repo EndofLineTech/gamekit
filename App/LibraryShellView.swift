@@ -526,9 +526,15 @@ struct LibraryShellView: View {
                         .help(isFavorite(game) ? "Remove from Favorites" : "Add to Favorites")
                     }
                     LibraryInspectorSection(title: "Game actions") {
-                        Button("All compatibility settings…") { compatibilityGame = game }
-                            .disabled(setup.isBusy).accessibilityIdentifier("game-compatibility-\(game.id)")
                         HStack(spacing: 10) {
+                            Button { compatibilityGame = game } label: {
+                                Image(systemName: "gearshape").frame(width: 36, height: 30)
+                            }
+                                .buttonStyle(.bordered)
+                                .disabled(setup.isBusy)
+                                .accessibilityIdentifier("game-compatibility-\(game.id)")
+                                .accessibilityLabel("Compatibility settings for \(game.name)")
+                                .help("All compatibility settings for \(game.name)")
                             Button { games.openGameFiles(game, setup: setup) } label: {
                                 Image(systemName: "folder").frame(width: 36, height: 30)
                             }
