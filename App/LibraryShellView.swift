@@ -3,7 +3,7 @@ import GamekitCore
 import SwiftUI
 
 private enum LibraryDestination: Hashable {
-    case all, favorites, steam, diagnostics, settings
+    case all, favorites, steam, settings
     var isLibrary: Bool { self == .all || self == .favorites || self == .steam }
 }
 
@@ -12,7 +12,7 @@ private enum LibraryInstallationFilter: String, CaseIterable {
 }
 
 private enum SettingsCategory: String, CaseIterable {
-    case general = "General", gameDefaults = "Game defaults", launchers = "Launchers", storage = "Storage"
+    case general = "General", gameDefaults = "Game defaults", launchers = "Launchers", storage = "Storage", diagnostics = "Diagnostics"
 }
 
 /// Native library-first shell over the existing window-owned Steam models.
@@ -23,6 +23,7 @@ struct LibraryShellView: View {
     @EnvironmentObject private var games: InstalledGamesModel
     @EnvironmentObject private var steam: SteamLifecycleModel
     @EnvironmentObject private var installation: SteamInstallationModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var destination: LibraryDestination = .all
     @State private var lastLibraryDestination: LibraryDestination = .all
     @State private var category: SettingsCategory = .general
@@ -42,8 +43,7 @@ struct LibraryShellView: View {
     @FocusState private var focusedListID: UInt32?
     @FocusState private var focusedGameID: UInt32?
     private let preferenceStore = LibraryPreferencesStore(root: AppStorageLocations.metadata)
-    // Keep headings and cover artwork clear of the native toolbar's scroll-edge effect.
-    private let scrollTopClearance: CGFloat = 36
+    private var sidebarAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.28) }
 
     private var sidebarVisible: Bool { destination == .settings ? settingsSidebarVisible : preferences.sidebarVisible }
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {
@@ -69,26 +69,25 @@ struct LibraryShellView: View {
         NavigationSplitView(columnVisibility: columnVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
-                .toolbar(removing: .sidebarToggle)
         } detail: {
             Group {
                 if destination.isLibrary { libraryBody }
-                else if destination == .diagnostics { diagnosticsBody }
                 else { settingsBody }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .toolbar(removing: .sidebarToggle)
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
         .toolbar { windowToolbar }
+        .searchable(text: $query, placement: .toolbar, prompt: "Search games")
+        .searchFocused($searchFocused)
         .task {
             let restored = await preferenceStore.loadForBrowsing()
             preferences = restored.preferences
             preferencesWarning = restored.savedPreferencesUnavailable
         }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in openSettings() }
-        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in destination = .diagnostics }
+        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in openSettings(.diagnostics) }
+        .onReceive(NotificationCenter.default.publisher(for: .gamekitFocusSearch)) { _ in focusSearch() }
         .onChange(of: installation.installedSuccessfully) { _, completed in
             if completed && destination == .settings && category == .launchers { destination = .all }
         }
@@ -144,12 +143,12 @@ struct LibraryShellView: View {
             .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 18)
             if destination == .settings {
                 navButton("Back to Library", symbol: "chevron.left", active: false, identifier: "back-to-library") {
-                    destination = lastLibraryDestination
+                    returnToLibrary()
                 }
                 sidebarHeading("Settings")
                 ForEach(SettingsCategory.allCases, id: \.self) { option in
-                    navButton(option.rawValue, symbol: option == .general ? "gearshape" : option == .launchers ? "square.stack" : option == .storage ? "externaldrive" : "gamecontroller",
-                              active: category == option, identifier: "settings-\(option.rawValue)") { category = option }
+                    navButton(option.rawValue, symbol: option == .general ? "gearshape" : option == .launchers ? "square.stack" : option == .storage ? "externaldrive" : option == .diagnostics ? "waveform.path.ecg" : "gamecontroller",
+                               active: category == option, identifier: "settings-\(option.rawValue)") { category = option }
                 }
             } else {
                 sidebarHeading("Library")
@@ -169,10 +168,20 @@ struct LibraryShellView: View {
                 .help("Show your favorite games")
                 if setup.record?.installation == .installed {
                     sidebarHeading("Launchers")
-                    navButton("Windows Steam", symbol: "gamecontroller", active: destination == .steam, identifier: "library-steam") { destination = .steam }
+                    Button { destination = .steam } label: {
+                        HStack(spacing: 8) {
+                            steamLauncherIcon
+                            Text("Windows Steam")
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(destination == .steam ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain).accessibilityIdentifier("library-steam")
+                    .help("Open Windows Steam games")
                 }
                 sidebarHeading("Management")
-                navButton("Diagnostics", symbol: "waveform.path.ecg", active: destination == .diagnostics, identifier: "nav-diagnostics") { destination = .diagnostics }
                 navButton("Settings", symbol: "gearshape", active: false, identifier: "nav-settings") { openSettings() }
             }
             Spacer(minLength: 0)
@@ -199,29 +208,21 @@ struct LibraryShellView: View {
         .help(title == "Back to Library" ? "Return to the previous library view" : "Open \(title)")
     }
 
+    private var steamLauncherIcon: some View {
+        Image("SteamLauncherMark").resizable().frame(width: 16, height: 16)
+            .frame(width: 22, height: 22)
+            .background(.black.opacity(0.85), in: Circle())
+            .accessibilityHidden(true)
+    }
+
     @ToolbarContentBuilder private var windowToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button {
-                if destination == .settings { settingsSidebarVisible.toggle() }
-                else { setSidebar(!preferences.sidebarVisible) }
-            } label: {
-                Image(systemName: "sidebar.left").frame(width: 22)
-            }
-            .accessibilityLabel("Toggle sidebar").accessibilityIdentifier("toggle-sidebar")
-            .help(sidebarVisible ? "Hide the sidebar" : "Show the sidebar")
-        }
         ToolbarItemGroup(placement: .primaryAction) {
             if destination == .settings && !sidebarVisible {
-                Button("Back to Library") { destination = lastLibraryDestination }
+                Button("Back to Library") { returnToLibrary() }
                     .accessibilityIdentifier("back-to-library")
                     .help("Return to the previous library view")
             }
-            Button { focusSearch() } label: { Image(systemName: "magnifyingglass") }
-                .keyboardShortcut("f", modifiers: .command).accessibilityLabel("Search games")
-                .help("Search installed games (⌘F)")
             if destination.isLibrary {
-                TextField("Search games", text: $query).textFieldStyle(.roundedBorder)
-                    .frame(width: 190).focused($searchFocused).accessibilityIdentifier("library-search")
                 Button { setViewMode(.grid) } label: { Image(systemName: "square.grid.2x2") }
                     .accessibilityLabel("Box art view").accessibilityIdentifier("library-view-grid")
                     .tint(preferences.viewMode == .grid ? LibraryVisualStyle.accent : nil)
@@ -302,7 +303,7 @@ struct LibraryShellView: View {
                 .padding(LibraryVisualStyle.contentSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .contentMargins(.top, scrollTopClearance, for: .scrollContent)
+            .scrollEdgeEffectHidden(for: .top)
         }
         .inspector(isPresented: $inspectorVisible) {
             inspector.inspectorColumnWidth(min: 255, ideal: 290, max: 320)
@@ -569,7 +570,7 @@ struct LibraryShellView: View {
             }
             .padding(22).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
+        .scrollEdgeEffectHidden(for: .top)
         .onExitCommand { dismissInspector() }
     }
 
@@ -599,21 +600,11 @@ struct LibraryShellView: View {
             .help("Request uninstall of \(game.name) through Windows Steam")
     }
 
-    private var diagnosticsBody: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Diagnostics").font(.largeTitle.bold()).accessibilityIdentifier("diagnostics-heading")
-                DiagnosticsView()
-                EnvironmentSummaryView()
-            }.padding(LibraryVisualStyle.contentSpacing)
-        }
-        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
-    }
-
     private var settingsBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text(category.rawValue).font(.largeTitle.bold()).accessibilityIdentifier("settings-heading")
+                Text(category.rawValue).font(.largeTitle.bold())
+                    .accessibilityIdentifier(category == .diagnostics ? "diagnostics-heading" : "settings-heading")
                 switch category {
                 case .general:
                     LibraryPanel {
@@ -659,7 +650,10 @@ struct LibraryShellView: View {
                         }
                     }
                 case .launchers:
-                    Text("Windows Steam · Managed environment").foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        steamLauncherIcon
+                        Text("Windows Steam · Managed environment").foregroundStyle(.secondary)
+                    }
                     if setup.record?.installation != .installed {
                         LibraryPanel {
                             VStack(alignment: .leading, spacing: 8) {
@@ -686,12 +680,15 @@ struct LibraryShellView: View {
                         RecoveryArchivesView()
                         LauncherCachesView()
                     }
+                case .diagnostics:
+                    DiagnosticsView()
+                    EnvironmentSummaryView()
                 }
             }
             .padding(LibraryVisualStyle.contentSpacing)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .contentMargins(.top, scrollTopClearance, for: .scrollContent)
+        .scrollEdgeEffectHidden(for: .top)
     }
 
     private func status(_ game: InstalledSteamGame) -> String {
@@ -713,7 +710,6 @@ struct LibraryShellView: View {
 
     private func select(_ game: InstalledSteamGame) {
         selectedGameID = game.id
-        searchFocused = false
         if preferences.viewMode == .list { focusedListID = game.id }
         else { focusedGameID = game.id }
         inspectorVisible = true
@@ -747,6 +743,8 @@ struct LibraryShellView: View {
 
     private func focusSearch() {
         destination = .all
+        focusedGameID = nil
+        focusedListID = nil
         searchFocused = true
         DispatchQueue.main.async {
             if let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isFieldEditor {
@@ -787,16 +785,26 @@ struct LibraryShellView: View {
 
     private func setSidebar(_ visible: Bool) {
         Task {
-            do { preferences = try await preferenceStore.setSidebarVisible(visible); preferencesWarning = false }
+            do {
+                let saved = try await preferenceStore.setSidebarVisible(visible)
+                withAnimation(sidebarAnimation) { preferences = saved }
+                preferencesWarning = false
+            }
             catch { preferencesWarning = true }
         }
+    }
+
+    private func returnToLibrary() {
+        withAnimation(sidebarAnimation) { destination = lastLibraryDestination }
     }
 
     private func openSettings(_ requested: SettingsCategory? = nil) {
         if destination.isLibrary { lastLibraryDestination = destination }
         if let requested { category = requested }
-        settingsSidebarVisible = true
-        destination = .settings
+        withAnimation(sidebarAnimation) {
+            settingsSidebarVisible = true
+            destination = .settings
+        }
     }
 }
 

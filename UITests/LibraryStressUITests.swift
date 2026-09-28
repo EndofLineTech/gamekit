@@ -48,7 +48,8 @@ final class LibraryStressUITests: XCTestCase {
         XCTAssertTrue(firstRow.buttons["select-game-100127"].waitForExistence(timeout: 10))
         let sortedAt = clock.now
 
-        let search = app.textFields["library-search"]
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
         search.click(); search.typeText("Fixture 12")
         XCTAssertTrue(app.staticTexts["9 installations · Windows Steam"].waitForExistence(timeout: 10))
         let searchedAt = clock.now

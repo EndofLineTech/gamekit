@@ -26,6 +26,12 @@ struct GamekitApp: App {
                 .keyboardShortcut(",", modifiers: .command)
                 .help("Open Gamekit Settings (⌘,)")
             }
+            CommandGroup(after: .textEditing) {
+                Button("Search games") {
+                    NotificationCenter.default.post(name: .gamekitFocusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
         }
     }
 }
@@ -33,4 +39,5 @@ struct GamekitApp: App {
 extension Notification.Name {
     static let gamekitOpenSettings = Notification.Name("GamekitOpenSettings")
     static let gamekitOpenDiagnostics = Notification.Name("GamekitOpenDiagnostics")
+    static let gamekitFocusSearch = Notification.Name("GamekitFocusSearch")
 }

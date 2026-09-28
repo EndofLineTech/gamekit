@@ -30,8 +30,8 @@ Older recovery archives retain data and consume storage independently.
 Storage; Command-comma enters the same in-window destination. Back to Library
 restores the previous library filter. Shared graphics and fullscreen-Space
 controls live only in Game defaults. Archive/cache cleanup is under Storage;
-reset confirmations stay in Settings → Launchers. Diagnostics has its own
-destination and contextual links from persistent setup, Steam and library status.
+reset confirmations stay in Settings → Launchers. Diagnostics is a Settings
+category, also reachable from contextual setup, Steam and library status links.
 
 ## Controls and state
 
@@ -52,7 +52,7 @@ facts and complete process observations:
 - Setup is silent. Readiness requires stable client, web-helper and visible-window
   evidence. The app finishes setup and opens Steam for normal use automatically.
 
-Progress stays in a persistent top-of-window bar, with stage-based indeterminate
+Progress appears below the library during an operation, with stage-based indeterminate
 activity indicators. No download or
 Steam-update percentages are invented. Reset controls require opening **Show reset
 options…** and then a distinct confirmation; they are not adjacent substitutes for
@@ -66,8 +66,10 @@ as text and is not conveyed by color alone. Full screen-reader usability remains
 part of hands-on release acceptance.
 
 The macOS 27 library uses `NavigationSplitView` and the system inspector for
-sidebar/game-detail layout. Window controls live in the native toolbar; primary
-game actions use the system prominent glass button style, while artwork and
+sidebar/game-detail layout. Its system sidebar button sits in the titlebar
+above the left pane, and the system search field highlights as a whole when
+focused. Search and view controls live in the native toolbar; primary game
+actions use the system prominent glass button style, while artwork and
 content panels stay legible and do not carry decorative glass overlays. The
 sidebar, inspector and accent follow macOS appearance and accessibility settings.
 

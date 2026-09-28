@@ -8,8 +8,9 @@ checks and displays them under **Local diagnostics**.
 
 1. Open Gamekit with `make run`. Startup and environment **Reload** run prerequisite
    checks; commands that actually execute produce diagnostic records.
-2. Scroll to **Local diagnostics**. Each row shows its stage, component, category
-   and a suggested next step. **Reload logs** refreshes the stored records.
+2. Open **Settings → Diagnostics** and scroll to **Local diagnostics**. Each row
+   shows its stage, component, category and a suggested next step. **Reload logs**
+   refreshes the stored records.
 3. **View local output** opens the captured stdout/stderr in a separate sheet.
 4. **Export summary** opens the macOS save dialog for a JSON summary.
 

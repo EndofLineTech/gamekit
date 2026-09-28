@@ -25,10 +25,10 @@ final class WindowOperationUITests: XCTestCase {
         XCTAssertEqual(back.frame.midY, navigationY, accuracy: 2,
                        "An operation starting must not move navigation underneath a click")
         app.buttons["back-to-library"].click()
-        app.buttons["nav-diagnostics"].click()
+        app.buttons["nav-settings"].click()
+        app.buttons["settings-Diagnostics"].click()
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
         app.activate()
-        app.buttons["nav-settings"].click()
         XCTAssertTrue(launchers.waitForExistence(timeout: 10))
         launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15),

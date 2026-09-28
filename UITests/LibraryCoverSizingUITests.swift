@@ -31,11 +31,16 @@ final class LibraryCoverSizingUITests: XCTestCase {
         XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "Saved cover size sets the artwork width")
 
         let firstX = tile.frame.minX
-        app.buttons["toggle-sidebar"].click()
-        XCTAssertFalse(app.buttons["library-all"].exists)
+        let sidebarToggle = app.buttons["Hide Sidebar"]
+        XCTAssertGreaterThan(sidebarToggle.frame.minX, app.windows["Gamekit"].buttons["_XCUI:FullScreenWindow"].frame.maxX,
+                             "The titlebar control follows the window buttons")
+        XCTAssertLessThan(sidebarToggle.frame.maxX, firstX, "The titlebar control sits above the left pane")
+        sidebarToggle.click()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["library-all"])
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         XCTAssertLessThan(tile.frame.minX, firstX - 100, "Collapsing the sidebar gives the grid more space")
         XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "More grid space must not scale a game's cover")
-        app.buttons["toggle-sidebar"].click()
+        app.buttons["Hide Sidebar"].click()
         XCTAssertTrue(app.buttons["library-all"].waitForExistence(timeout: 10))
         XCTAssertEqual(tile.frame.width, 180, accuracy: 3, "Restoring the sidebar must not scale the cover")
         let savedCoverSize = try await LibraryPreferencesStore(root: root).load().coverSize
