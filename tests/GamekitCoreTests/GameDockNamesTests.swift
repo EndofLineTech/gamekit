@@ -145,6 +145,18 @@ struct GameDockNamesTests {
         #expect(map.games == ["526870": "Satisfactory"])
         #expect(map.sharedGraphicsBackend == .metal3 && map.graphicsBackends == ["526870": .automatic])
         #expect(map.directories["526870"] == "c:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\")
+        let image = ["/managed/wine", "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Satisfactory\\" + GameFixtures.renderer.executable]
+        #expect(map.gameAppID(arguments: image, prefix: prefix, session: first.uuidString) == 526870)
+        #expect(map.gameAppID(arguments: image, prefix: prefix, session: second.uuidString) == nil)
+        #expect(map.gameAppID(arguments: ["/managed/wine", "C:\\Steam\\Steam.exe"], prefix: prefix,
+                              session: first.uuidString) == nil)
+        let gameDirectory = try #require(map.directories["526870"])
+        let ambiguous = GameDockNames(schemaVersion: 1, prefix: prefix.path, sessionID: first.uuidString,
+            games: ["526870": "Satisfactory", "42": "Another game"],
+            directories: ["526870": gameDirectory, "42": gameDirectory])
+        #expect(ambiguous.gameAppID(arguments: image, prefix: prefix, session: first.uuidString) == nil)
+        #expect(try GameDockNames.read(root: store.root, prefix: prefix)?.gameAppID(
+            arguments: image, prefix: prefix, session: first.uuidString) == 526870)
         try GameDockNames.publish(root: store.root, prefix: prefix, session: second, games: [], validate: {})
         map = try JSONDecoder().decode(GameDockNames.self, from: Data(contentsOf: path))
         #expect(map.sessionID == second.uuidString && map.games.isEmpty)

@@ -68,8 +68,9 @@ box-art grid and native table using the toolbar buttons; selection, search and f
 are shared. **Cover size** sets the width of grid artwork; resizing the window
 rearranges columns without stretching the covers. The toolbar Sort menu can
 order by name, launcher, state or Steam-reported size (unknown sizes sort last).
-Use the **Favorites** sidebar
-destination and the star in a cover's upper-right corner to keep a local list.
+Use the **Favorites** sidebar destination and the star in a cover's upper-right
+corner to keep a local list. The star appears when you hover over or select a
+cover; the sidebar star animates when the Favorites list changes.
 Only managed Windows Steam is a configured launcher in this version. Its
 transparent Steam icon appears in the upper-left of each cover and compact
 table thumbnail, with the text **Windows Steam** beneath the cover and in the
@@ -81,7 +82,8 @@ its asset-generation instructions are in the
 [design README](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/README.md#icon-review).
 Use arrow keys to move between focused covers or adjacent table rows; Home/End
 move to the first/last game. Return or Space selects and opens the inspector;
-movement alone does not start a game. **Command-F** enters library search, and
+movement alone does not start a game. Hover a ready cover for its Play button;
+**Command-F** enters library search, and
 Escape collapses the inspector. Clicking a title or row once also selects;
 double-clicking a ready title requests Play once.
 
@@ -185,8 +187,8 @@ macOS/runtime combination and must be rechecked after upgrades.
 
 After Play, Gamekit tracks Steam's fresh launch events for up to two minutes.
 It distinguishes a queued request, preparation, Cloud synchronization, prompts
-needing attention, and reported process creation. **Show Windows Steam** helps
-you resolve Steam's own prompts. Gamekit never automatically retries Play,
+needing attention, and reported process creation. Use **Settings → Launchers →
+Show Windows Steam** to resolve Steam's own prompts. Gamekit never automatically retries Play,
 accepts a Cloud conflict, or disconnects another session. Play controls unlock
 after tracking ends; if startup is unconfirmed, check Steam before trying again.
 See [cold-start launch feedback](cold-steam-game-launch.md).
@@ -205,8 +207,16 @@ session. See the repository's
 
 Install games using **Windows Steam**, in its default managed library. **All
 Installed Games** shows Steam's installed records as portrait covers or list rows.
-Click once to select a game and open its inspector; click **Play** explicitly to
-send a launch request. Double-clicking a ready game is a shortcut. Neither
+Click once to select a game and open its inspector; click the **Play** triangle
+there or on a hovered ready cover to send a launch request. When the owned game
+process is observed running, the control becomes a **Stop** square for that
+game alone; save your progress first. Stop requests termination of only its
+verified processes; check the game window afterward. Windows Steam and other
+games remain open. If process ownership
+cannot be verified, the control is disabled instead of assuming the game has
+stopped. The inspector's
+star toggles Favorites, the folder opens game files in Finder, and the trash
+requests uninstall. Double-clicking a ready game is a shortcut. Neither
 switching views nor browsing Settings sends Play. Gamekit shows
 each title with artwork, status, and its Steam-reported installed size. The
 size may be unavailable while a download or update is incomplete, if game files
@@ -226,7 +236,7 @@ context menu rechecks the current managed manifest and folder first. Per-game
 graphics and fullscreen-Space choices are summarized as **next launch** values
 in the inspector; **All compatibility settings…** opens the full editable sheet.
 
-To uninstall, select the game and click **Uninstall…** in its inspector (or use
+To uninstall, select the game and click the trash icon in its inspector (or use
 the game's context menu), then choose **Continue in Windows Steam**. Steam opens
 its uninstall flow; review and confirm
 or cancel there. Gamekit brings the owned Steam window forward for confirmation,

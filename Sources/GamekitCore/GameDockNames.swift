@@ -23,6 +23,43 @@ struct GameDockNames: Codable {
         root.appendingPathComponent("Metadata/GameDock/\(prefix.lastPathComponent).json")
     }
 
+    static func read(root: URL, prefix: URL) throws -> Self? {
+        guard let base = try ManagedDirectory.openRoot(root, create: false),
+              let data = try base.directory("Metadata")?.directory("GameDock")?
+                  .read(prefix.lastPathComponent + ".json") else { return nil }
+        let mapping = try JSONDecoder().decode(Self.self, from: data)
+        guard mapping.schemaVersion == 1, mapping.prefix == prefix.path,
+              UUID(uuidString: mapping.sessionID) != nil,
+              mapping.games.count <= 512, mapping.directories.count <= 512 else { return nil }
+        return mapping
+    }
+
+    /// Match the actual Windows image, never just SteamAppId inherited from a
+    /// parent. Only an unambiguous managed installation in this session counts.
+    func gameAppID(arguments: [String], prefix: URL, session: String?) -> UInt32? {
+        guard session == sessionID,
+              let raw = arguments.prefix(3).first(where: { $0.lowercased().hasSuffix(".exe") }) else { return nil }
+        var image = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        let unixBase = prefix.path + "/drive_c/"
+        if image.hasPrefix(unixBase) { image = "c:\\" + image.dropFirst(unixBase.count) }
+        image = image.replacingOccurrences(of: "/", with: "\\").lowercased()
+        guard image.hasPrefix("c:\\"), image.hasSuffix(".exe"),
+              image.rangeOfCharacter(from: .controlCharacters) == nil,
+              !image.components(separatedBy: "\\").contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+        var found: UInt32?
+        for (key, directory) in directories {
+            guard let id = UInt32(key), id > 0, key == String(id), games[key] != nil else { continue }
+            let path = directory.lowercased()
+            guard path.hasPrefix("c:\\"), path.hasSuffix("\\"),
+                  path.rangeOfCharacter(from: .controlCharacters) == nil,
+                  !path.components(separatedBy: "\\").contains(where: { $0 == "." || $0 == ".." }),
+                  image.hasPrefix(path) else { continue }
+            if found != nil { return nil }
+            found = id
+        }
+        return found
+    }
+
     static func publish(root: URL, prefix: URL, session: UUID, games: [InstalledSteamGame],
                         steamExecutable: RelativePath = .steamDefault, loaders: [String: String] = [:],
                         defaultLoader: String? = nil, graphicsBackend: D3DMetalBackend = .automatic,

@@ -1,7 +1,9 @@
+import Darwin
 import Foundation
 
 public enum SteamLifecycleState: String, Sendable { case notInstalled, stopped, starting, running, unverified, foreignActivity }
 public enum SteamStopResult: String, Sendable { case alreadyStopped, graceful, forced }
+public enum SteamGameStopResult: Sendable { case alreadyStopped, stopped }
 public enum SteamLifecycleError: Error, Equatable { case notInstalled, foreignActivity, observationUnavailable, scopeChanged, cleanupFailed }
 
 struct SteamLifecycleDriver: Sendable {
@@ -11,6 +13,7 @@ struct SteamLifecycleDriver: Sendable {
     let execute: @Sendable (CommandRequest) async throws -> CommandResult
     var runtimeAvailable: @Sendable () -> Bool = { true }
     var signalRemaining: @Sendable ([ScopedRuntimeProcess], Int32) async throws -> Void = { _, _ in throw SteamLifecycleError.cleanupFailed }
+    var signalGame: @Sendable ([ScopedRuntimeProcess], Int32) async throws -> Void = { _, _ in throw SteamLifecycleError.cleanupFailed }
 }
 
 private struct SteamLaunchReceipt: Codable {
@@ -62,7 +65,8 @@ public actor SteamLifecycle {
         }, execute: { try await ProcessExecutor().run($0) },
         runtimeAvailable: { RuntimeDetector.safeBundle(layout) && RuntimeDetector.containedRegularFile(layout.wine, root: layout.bundle)
             && RuntimeDetector.containedRegularFile(layout.wineserver, root: layout.bundle) },
-        signalRemaining: { try ScopedProcessTermination.signal($0, signal: $1) })
+        signalRemaining: { try ScopedProcessTermination.signal($0, signal: $1) },
+        signalGame: { try ScopedProcessTermination.signal($0, signal: $1) })
     }
     init(store: EnvironmentStore, driver: SteamLifecycleDriver, gracefulTimeout: TimeInterval = 30) {
         self.store = store; self.driver = driver; self.gracefulTimeout = gracefulTimeout
@@ -120,6 +124,50 @@ public actor SteamLifecycle {
             throw SteamLifecycleError.observationUnavailable
         }
         return snapshot
+    }
+
+    /// A stopped managed session has no game processes. Every running/starting
+    /// session must have a matching receipt and a complete, owned inventory.
+    public func gameProcesses() async throws -> RuntimeProcessSnapshot {
+        let current = try await status()
+        if current == .stopped { return .init(processes: [], complete: true) }
+        guard current == .running || current == .starting else { throw SteamLifecycleError.observationUnavailable }
+        return try await diagnosticProcesses()
+    }
+
+    /// Signal only the fresh, positively attributed game processes. Never send
+    /// the per-prefix Wine server shutdown command or signal another game's PID.
+    public func stopGame(appID: UInt32) async throws -> SteamGameStopResult {
+        guard appID > 0 else { throw SteamGameLibraryError.notInstalled }
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: id)
+        defer { withExtendedLifetime(lease) {} }
+        guard let owned = try receipt() else { throw SteamLifecycleError.observationUnavailable }
+        let before = try await ownedSnapshot(record, lease: lease, receipt: owned)
+        let targets = before.processes.filter { $0.role == .other && $0.gameAppID == appID }
+        guard !targets.isEmpty else { return .alreadyStopped }
+        try Task.checkCancellation(); try lease.validate()
+        guard try receipt()?.token == owned.token else { throw SteamLifecycleError.scopeChanged }
+        try await driver.signalGame(targets, SIGTERM)
+        var quietSince: ContinuousClock.Instant?
+        for _ in 0..<40 {
+            try Task.checkCancellation()
+            guard try receipt()?.token == owned.token else { throw SteamLifecycleError.scopeChanged }
+            let remaining = try await ownedSnapshot(record, lease: lease, receipt: owned)
+            if remaining.processes.contains(where: { $0.role == .other && $0.gameAppID == appID }) {
+                quietSince = nil
+            } else if let quietSince {
+                if quietSince.duration(to: .now) >= .seconds(1) { return .stopped }
+            } else {
+                quietSince = .now
+            }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        throw SteamLifecycleError.cleanupFailed
     }
 
     public func launch() async throws -> SteamLifecycleState {

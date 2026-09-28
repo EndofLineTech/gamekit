@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import GamekitCore
@@ -10,6 +11,8 @@ private actor LifecycleFixtureRuntime {
     var graceful = true
     var orphan = false
     var signalled = false
+    var activeGames: [UInt32: String] = [:]
+    var gameSignals: [UInt32] = []
     var commands: [[String]] = []
     var observationScript: [Bool] = []
     var shutdownScript: [Bool] = []
@@ -17,13 +20,21 @@ private actor LifecycleFixtureRuntime {
     func observeCompleteness(_ values: [Bool]) { observationScript = values; observations = 0 }
     func afterShutdownCompleteness(_ values: [Bool]) { shutdownScript = values }
     func foreign() { token = "foreign" }
+    func gameRunning(_ appID: UInt32) { if let token { activeGames[appID] = token } }
     func refuseGraceful() { graceful = false }
     func leaveOrphan() { graceful = false; orphan = true }
     func handoffGap() { token = nil }
     func snapshot() -> RuntimeProcessSnapshot {
         observations += 1
         let complete = observationScript.isEmpty ? true : observationScript.removeFirst()
-        return .init(processes: token.map { [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: $0)] } ?? [], complete: complete)
+        var processes: [ScopedRuntimeProcess] = token.map {
+            [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0), role: .steam, sessionID: $0)]
+        } ?? []
+        processes += activeGames.map { appID, owner in
+            .init(identity: .init(pid: Int32(appID + 1000), startSeconds: 1, startMicroseconds: 0),
+                  role: .other, sessionID: owner, gameAppID: appID)
+        }
+        return .init(processes: processes, complete: complete)
     }
     func spawn(_ request: CommandRequest) {
         launches += 1; token = request.environment["GAMEKIT_SESSION_ID"]
@@ -41,10 +52,18 @@ private actor LifecycleFixtureRuntime {
     }
     var driver: SteamLifecycleDriver {
         .init(preflight: {}, observe: { _, _ in await self.snapshot() }, spawn: { await self.spawn($0) }, execute: { try await self.execute($0) },
-              signalRemaining: { processes, _ in await self.signal(processes) })
+               signalRemaining: { processes, _ in await self.signal(processes) },
+               signalGame: { processes, signal in await self.signalGame(processes, signal: signal) })
     }
     func signal(_ processes: [ScopedRuntimeProcess]) {
         if !processes.isEmpty { #expect(processes.allSatisfy { $0.sessionID == token }); signalled = true; token = nil }
+    }
+    func signalGame(_ processes: [ScopedRuntimeProcess], signal: Int32) {
+        #expect(signal == SIGTERM)
+        #expect(processes.allSatisfy { $0.role == .other && $0.gameAppID != nil && $0.sessionID == token })
+        for process in processes {
+            if let id = process.gameAppID { gameSignals.append(id); activeGames[id] = nil }
+        }
     }
 }
 
@@ -78,6 +97,40 @@ private struct LifecycleFixture {
 
 @Suite("Persistent Steam lifecycle")
 struct SteamLifecycleTests {
+    @Test("A selected game's Stop signals only its owned processes and leaves Steam and other games running")
+    func stopSelectedGame() async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        await runtime.gameRunning(42)
+        await runtime.gameRunning(43)
+        #expect(try await lifecycle.gameProcesses().processes.compactMap(\.gameAppID).sorted() == [42, 43])
+        #expect(try await lifecycle.stopGame(appID: 42) == .stopped)
+        #expect(try await lifecycle.gameProcesses().processes.compactMap(\.gameAppID) == [43])
+        #expect(try await lifecycle.status() == .running)
+        #expect(await runtime.gameSignals == [42])
+        #expect(await runtime.commands.isEmpty)
+        #expect(!(await runtime.forced))
+        #expect(try await lifecycle.stopGame(appID: 42) == .alreadyStopped)
+        #expect(await runtime.gameSignals == [42])
+    }
+
+    @Test("A foreign session or incomplete inventory never permits per-game Stop", arguments: [false, true])
+    func stopGameRefusesUncertainOwnership(incomplete: Bool) async throws {
+        let fixture = try await LifecycleFixture(); defer { fixture.remove() }
+        let runtime = LifecycleFixtureRuntime()
+        let lifecycle = SteamLifecycle(store: fixture.store, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        await runtime.gameRunning(42)
+        if incomplete { await runtime.observeCompleteness([false]) }
+        else { await runtime.foreign() }
+        await #expect(throws: incomplete ? SteamLifecycleError.observationUnavailable : .foreignActivity) {
+            try await lifecycle.stopGame(appID: 42)
+        }
+        #expect(await runtime.gameSignals.isEmpty)
+    }
+
     @Test("Uninstall requests use owned Windows Steam for ready, partial and missing-file installations",
           arguments: [SteamGameInstallState.ready, .updating, .missingFiles], [false, true])
     func requestUninstall(state: SteamGameInstallState, alreadyRunning: Bool) async throws {

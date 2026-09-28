@@ -12,6 +12,11 @@ public struct ScopedRuntimeProcess: Sendable {
     public let identity: ProcessIdentity
     public let role: RuntimeProcessRole
     public let sessionID: String?
+    public let gameAppID: UInt32?
+
+    public init(identity: ProcessIdentity, role: RuntimeProcessRole, sessionID: String?, gameAppID: UInt32? = nil) {
+        self.identity = identity; self.role = role; self.sessionID = sessionID; self.gameAppID = gameAppID
+    }
 }
 public struct RuntimeProcessSnapshot: Sendable {
     public let processes: [ScopedRuntimeProcess]
@@ -99,6 +104,12 @@ public struct RuntimeProcessObserver: Sendable {
         return .other
     }
 
+    static func attributedGameID(_ parsed: KernelArguments, role: RuntimeProcessRole,
+                                 mapping: GameDockNames?, prefix: URL) -> UInt32? {
+        guard role == .other else { return nil }
+        return mapping?.gameAppID(arguments: parsed.arguments, prefix: prefix, session: parsed.session)
+    }
+
     public func snapshot(record: EnvironmentRecord, prefix: URL, layout: RuntimeLayout) -> RuntimeProcessSnapshot {
         let initial = gk_user_pids(nil, 0)
         guard initial > 0 else { return .init(processes: [], complete: false) }
@@ -106,6 +117,7 @@ public struct RuntimeProcessObserver: Sendable {
         let capacity = ids.count * MemoryLayout<pid_t>.stride
         let used = gk_user_pids(&ids, Int32(capacity))
         guard used > 0 && used < capacity else { return .init(processes: [], complete: false) }
+        let gameMapping = try? GameDockNames.read(root: layout.dataRoot, prefix: prefix)
         var processes: [ScopedRuntimeProcess] = [], complete = true
         for pid in ids.prefix(Int(used) / MemoryLayout<pid_t>.stride) where pid > 0 {
             var first = GKProcessIdentity()
@@ -139,10 +151,12 @@ public struct RuntimeProcessObserver: Sendable {
                   second.start_microseconds == first.start_microseconds else { complete = false; continue }
             let secondPath = withUnsafeBytes(of: second.path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
             guard secondPath == executable else { complete = false; continue }
+            let role = Self.role(arguments: parsed.arguments, record: record, prefix: prefix)
             processes.append(.init(identity: .init(pid: pid, startSeconds: first.start_seconds,
-                                                   startMicroseconds: first.start_microseconds),
-                                   role: Self.role(arguments: parsed.arguments, record: record, prefix: prefix),
-                                   sessionID: parsed.session))
+                                                    startMicroseconds: first.start_microseconds),
+                                    role: role, sessionID: parsed.session,
+                                    gameAppID: Self.attributedGameID(parsed, role: role,
+                                                                     mapping: gameMapping, prefix: prefix)))
         }
         return .init(processes: processes, complete: complete)
     }

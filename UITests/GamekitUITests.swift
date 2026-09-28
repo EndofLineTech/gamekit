@@ -26,6 +26,11 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["inspector-space-42"].exists)
         let files = app.buttons["game-files-42"]
         XCTAssertTrue(files.exists && files.isEnabled, "Revealing a ready folder does not require launching Wine")
+        XCTAssertEqual(files.label, "Open Fixture files in Finder")
+        XCTAssertEqual(app.buttons["uninstall-game-42"].label, "Uninstall Fixture")
+        XCTAssertEqual(app.buttons["launch-game-42"].label, "Play Fixture")
+        XCTAssertTrue(app.buttons["inspector-favorite-game-42"].exists)
+        XCTAssertFalse(app.buttons["Show Windows Steam"].exists, "Steam management belongs in Settings → Launchers")
         try writeManifest(flags: 1026)
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: files)
         XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 15), .completed)
@@ -204,6 +209,10 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(item.waitForExistence(timeout: 20))
         item.click()
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        let hoverPlay = app.buttons["hover-launch-game-42"]
+        item.hover()
+        XCTAssertTrue(hoverPlay.waitForExistence(timeout: 5), "Hovering a cover reveals its Play button")
+        XCTAssertFalse(hoverPlay.isEnabled, "Unavailable runtime still disables explicit hover Play")
         let gridCapture = XCTAttachment(screenshot: app.screenshot())
         gridCapture.name = "native-library-grid"
         gridCapture.lifetime = .keepAlways
@@ -610,7 +619,7 @@ final class GamekitUITests: XCTestCase {
         openGameInspector(413150, in: app)
         let game = app.buttons["launch-game-413150"]
         XCTAssertTrue(game.waitForExistence(timeout: 20))
-        XCTAssertEqual(game.label, "Play")
+        XCTAssertEqual(game.label, "Play \(GameFixtures.other.name)")
         let reported = ByteCountFormatter.string(fromByteCount: 123_456_789, countStyle: .file)
         XCTAssertTrue(app.staticTexts["Steam-reported size: \(reported)"].exists)
         XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")

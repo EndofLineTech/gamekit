@@ -10,9 +10,12 @@ final class InstalledGamesModel: ObservableObject {
     @Published private(set) var libraryStale = false
     @Published private(set) var message: String?
     @Published private(set) var pendingGame: UInt32?
+    @Published private(set) var runningGames: Set<UInt32> = []
+    @Published private(set) var gameObservationAvailable = false
     @Published private(set) var lastDiagnosticID: UUID?
     private var launchObservation: Task<Void, Never>?
     private var namesNeedRefresh = true
+    private var missingRunningPolls: [UInt32: Int] = [:]
     private var requestedUninstall: (id: UInt32, name: String)?
     private let profiles = GameProfileStore(root: AppStorageLocations.metadata)
     private var profileRefresh: Task<Void, Never>?
@@ -24,7 +27,8 @@ final class InstalledGamesModel: ObservableObject {
         do {
             let store = try EnvironmentStore(root: AppStorageLocations.metadata)
             guard let record = try await store.load(SteamInstallationRecipe.environmentID), record.installation == .installed else {
-                games = []; warning = nil; libraryStale = false; return
+                games = []; runningGames = []; missingRunningPolls = [:]; gameObservationAvailable = false
+                warning = nil; libraryStale = false; return
             }
             let service = SteamLibraryService(store: store, layout: setup.layout)
             let result = try await Task.detached(priority: .utility) {
@@ -69,15 +73,44 @@ final class InstalledGamesModel: ObservableObject {
                     warning = "Games were detected, but their Dock names could not be refreshed. Refresh after checking the managed Steam session."
                 }
             }
+            #if DEBUG
+            if AppStorageLocations.queuedLaunchFixtureRoot != nil {
+                runningGames = []; missingRunningPolls = [:]; gameObservationAvailable = true
+            } else {
+                await observeRunningGames(using: service)
+            }
+            #else
+            await observeRunningGames(using: service)
+            #endif
         } catch {
             guard !Task.isCancelled else { return }
             libraryStale = true
+            gameObservationAvailable = false
             warning = "The managed game library could not be read. Last known entries are shown without Play or uninstall. Refresh after checking Steam and the environment."
         }
     }
 
+    private func observeRunningGames(using service: SteamLibraryService) async {
+        do {
+            let snapshot = try await service.observeGames()
+            guard !Task.isCancelled else { return }
+            var observed = snapshot.runningIDs
+            for id in runningGames.subtracting(snapshot.runningIDs) {
+                let misses = (missingRunningPolls[id] ?? 0) + 1
+                if misses < 2 { missingRunningPolls[id] = misses; observed.insert(id) }
+                else { missingRunningPolls[id] = nil }
+            }
+            for id in snapshot.runningIDs { missingRunningPolls[id] = nil }
+            runningGames = observed
+            gameObservationAvailable = !libraryStale && !snapshot.hasUnidentifiedProcesses && missingRunningPolls.isEmpty
+        } catch {
+            gameObservationAvailable = false
+        }
+    }
+
     func launch(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
-        guard pendingGame == nil, !libraryStale, game.state == .ready, setup.actions.launch || setup.actions.show,
+        guard pendingGame == nil, !runningGames.contains(game.id), gameObservationAvailable,
+              !libraryStale, game.state == .ready, setup.actions.launch || setup.actions.show,
               let token = setup.begin("Launching \(game.name)") else { return }
         message = "Requesting \(game.name)…"
         Task { [self] in
@@ -112,6 +145,29 @@ final class InstalledGamesModel: ObservableObject {
             setup.end(token)
             await refresh(setup: setup)
             setup.refresh(diagnostics: diagnostics)
+            diagnostics.refreshID = UUID()
+        }
+    }
+
+    func stop(_ game: InstalledSteamGame, setup: SetupModel, diagnostics: AppDiagnosticsModel) {
+        guard pendingGame == nil, runningGames.contains(game.id), gameObservationAvailable, !libraryStale,
+              let token = setup.begin("Stopping \(game.name)") else { return }
+        message = "Stopping \(game.name)…"
+        Task { [self] in
+            let operation = try? await diagnostics.store?.begin(stage: .shutdown, context: .init(component: .steam))
+            lastDiagnosticID = operation?.id
+            do {
+                let service = SteamLibraryService(store: try EnvironmentStore(root: AppStorageLocations.metadata), layout: setup.layout)
+                let result = try await service.stopGame(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id))
+                message = result == .stopped ? "Stop requested for \(game.name). Check its window; Windows Steam and other games remain open."
+                    : "\(game.name) was already stopped. Windows Steam remains open."
+                if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .exited(0)) }
+            } catch {
+                message = "Could not stop \(game.name): \(AppFailure.message(error))"
+                if let operation { _ = try? await diagnostics.store?.finish(operation, outcome: .executionFailed) }
+            }
+            setup.end(token)
+            await refresh(setup: setup)
             diagnostics.refreshID = UUID()
         }
     }

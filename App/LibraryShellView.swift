@@ -32,6 +32,7 @@ struct LibraryShellView: View {
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
+    @State private var hoveredGameID: UInt32?
     @State private var inspectorVisible = false
     @State private var compatibilityGame: InstalledSteamGame?
     @State private var compatibilityRevision = 0
@@ -147,7 +148,18 @@ struct LibraryShellView: View {
             } else {
                 sidebarHeading("Library")
                 navButton("All Installed Games", symbol: "square.grid.2x2", active: destination == .all, identifier: "library-all") { destination = .all }
-                navButton("Favorites", symbol: "star", active: destination == .favorites, identifier: "library-favorites") { destination = .favorites }
+                Button { destination = .favorites } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: preferences.favorites.isEmpty ? "star" : "star.fill")
+                            .symbolEffect(.bounce, value: preferences.favorites.count)
+                        Text("Favorites")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(destination == .favorites ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
+                                in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain).accessibilityIdentifier("library-favorites")
                 if setup.record?.installation == .installed {
                     sidebarHeading("Launchers")
                     navButton("Windows Steam", symbol: "gamecontroller", active: destination == .steam, identifier: "library-steam") { destination = .steam }
@@ -321,18 +333,46 @@ struct LibraryShellView: View {
                     .accessibilityIdentifier("select-game-\(game.id)")
                     .accessibilityValue(favorite ? "Favorite" : "Not favorite")
                     .overlay(alignment: .topTrailing) {
-                        Button { toggleFavorite(game) } label: {
-                            Image(systemName: favorite ? "star.fill" : "star")
-                                .foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 3)
-                                .frame(width: 32, height: 32)
+                        if favorite || selectedGameID == game.id || hoveredGameID == game.id {
+                            Button { toggleFavorite(game) } label: {
+                                Image(systemName: favorite ? "star.fill" : "star")
+                                    .foregroundStyle(.white).shadow(color: .black.opacity(0.8), radius: 3)
+                                    .frame(width: 32, height: 32)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
+                            .accessibilityIdentifier("favorite-game-\(game.id)")
+                            .padding(7)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(favorite ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
-                        .accessibilityIdentifier("favorite-game-\(game.id)")
-                        .padding(7)
+                    }
+                    .overlay(alignment: .top) {
+                        if hoveredGameID == game.id && game.state == .ready {
+                            let running = games.runningGames.contains(game.id)
+                            Button { if running { stop(game) } else { play(game) } } label: {
+                                Image(systemName: running ? "stop.fill" : "play.fill")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 42, height: 42)
+                                    .background(LibraryVisualStyle.accent, in: Circle())
+                                    .shadow(color: .black.opacity(0.45), radius: 5)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale
+                                      || setup.isBusy || (!running && !(setup.actions.launch || setup.actions.show)))
+                            .accessibilityLabel("\(running ? "Stop" : "Play") \(game.name)")
+                            .accessibilityHint(running ? "Stop this managed game without stopping Windows Steam or other games."
+                                               : playHint(for: game))
+                            .accessibilityIdentifier("\(running ? "hover-stop-game" : "hover-launch-game")-\(game.id)")
+                            .help("\(running ? "Stop" : "Play") \(game.name)")
+                            .padding(.bottom, 12)
+                            .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottom)
+                        }
                     }
                     .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
                     .contextMenu { gameMenu(game) }
+                    .onHover { hovering in
+                        if hovering { hoveredGameID = game.id }
+                        else if hoveredGameID == game.id { hoveredGameID = nil }
+                    }
                     .id(game.id)
                 }
             }
@@ -454,24 +494,58 @@ struct LibraryShellView: View {
                     Text(game.name).font(.title2.bold())
                     Text("Windows Steam · \(status(game))").foregroundStyle(.secondary)
                     Text("Steam-reported size: \(size(game))").font(.callout)
-                    Button("Play") { play(game) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(game.state != .ready || games.pendingGame != nil || !(setup.actions.launch || setup.actions.show) || games.libraryStale)
-                        .accessibilityIdentifier("launch-game-\(game.id)")
-                        .accessibilityHint(playHint(for: game))
-                    Button(isFavorite(game) ? "Remove from Favorites" : "Add to Favorites") { toggleFavorite(game) }
+                    HStack(spacing: 10) {
+                        if games.runningGames.contains(game.id) {
+                            Button { stop(game) } label: {
+                                Image(systemName: "stop.fill").frame(width: 36, height: 30)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale || setup.isBusy)
+                            .accessibilityLabel("Stop \(game.name)")
+                            .accessibilityHint("Stop this managed game without stopping Windows Steam or other games.")
+                            .accessibilityIdentifier("stop-game-\(game.id)")
+                            .help("Stop \(game.name)")
+                        } else {
+                            Button { play(game) } label: {
+                                Image(systemName: "play.fill").frame(width: 36, height: 30)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(game.state != .ready || games.pendingGame != nil || !games.gameObservationAvailable
+                                      || !(setup.actions.launch || setup.actions.show) || games.libraryStale)
+                            .accessibilityLabel("Play \(game.name)")
+                            .accessibilityIdentifier("launch-game-\(game.id)")
+                            .accessibilityHint(playHint(for: game))
+                            .help("Play \(game.name)")
+                        }
+                        Button { toggleFavorite(game) } label: {
+                            Image(systemName: isFavorite(game) ? "star.fill" : "star").frame(width: 36, height: 30)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(isFavorite(game) ? "Remove \(game.name) from Favorites" : "Add \(game.name) to Favorites")
+                        .accessibilityIdentifier("inspector-favorite-game-\(game.id)")
+                        .help(isFavorite(game) ? "Remove from Favorites" : "Add to Favorites")
+                    }
                     LibraryInspectorSection(title: "Game actions") {
-                        Button("Show Windows Steam") { steam.control(stop: false, diagnostics: diagnostics, setup: setup) }
-                            .disabled(!(setup.actions.launch || setup.actions.show))
                         Button("All compatibility settings…") { compatibilityGame = game }
                             .disabled(setup.isBusy).accessibilityIdentifier("game-compatibility-\(game.id)")
-                        Button("Open game files in Finder") { games.openGameFiles(game, setup: setup) }
-                            .disabled(game.state != .ready || games.libraryStale || setup.isBusy)
-                            .accessibilityIdentifier("game-files-\(game.id)")
-                            .help("Open this game's current managed installation folder in Finder")
-                        Button("Uninstall…") { uninstallGame = game; confirmingUninstall = true }
-                            .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
-                            .accessibilityIdentifier("uninstall-game-\(game.id)")
+                        HStack(spacing: 10) {
+                            Button { games.openGameFiles(game, setup: setup) } label: {
+                                Image(systemName: "folder").frame(width: 36, height: 30)
+                            }
+                                .buttonStyle(.bordered)
+                                .disabled(game.state != .ready || games.libraryStale || setup.isBusy)
+                                .accessibilityIdentifier("game-files-\(game.id)")
+                                .accessibilityLabel("Open \(game.name) files in Finder")
+                                .help("Open this game's current managed installation folder in Finder")
+                            Button { uninstallGame = game; confirmingUninstall = true } label: {
+                                Image(systemName: "trash").frame(width: 36, height: 30)
+                            }
+                                .buttonStyle(.bordered)
+                                .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
+                                .accessibilityIdentifier("uninstall-game-\(game.id)")
+                                .accessibilityLabel("Uninstall \(game.name)")
+                                .help("Uninstall \(game.name) through Windows Steam")
+                        }
                     }
                     InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
                 } else {
@@ -485,11 +559,14 @@ struct LibraryShellView: View {
     }
 
     @ViewBuilder private func gameMenu(_ game: InstalledSteamGame) -> some View {
-        if game.state == .ready {
+        if games.runningGames.contains(game.id) {
+            Button("Stop \(game.name)") { stop(game) }
+                .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale || setup.isBusy)
+        } else if game.state == .ready {
             Button("Play") { play(game) }
-                .disabled(games.pendingGame != nil || games.libraryStale || !(setup.actions.launch || setup.actions.show))
+                .disabled(games.pendingGame != nil || !games.gameObservationAvailable || games.libraryStale
+                          || !(setup.actions.launch || setup.actions.show))
         }
-        Button("Show Windows Steam") { steam.control(stop: false, diagnostics: diagnostics, setup: setup) }
         Button("Compatibility settings…") { compatibilityGame = game }
         if game.state == .ready {
             Button("Open game files in Finder") { games.openGameFiles(game, setup: setup) }
@@ -618,9 +695,14 @@ struct LibraryShellView: View {
         games.launch(game, setup: setup, diagnostics: diagnostics)
     }
 
+    private func stop(_ game: InstalledSteamGame) {
+        games.stop(game, setup: setup, diagnostics: diagnostics)
+    }
+
     private func playHint(for game: InstalledSteamGame) -> String {
         if games.libraryStale { return "The managed library is unreadable. Refresh its records before requesting Play." }
         if game.state != .ready { return "Finish this game's installation or update in Windows Steam first." }
+        if !games.gameObservationAvailable { return "Managed game processes cannot be verified. Refresh before requesting Play." }
         if games.pendingGame != nil { return "Another game launch is being observed. Check Windows Steam before retrying." }
         if !(setup.actions.launch || setup.actions.show) { return "Complete Steam setup and runtime checks before requesting Play." }
         return "Request this game once through managed Windows Steam. A launch request does not prove gameplay readiness."

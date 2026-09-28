@@ -37,7 +37,11 @@ final class QueuedGameLaunchUITests: XCTestCase {
             XCTFail("The isolated game never became launchable: \(play.debugDescription)")
             return
         }
-        play.click()
+        tile.hover()
+        let hoverPlay = app.buttons["hover-launch-game-42"]
+        XCTAssertTrue(hoverPlay.waitForExistence(timeout: 5))
+        XCTAssertTrue(hoverPlay.isEnabled)
+        hoverPlay.click()
         let status = app.staticTexts["persistent-game-status"]
         let pending = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "Waiting for Steam to acknowledge"), object: status)
         await fulfillment(of: [pending], timeout: 15)
