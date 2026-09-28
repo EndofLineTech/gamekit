@@ -30,6 +30,9 @@ final class GamekitUITests: XCTestCase {
         XCTAssertEqual(app.buttons["uninstall-game-42"].label, "Uninstall Fixture")
         XCTAssertEqual(app.buttons["launch-game-42"].label, "Play Fixture")
         XCTAssertTrue(app.buttons["inspector-favorite-game-42"].exists)
+        let gear = app.buttons["game-compatibility-42"]
+        XCTAssertTrue(gear.exists)
+        XCTAssertEqual(gear.label, "Compatibility settings for Fixture")
         XCTAssertFalse(app.buttons["Show Windows Steam"].exists, "Steam management belongs in Settings → Launchers")
         try writeManifest(flags: 1026)
         let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == false"), object: files)

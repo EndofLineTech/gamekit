@@ -119,7 +119,7 @@ counters. No screenshots or shader hooks are enabled. See
 
 ### Helldivers driver alert
 
-Select Helldivers, open **All compatibility settings…** in the inspector and
+Select Helldivers, open the inspector's **gear icon** for compatibility settings and
 use **Avoid the virtual-GPU driver warning** to enable or disable the workaround
 for that game. It requires
 the updated runtime and a stopped Steam session. Your existing enabled choice
@@ -234,7 +234,7 @@ subfolder. Windows Steam does not need to be running to use this button.
 For a ready individual game, **Open game files in Finder** in its inspector or
 context menu rechecks the current managed manifest and folder first. Per-game
 graphics and fullscreen-Space choices are summarized as **next launch** values
-in the inspector; **All compatibility settings…** opens the full editable sheet.
+in the inspector; its gear icon opens the full editable compatibility sheet.
 
 To uninstall, select the game and click the trash icon in its inspector (or use
 the game's context menu), then choose **Continue in Windows Steam**. Steam opens
@@ -279,7 +279,7 @@ for scope and validation.
 
 ## Per-game compatibility
 
-Select a game and choose **All compatibility settings…** in its inspector.
+Select a game and click the gear icon in its inspector.
 Every ready installed game offers an independent graphics-backend override and
 displays its effective next-launch choice. **Use shared default** follows the
 shared selection under **Settings → Game defaults**; explicit
