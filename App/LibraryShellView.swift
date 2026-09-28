@@ -154,29 +154,18 @@ struct LibraryShellView: View {
                 sidebarHeading("Library")
                 navButton("All Installed Games", symbol: "square.grid.2x2", active: destination == .all, identifier: "library-all") { destination = .all }
                 Button { destination = .favorites } label: {
-                    HStack(spacing: 8) {
+                    sidebarRow("Favorites", active: destination == .favorites) {
                         Image(systemName: preferences.favorites.isEmpty ? "star" : "star.fill")
                             .symbolEffect(.bounce, value: preferences.favorites.count)
-                        Text("Favorites")
-                        Spacer()
+                            .accessibilityHidden(true)
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(destination == .favorites ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
-                                in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain).accessibilityIdentifier("library-favorites")
                 .help("Show your favorite games")
                 if setup.record?.installation == .installed {
                     sidebarHeading("Launchers")
                     Button { destination = .steam } label: {
-                        HStack(spacing: 8) {
-                            steamLauncherIcon
-                            Text("Windows Steam")
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(destination == .steam ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 8))
+                        sidebarRow("Windows Steam", active: destination == .steam) { steamLauncherIcon }
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("library-steam")
                     .help("Open Windows Steam games")
@@ -199,13 +188,24 @@ struct LibraryShellView: View {
     private func navButton(_ title: String, symbol: String, active: Bool, identifier: String,
                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: symbol).frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(active ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
-                            in: RoundedRectangle(cornerRadius: 8))
+            sidebarRow(title, active: active) {
+                Image(systemName: symbol).accessibilityHidden(true)
+            }
         }
         .buttonStyle(.plain).accessibilityIdentifier(identifier)
         .help(title == "Back to Library" ? "Return to the previous library view" : "Open \(title)")
+    }
+
+    private func sidebarRow<Icon: View>(_ title: String, active: Bool, @ViewBuilder icon: () -> Icon) -> some View {
+        HStack(spacing: 8) {
+            icon().frame(width: 22, height: 22)
+            Text(title)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(active ? LibraryVisualStyle.accent.opacity(0.18) : .clear,
+                    in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var steamLauncherIcon: some View {
