@@ -1095,7 +1095,11 @@ final class GamekitUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
         if button.isHittable && app.windows["Gamekit"].frame.insetBy(dx: 0, dy: 8).contains(button.frame) { return }
-        let scroll = app.scrollViews.firstMatch
+        // The system inspector has its own scroll view. Scroll the pane that
+        // contains the control, rather than the library content behind it.
+        let scroll = app.scrollViews.allElementsBoundByIndex.first {
+            $0.frame.minX <= button.frame.midX && button.frame.midX <= $0.frame.maxX
+        } ?? app.scrollViews.firstMatch
         // A partially clipped button can report hittable while its center is
         // outside the scroll viewport. Avoid clicking during startup layout shifts.
         for _ in 0..<12 {
