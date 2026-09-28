@@ -179,9 +179,11 @@ final class GamekitUITests: XCTestCase {
         app.typeKey(.home, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        let nextRowID = [43, 44, 45].first { app.buttons["select-game-\($0)"].frame.minY > first.frame.minY + 5 } ?? 45
         app.typeKey(.downArrow, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10), "Down moves by the displayed column count")
+        XCTAssertTrue(app.buttons["launch-game-\(nextRowID)"].waitForExistence(timeout: 10),
+                      "Down moves by the displayed column count")
         app.typeKey(.end, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10))
