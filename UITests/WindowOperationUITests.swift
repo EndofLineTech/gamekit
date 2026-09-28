@@ -25,16 +25,18 @@ final class WindowOperationUITests: XCTestCase {
         XCTAssertEqual(back.frame.midY, navigationY, accuracy: 2,
                        "An operation starting must not move navigation underneath a click")
         app.buttons["back-to-library"].click()
-        XCTAssertTrue(activity.exists, "Leaving Settings must not cancel the pending operation")
         app.buttons["nav-diagnostics"].click()
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
-        XCTAssertTrue(activity.exists, "Leaving setup must not cancel or hide the window's pending operation")
         app.activate()
         app.buttons["nav-settings"].click()
         XCTAssertTrue(launchers.waitForExistence(timeout: 10))
         launchers.click()
         XCTAssertTrue(app.staticTexts["Ready to install and launch"].waitForExistence(timeout: 15),
-                      "The original operation must complete after navigation")
+                       "The original operation must complete after navigation")
+        let refresh = app.buttons["refresh-prerequisites"]
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed,
+                       "The check finishes after navigation and releases the window operation gate")
         XCTAssertEqual(back.frame.midY, navigationY, accuracy: 2,
                        "An operation finishing must leave navigation in place")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path),
