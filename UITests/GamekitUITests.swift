@@ -619,7 +619,7 @@ final class GamekitUITests: XCTestCase {
         openGameInspector(413150, in: app)
         let game = app.buttons["launch-game-413150"]
         XCTAssertTrue(game.waitForExistence(timeout: 20))
-        XCTAssertEqual(game.label, "Play")
+        XCTAssertEqual(game.label, "Play \(GameFixtures.other.name)")
         let reported = ByteCountFormatter.string(fromByteCount: 123_456_789, countStyle: .file)
         XCTAssertTrue(app.staticTexts["Steam-reported size: \(reported)"].exists)
         XCTAssertFalse(game.isEnabled, "Unavailable runtime must disable game launches")
