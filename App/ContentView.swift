@@ -38,6 +38,7 @@ struct ContentView: View {
                     Spacer()
                     Button("Diagnostics") { diagnostics.open(operationID: games.lastDiagnosticID) }
                         .accessibilityIdentifier("game-diagnostics-link")
+                        .help("Open diagnostics for this game action")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 9)
                 .background(LibraryVisualStyle.panel)
@@ -108,6 +109,7 @@ struct ContentView: View {
                 .accessibilityIdentifier(identifier)
             Button("Diagnostics") { diagnostics.open(operationID: operationID) }
                 .accessibilityIdentifier("\(identifier)-diagnostics")
+                .help("Open diagnostics for this status")
         }
         .padding(.horizontal, 18).padding(.vertical, 9)
         .background(LibraryVisualStyle.panel)

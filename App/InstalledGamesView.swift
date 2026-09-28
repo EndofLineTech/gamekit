@@ -288,6 +288,7 @@ struct InstalledGamesView: View {
                     }
                     .disabled(model.refreshing || setup.isBusy)
                     .accessibilityIdentifier("refresh-games")
+                    .help("Refresh the managed Windows Steam game library")
                 }
                 if model.games.isEmpty {
                     Text("No games detected. Install a game in Windows Steam and it will appear here automatically.")
@@ -359,7 +360,9 @@ struct InstalledGamesView: View {
                 uninstallGame = nil
             }
             .disabled(model.pendingGame != nil || !(setup.actions.launch || setup.actions.show))
+            .help("Open this game's uninstall flow in Windows Steam")
             Button("Cancel", role: .cancel) { uninstallGame = nil }
+                .help("Keep this game installed")
         } message: {
             Text("Windows Steam will handle removal. Review and confirm it there. The installed-game list updates automatically.")
         }

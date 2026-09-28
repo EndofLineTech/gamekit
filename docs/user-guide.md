@@ -86,6 +86,7 @@ movement alone does not start a game. Hover a ready cover for its Play button;
 **Command-F** enters library search, and
 Escape collapses the inspector. Clicking a title or row once also selects;
 double-clicking a ready title requests Play once.
+Hover over buttons, including icon-only controls, for a description of their action.
 
 **Settings** (Command-comma) replaces the sidebar with **General**, **Game
 defaults**, **Launchers** and **Storage**. **Back to Library** returns to your

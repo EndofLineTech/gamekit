@@ -14,6 +14,7 @@ struct LauncherCachesView: View {
             Text("Generated game launchers").font(.headline)
             Button("Inspect launcher caches") { run() }
                 .disabled(setup.isBusy).accessibilityIdentifier("inspect-launcher-caches")
+                .help("List generated game launchers and identify obsolete caches")
             Text(status).font(.caption).accessibilityIdentifier("launcher-caches-status")
             ForEach(entries) { entry in
                 HStack {
@@ -25,6 +26,7 @@ struct LauncherCachesView: View {
                     if entry.canClean {
                         Button("Remove obsolete cache…") { selected = entry; confirmation = true }
                             .disabled(setup.isBusy).accessibilityIdentifier("clean-launcher-cache-\(entry.id)")
+                            .help("Review removal of this obsolete generated launcher cache")
                     }
                 }
             }
@@ -33,7 +35,9 @@ struct LauncherCachesView: View {
         }
         .confirmationDialog("Remove this obsolete launcher cache?", isPresented: $confirmation, titleVisibility: .visible, presenting: selected) { entry in
             Button("Remove obsolete cache", role: .destructive) { run(cleaning: entry) }
+                .help("Remove only this verified obsolete launcher cache")
             Button("Cancel", role: .cancel) {}
+                .help("Keep this generated launcher cache")
         } message: { entry in
             Text("Removes \(entry.id). This is a generated launcher, not installed game data. Current launchers and source runtimes are preserved.")
         }

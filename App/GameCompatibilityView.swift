@@ -43,6 +43,7 @@ struct GameCompatibilityView: View {
             }
             HStack {
                 Link("Profile JSON", destination: GameProfileStore.url(appID: game.id))
+                    .help("Open this game's published profile JSON")
                 Button("Update profile") {
                     fetchingProfile = true
                     Task {
@@ -58,6 +59,7 @@ struct GameCompatibilityView: View {
                         } catch { profileStatus = "Profile update unavailable. Your current profile or defaults remain in use." }
                     }
                 }.disabled(fetchingProfile)
+                    .help("Check for an updated profile without replacing your imported profile")
             }.font(.caption)
             GameProfileTransferControls(game: game, isLocal: profile?.isLocal == true,
                 working: $fetchingProfile, status: $profileStatus) {
@@ -71,6 +73,7 @@ struct GameCompatibilityView: View {
             if let graphics {
                 GameGraphicsBackendPicker(selection: Binding(get: { graphics.override }, set: { run(backend: $0) }))
                     .disabled(setup.isBusy || graphics.sessionLocked || !setup.actions.reset)
+                    .help("Choose the graphics backend for this game's next launch")
                 Text("Effective next launch: \(graphics.effectiveBackend.title)")
                     .accessibilityIdentifier("game-effective-backend")
                 Text("Shared default: \(graphics.sharedBackend.title)").font(.caption)
@@ -95,6 +98,7 @@ struct GameCompatibilityView: View {
                 .pickerStyle(.menu)
                 .accessibilityIdentifier("game-fullscreen-space-picker")
                 .disabled(setup.isBusy || fullscreen.sessionLocked || !setup.actions.reset)
+                .help("Choose whether this game uses the shared fullscreen Space setting")
                 Text("Effective next launch: \(fullscreen.effective ? "Dedicated fullscreen Space" : "Desktop") · Shared default: \(fullscreen.sharedDefault ? "Space" : "Desktop")")
                     .font(.caption).accessibilityIdentifier("game-fullscreen-presentation")
             }
@@ -111,6 +115,7 @@ struct GameCompatibilityView: View {
                         set: { run(driver: $0) }))
                         .accessibilityIdentifier("game-driver-compatibility")
                         .disabled(setup.isBusy || snapshot.sessionLocked || !snapshot.driverCompatibilityAvailable || !setup.actions.reset)
+                        .help("Save this game's driver compatibility choice for the next launch")
                     Text(driver.guidance)
                         .font(.caption).foregroundStyle(.secondary)
                     Divider()
@@ -123,9 +128,15 @@ struct GameCompatibilityView: View {
                         .accessibilityIdentifier("game-capture-setting")
                     Text("Inherited Wine setting: \(snapshot.inheritedCapture ? "enabled" : "disabled"). These are saved settings; changes apply at the next launch.").font(.caption)
                     HStack {
-                        Button("Enable capture") { run(capture: .enabled) }.accessibilityIdentifier("enable-game-capture")
-                        Button("Disable capture") { run(capture: .disabled) }.accessibilityIdentifier("disable-game-capture")
-                        Button("Restore capture default") { run(capture: .inherit) }.accessibilityIdentifier("restore-game-defaults")
+                        Button("Enable capture") { run(capture: .enabled) }
+                            .accessibilityIdentifier("enable-game-capture")
+                            .help("Enable fullscreen display capture for this game on its next launch")
+                        Button("Disable capture") { run(capture: .disabled) }
+                            .accessibilityIdentifier("disable-game-capture")
+                            .help("Disable fullscreen display capture for this game on its next launch")
+                        Button("Restore capture default") { run(capture: .inherit) }
+                            .accessibilityIdentifier("restore-game-defaults")
+                            .help("Use the inherited Wine capture setting for this game")
                     }
                     .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
                     Divider()
@@ -136,6 +147,7 @@ struct GameCompatibilityView: View {
                         get: { snapshot.cursorGuard }, set: { run(cursorGuard: $0) }))
                         .accessibilityIdentifier("game-cursor-guard")
                         .disabled(setup.isBusy || snapshot.sessionLocked || !setup.actions.reset)
+                        .help("Use this game's saved cursor-guard choice on the next launch")
                     Text(cursor.guidance).font(.caption)
                     }
                 }
@@ -146,7 +158,12 @@ struct GameCompatibilityView: View {
             }
             Text(status).font(.callout).accessibilityIdentifier("game-compatibility-status")
             Button("Refresh saved settings") { run() }.disabled(setup.isBusy)
-            HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
+                .help("Reload this game's effective saved compatibility choices")
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                    .help("Close this game's compatibility settings")
+            }
         }
         .padding(24).frame(width: 580)
     }
