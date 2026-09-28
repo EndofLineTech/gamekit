@@ -610,11 +610,6 @@ struct LibraryShellView: View {
                     LibraryPanel {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("Open to All Installed Games").font(.headline)
-                            Picker("Default view", selection: Binding(get: { preferences.viewMode }, set: { setViewMode($0) })) {
-                                Text("Box art").tag(LibraryViewMode.grid)
-                                Text("List").tag(LibraryViewMode.list)
-                            }
-                            .help("Choose the default library layout")
                             Picker("Sort games by", selection: Binding(get: { preferences.sortOrder }, set: { setSortOrder($0) })) {
                                 Text("Name").tag(LibrarySortOrder.name)
                                 Text("Launcher").tag(LibrarySortOrder.source)
