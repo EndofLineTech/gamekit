@@ -61,6 +61,42 @@ private final class InstallerProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite("Steam installer acquisition")
 struct InstallerAcquisitionTests {
+    @Test("Bundled launcher policy keeps large downloads scoped to an exact endpoint")
+    func launcherEndpoint() throws {
+        let profile = try LauncherProfileStore.bundled("ubisoft")
+        let policy = InstallerEndpointPolicy(source: profile.installer.url, maximumBytes: profile.installer.maximumBytes)
+        #expect(policy.allows(profile.installer.url))
+        #expect(!policy.allows(try #require(URL(string: profile.installer.url.absoluteString + "?untrusted=1"))))
+        #expect(!policy.allows(try #require(URL(string: "http://" + profile.installer.url.host! + profile.installer.url.path))))
+        #expect(!policy.allows(try #require(URL(string: "https://" + profile.installer.url.host! + ".evil.test" + profile.installer.url.path))))
+        try InstallerHTTPClient.validateResponse(url: profile.installer.url, status: 200,
+            expectedBytes: Int64(InstallerSourcePolicy.maximumBytes + 1), policy: policy)
+    }
+
+    @Test("Launcher acquisition pins digest and keeps receipts separate from Steam")
+    func launcherAcquisition() async throws {
+        let fixture = try AcquisitionFixture(); defer { fixture.remove() }
+        let bundled = try LauncherProfileStore.bundled("ubisoft")
+        let payload = InstallerPayload(data: installerPE(), finalURL: bundled.installer.url,
+                                       status: 200, expectedBytes: Int64(installerPE().count))
+        let unchanged = try ManagedLauncherInstallerAcquisition(profile: bundled, root: fixture.root, transfer: { payload })
+        await #expect(throws: InstallerAcquisitionError.artifactChanged) { try await unchanged.acquire() }
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(bundled)) as? [String: Any])
+        var installer = try #require(object["installer"] as? [String: Any])
+        installer["sha256"] = SHA256.hash(data: payload.data).map { String(format: "%02x", $0) }.joined()
+        object["installer"] = installer
+        let profile = try LauncherProfile.decode(JSONSerialization.data(withJSONObject: object))
+        let store = try ManagedLauncherInstallerAcquisition(profile: profile, root: fixture.root, transfer: { payload })
+        let artifact = try await store.acquire()
+        #expect(artifact.provenance.source == bundled.installer.url)
+        let file = try await store.validatedURL(for: artifact)
+        #expect(file.pathComponents.contains(profile.id.rawValue))
+        #expect(try Data(contentsOf: file) == payload.data)
+        #expect(!FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("InstallerDownloads/\(artifact.id.uuidString.lowercased()).exe").path))
+        try Data("changed".utf8).write(to: file)
+        await #expect(throws: (any Error).self) { try await store.validatedURL(for: artifact) }
+    }
+
     @Test("Official URL policy rejects credential-bearing, downgrade and lookalike redirects")
     func sourcePolicy() throws {
         #expect(InstallerSourcePolicy.allows(InstallerSourcePolicy.source))

@@ -18,13 +18,32 @@ public enum InstallerSourcePolicy {
     }
 }
 
+/// A bundled launcher's exact HTTPS endpoint and download ceiling. Never
+/// authorize redirects just because their hostname looks familiar.
+struct InstallerEndpointPolicy: Sendable {
+    let source: URL
+    let maximumBytes: Int
+
+    static let steam = Self(source: InstallerSourcePolicy.source, maximumBytes: InstallerSourcePolicy.maximumBytes)
+
+    func allows(_ url: URL) -> Bool {
+        guard let expected = URLComponents(url: source, resolvingAgainstBaseURL: false),
+              let actual = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        return expected.scheme == "https" && actual.scheme == expected.scheme && actual.host == expected.host &&
+            (actual.port == nil || actual.port == 443) && actual.user == nil && actual.password == nil &&
+            actual.percentEncodedPath == expected.percentEncodedPath && actual.query == nil && actual.fragment == nil
+    }
+}
+
 final class InstallerRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
+    private let policy: InstallerEndpointPolicy
+    init(policy: InstallerEndpointPolicy = .steam) { self.policy = policy }
     func accept(_ url: URL) -> Bool {
         lock.lock(); defer { lock.unlock() }
         count += 1
-        return count <= 5 && InstallerSourcePolicy.allows(url)
+        return count <= 5 && policy.allows(url)
     }
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
@@ -41,9 +60,9 @@ struct InstallerPayload: Sendable {
     let status: Int
     let expectedBytes: Int64
 
-    func validate() throws {
-        try InstallerHTTPClient.validateResponse(url: finalURL, status: status, expectedBytes: expectedBytes)
-        guard data.count <= InstallerSourcePolicy.maximumBytes else { throw InstallerAcquisitionError.tooLarge }
+    func validate(policy: InstallerEndpointPolicy = .steam) throws {
+        try InstallerHTTPClient.validateResponse(url: finalURL, status: status, expectedBytes: expectedBytes, policy: policy)
+        guard data.count <= policy.maximumBytes else { throw InstallerAcquisitionError.tooLarge }
         guard expectedBytes < 0 || expectedBytes == data.count else { throw InstallerAcquisitionError.incompleteTransfer }
         try InstallerExecutable.validate(data)
     }
@@ -57,15 +76,22 @@ enum InstallerHTTPClient {
         return request
     }
 
-    static func validateResponse(url: URL, status: Int, expectedBytes: Int64) throws {
-        guard InstallerSourcePolicy.allows(url) else { throw InstallerAcquisitionError.invalidSource }
+    static func validateResponse(url: URL, status: Int, expectedBytes: Int64,
+                                 policy: InstallerEndpointPolicy = .steam) throws {
+        guard policy.allows(url) else { throw InstallerAcquisitionError.invalidSource }
         guard status == 200 else { throw InstallerAcquisitionError.invalidResponse }
-        guard expectedBytes <= InstallerSourcePolicy.maximumBytes else { throw InstallerAcquisitionError.tooLarge }
+        guard expectedBytes <= policy.maximumBytes else { throw InstallerAcquisitionError.tooLarge }
     }
 
     static func fetch(configuration: URLSessionConfiguration = .ephemeral,
                       byteLimit: Int = InstallerSourcePolicy.maximumBytes) async throws -> InstallerPayload {
-        guard (1...InstallerSourcePolicy.maximumBytes).contains(byteLimit) else { throw InstallerAcquisitionError.tooLarge }
+        try await fetch(policy: .steam, configuration: configuration, byteLimit: byteLimit)
+    }
+
+    static func fetch(policy: InstallerEndpointPolicy, configuration: URLSessionConfiguration = .ephemeral,
+                      byteLimit: Int? = nil) async throws -> InstallerPayload {
+        let byteLimit = byteLimit ?? policy.maximumBytes
+        guard (1...policy.maximumBytes).contains(byteLimit) else { throw InstallerAcquisitionError.tooLarge }
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.urlCache = nil
@@ -75,12 +101,12 @@ enum InstallerHTTPClient {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         try Task.checkCancellation()
-        let (stream, response) = try await session.bytes(for: request(InstallerSourcePolicy.source), delegate: InstallerRedirectPolicy())
+        let (stream, response) = try await session.bytes(for: request(policy.source), delegate: InstallerRedirectPolicy(policy: policy))
         guard let response = response as? HTTPURLResponse, let url = response.url,
               response.value(forHTTPHeaderField: "Content-Range") == nil,
               response.value(forHTTPHeaderField: "Content-Encoding").map({ $0.lowercased() == "identity" }) ?? true
         else { throw InstallerAcquisitionError.invalidResponse }
-        try validateResponse(url: url, status: response.statusCode, expectedBytes: response.expectedContentLength)
+        try validateResponse(url: url, status: response.statusCode, expectedBytes: response.expectedContentLength, policy: policy)
         guard response.expectedContentLength <= byteLimit else { throw InstallerAcquisitionError.tooLarge }
         var data = Data()
         for try await byte in stream {

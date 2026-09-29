@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "ubisoft",
+  "name": "Ubisoft Connect",
+  "installer": {
+    "url": "https://static3.cdn.ubi.com/orbit/launcher_installer/UbisoftConnectInstaller.exe",
+    "sha256": "2df8790f7a4aba803dd140ff20e45a55f60d1c7fe3bd34709b4519bcb5c5e3e7",
+    "maximumBytes": 300000000,
+    "arguments": ["/S"]
+  },
+  "executable": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/UbisoftConnect.exe",
+  "clientExecutables": ["upc.exe"],
+  "webExecutables": ["UplayWebCore.exe"],
+  "versionFile": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/version.txt"
+}
