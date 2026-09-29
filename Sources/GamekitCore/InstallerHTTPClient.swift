@@ -97,7 +97,9 @@ enum InstallerHTTPClient {
         configuration.urlCache = nil
         configuration.httpShouldSetCookies = false
         configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 120
+        // Large official launcher installers need a longer *total* transfer
+        // budget; the request timeout still bounds stalled connections.
+        configuration.timeoutIntervalForResource = policy.maximumBytes > 64 * 1024 * 1024 ? 900 : 120
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         try Task.checkCancellation()

@@ -184,29 +184,48 @@ enum AppFailure {
     static func message(_ error: any Error) -> String {
         switch error {
         case GraphicsPayloadError.unavailable: "The selected graphics payload is missing, changed, or incompatible with this runtime. Install the pinned backend payload and refresh Setup, or select an Apple backend."
-        case EnvironmentStoreError.busy: "Another operation or Steam session owns this environment. Finish or stop it, then retry."
-        case EnvironmentStoreError.unsafePath, EnvironmentStoreError.identityMismatch, SteamLifecycleError.scopeChanged:
+        case EnvironmentStoreError.busy: "Another operation or managed launcher session owns this environment. Finish or stop it, then retry."
+        case EnvironmentStoreError.unsafePath, EnvironmentStoreError.identityMismatch, SteamLifecycleError.scopeChanged,
+             ManagedLauncherLifecycleError.scopeChanged:
             "A managed path changed or redirects elsewhere. Restore the expected location and refresh; Gamekit will not overwrite it."
         case SteamInstallationError.recoveryRequired: "This installation needs recovery. Choose Retry, or review the reset options."
+        case ManagedLauncherInstallationError.recoveryRequired:
+            "Ubisoft Connect has an existing or incomplete installation. Use its stage-specific Retry or Verify action; no files were reset."
         case SteamRecoveryError.activeProcesses, SteamLifecycleError.foreignActivity:
             "Processes are still using this environment, or ownership does not match. Stop the owning session before recovery."
+        case ManagedLauncherLifecycleError.foreignActivity:
+            "Ubisoft Connect's environment has unowned or mixed-session processes. Gamekit will not launch or stop them."
         case SteamRecoveryError.observationUnavailable, SteamLifecycleError.observationUnavailable:
             "Process ownership could not be checked. Refresh status before trying again."
+        case ManagedLauncherLifecycleError.observationUnavailable:
+            "Ubisoft Connect process ownership could not be verified. Refresh its status before retrying."
         case SteamRecoveryError.nonEmptyInstallerDestination:
             "The installer needs an empty destination. Choose a reset option to handle partial client files, then Retry."
         case SteamRecoveryError.pendingReset: "A previous reset has unfinished journal steps. Choose Retry to resume that confirmed operation."
         case SteamInstallationError.prerequisitesNotReady, RuntimeSessionError.prerequisitesNotReady:
             "Prerequisites are not ready. Refresh the checks and follow the reported fix before continuing."
+        case ManagedLauncherInstallationError.prerequisitesNotReady:
+            "The selected runtime is not ready for Ubisoft Connect. Refresh prerequisite checks before installing."
         case SteamApplicationError.invalidBundle: "The generated Windows Steam launcher is invalid. Review local diagnostics before rebuilding its cache."
         case is URLError: "The download could not finish. Check connectivity, then Retry; incomplete downloads are not executed."
         case SteamInstallationError.steamNotObserved: "Steam disappeared during readiness checks. Retry verification after reviewing diagnostics."
+        case ManagedLauncherInstallationError.clientNotObserved:
+            "Ubisoft Connect did not reach its client and web-helper readiness check. Retry Verify when its environment is idle."
         case SteamLifecycleError.notInstalled: "Steam is not fully installed. Complete setup or choose Retry."
+        case ManagedLauncherLifecycleError.notInstalled:
+            "Ubisoft Connect is not fully installed. Complete its isolated setup first."
+        case ManagedLauncherLifecycleError.cleanupFailed:
+            "Ubisoft Connect did not stop cleanly. Its ownership receipt was preserved; inspect its processes before retrying."
+        case InstallerAcquisitionError.artifactChanged, InstallerAcquisitionError.invalidReceipt:
+            "The installer differs from Gamekit's pinned official revision. No changed installer was run; update Gamekit before retrying."
         case SteamRecoveryError.unsupportedRecord: "This saved state is not supported by that recovery action. Review its status and use the appropriate setup or Stop control."
         case GameCompatibilityError.unsupportedGame: "No validated game-specific settings are available for this title."
         case GameCompatibilityError.unsupportedPresentation: "Saved game compatibility settings are not supported. Review the saved configuration before retrying."
         case GameCompatibilityError.driverRuntimeRequired: "This option requires the updated runtime. Stop Steam and select Use updated runtime under Setup and prerequisites."
         case GameCompatibilityError.unsupportedRegistry: "Wine's saved registry has an unsupported or ambiguous setting. Gamekit cannot safely edit it. Review the local configuration before retrying."
         case SteamInstallationError.timedOut: "The stage timed out. Inspect progress and use Retry after the managed session has stopped."
+        case ManagedLauncherInstallationError.timedOut:
+            "Ubisoft Connect setup timed out. Inspect its saved stage and use Retry or Verify once the environment is idle."
         default: "The operation did not complete. Open local diagnostics for details; use Retry to inspect the saved stage."
         }
     }

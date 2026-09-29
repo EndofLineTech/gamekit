@@ -36,6 +36,25 @@ private struct ApplicationBundleFixture {
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("An independent launcher identity keeps the Steam bundle and source runtime intact")
+    func separateLauncherBundle() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let profile = try LauncherProfileStore.bundled("ubisoft")
+        let steam = try await SteamApplicationBundle(layout: fixture.layout).prepare()
+        let builder = SteamApplicationBundle(layout: fixture.layout, launcher: profile)
+        let launcher = try await builder.prepare()
+        #expect(launcher == fixture.layout.launcherApplicationBundle(profile))
+        #expect(launcher != steam)
+        try builder.validate(launcher)
+        let plist = try #require(PropertyListSerialization.propertyList(
+            from: Data(contentsOf: launcher.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any])
+        #expect(plist["CFBundleDisplayName"] as? String == profile.name)
+        #expect(plist["CFBundleIdentifier"] as? String == "tech.endofline.gamekit.launcher.\(profile.id.rawValue)")
+        #expect(try await builder.prepare() == launcher)
+        #expect(try Data(contentsOf: fixture.layout.wine) == Data("wine fixture".utf8))
+        #expect(try Data(contentsOf: steam.appendingPathComponent("Contents/MacOS/Windows Steam")) == Data("wine fixture".utf8))
+    }
+
     @Test("Profile-selected driver adapters get private DXGI; other PE images remain shared")
     func scopedDriverShim() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }

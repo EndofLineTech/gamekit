@@ -76,7 +76,7 @@ order by name, launcher, state or Steam-reported size (unknown sizes sort last).
 Use the **Favorites** sidebar destination and the star in a cover's upper-right
 corner to keep a local list. The star appears when you hover over or select a
 cover; the sidebar star animates when the Favorites list changes.
-Only managed Windows Steam is a configured launcher in this version. Its icon
+The game library currently lists managed Windows Steam installations. Its icon
 appears in the launcher sidebar row; the transparent mark also appears on covers
 and compact table thumbnails, with **Windows Steam** beneath each cover and in
 the table. Gamekit remembers browsing preferences;
@@ -109,6 +109,21 @@ Changing destinations does not stop Steam or cancel a launch being observed.
 Setup, library and Steam status remain visible near their controls and in the
 window status area. **Diagnostics** beside a status routes to the related local
 operation when one was recorded, without putting raw logs in the library.
+
+### Ubisoft Connect setup
+
+**Settings → Launchers** also offers a separate managed Ubisoft Connect
+environment. Install uses the pinned official Windows installer and requires
+successful runtime checks; it never installs into the Steam prefix. If setup
+is interrupted, use the stage-specific **Retry Ubisoft installer** or **Verify
+Ubisoft Connect** action instead of repeating a fresh install. **Launch Ubisoft
+Connect** opens its own window for you to sign in; Gamekit never reads your
+password. **Show** brings that verified client forward, while **Stop** shuts
+down only its owned Wine environment. Ordinary Gamekit Quit leaves it running.
+
+Ubisoft game discovery and Play are not yet available in Gamekit. Installing
+the client or signing in does not fabricate installed game entries; real
+signed-in receipts and a guarded Play request must be validated separately.
 
 ### Debug capture
 

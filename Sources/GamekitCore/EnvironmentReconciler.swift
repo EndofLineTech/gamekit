@@ -11,7 +11,7 @@ public enum PrerequisiteObservation: Equatable, Sendable {
 
 /// The caller must scope these facts to this environment. A PID alone is insufficient.
 public enum ProcessObservation: Equatable, Sendable {
-    case notChecked, idle, steamRunning
+    case notChecked, idle, steamRunning, launcherRunning
     case installerRunning(InstallationStage)
 }
 
@@ -67,7 +67,7 @@ public enum EnvironmentReconciler {
                 record.updatedAt = max(record.updatedAt, now)
             }
             return result(.installing(stage))
-        case .steamRunning:
+        case .steamRunning, .launcherRunning:
             return result(files.prefixExists && files.executableExists ? .running : .failed(.inconsistentObservation))
         case .idle:
             break

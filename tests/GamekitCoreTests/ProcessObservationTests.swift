@@ -27,6 +27,29 @@ struct ProcessObservationTests {
         let helper = prefix.appendingPathComponent("drive_c/Program Files (x86)/Steam/bin/cef/cef.win64/steamwebhelper.exe").path
         #expect(RuntimeProcessObserver.role(arguments: [helper], record: record, prefix: prefix) == .steamUI)
     }
+
+    @Test("Bundled launcher targets are recognized only within their own prefix and client directory")
+    func launcherRole() throws {
+        let profile = try LauncherProfileStore.bundled("ubisoft")
+        let record = try EnvironmentRecord(id: profile.id, name: profile.name,
+                                           steamExecutable: profile.executable, installation: .installed)
+        let prefix = URL(fileURLWithPath: "/owned/launcher")
+        let directory = prefix.appendingPathComponent(profile.executable.rawValue).deletingLastPathComponent()
+        let client = directory.appendingPathComponent(try #require(profile.clientExecutables.first))
+        let web = directory.appendingPathComponent(try #require(profile.webExecutables.first))
+        #expect(RuntimeProcessObserver.role(arguments: [profile.executable.rawValue], record: record, prefix: prefix) == .other)
+        #expect(RuntimeProcessObserver.role(arguments: [prefix.appendingPathComponent(profile.executable.rawValue).path],
+                                            record: record, prefix: prefix) == .launcher)
+        #expect(RuntimeProcessObserver.role(arguments: [client.path], record: record, prefix: prefix) == .launcher)
+        #expect(RuntimeProcessObserver.role(arguments: [web.path], record: record, prefix: prefix) == .launcherUI)
+        #expect(RuntimeProcessObserver.role(arguments: ["/other/" + client.lastPathComponent], record: record, prefix: prefix) == .other)
+        #expect(RuntimeProcessObserver.role(arguments: ["cmd", "/c", client.path], record: record, prefix: prefix) == .other)
+        let process = ScopedRuntimeProcess(identity: .init(pid: 42, startSeconds: 1, startMicroseconds: 0),
+                                           role: .launcher, sessionID: "owned")
+        #expect(RuntimeProcessSnapshot(processes: [process], complete: true).observation(installation: .installed) == .launcherRunning)
+        #expect(EnvironmentReconciler.reconcile(record, files: .init(prefixExists: true, executableExists: true),
+                                                process: .launcherRunning, prerequisites: .ready, at: Date()).state == .running)
+    }
     @Test("Wine environment does not inherit secrets or conflicting runtime controls")
     func sanitizedEnvironment() {
         let layout = RuntimeLayout(dataRoot: URL(fileURLWithPath: "/Gamekit"))

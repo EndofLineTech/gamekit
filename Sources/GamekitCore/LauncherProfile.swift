@@ -39,7 +39,8 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
                 name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil
         }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              name.count <= 100, name.rangeOfCharacter(from: .controlCharacters) == nil,
+              name.count <= 100, name != ".", name != "..",
+              name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil,
               url?.scheme == "https", url?.host != nil, url?.user == nil, url?.password == nil,
               url?.port == nil || url?.port == 443, url?.query == nil, url?.fragment == nil,
               url?.percentEncodedPath.lowercased().hasSuffix(".exe") == true,

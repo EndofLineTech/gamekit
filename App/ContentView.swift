@@ -7,6 +7,7 @@ struct ContentView: View {
     @StateObject private var setup = SetupModel()
     @StateObject private var games = InstalledGamesModel()
     @StateObject private var steam = SteamLifecycleModel()
+    @StateObject private var ubisoft = UbisoftConnectModel()
     @StateObject private var installation = SteamInstallationModel()
     @StateObject private var portraits = SteamPortraitModel()
     @Environment(\.scenePhase) private var scenePhase
@@ -50,6 +51,7 @@ struct ContentView: View {
         .environmentObject(setup)
         .environmentObject(games)
         .environmentObject(steam)
+        .environmentObject(ubisoft)
         .environmentObject(installation)
         .environmentObject(portraits)
         .task {
@@ -80,6 +82,12 @@ struct ContentView: View {
             while !Task.isCancelled {
                 await steam.refresh(setup: setup)
                 do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
+        .task(id: setup.selectionRevision) {
+            while !Task.isCancelled {
+                await ubisoft.refresh(setup: setup)
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
             }
         }
         .onChange(of: scenePhase) { _, phase in
