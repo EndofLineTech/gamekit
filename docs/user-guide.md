@@ -58,12 +58,17 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 There are no installer-wizard clicks or separate Gamekit readiness confirmation.
 Automatic readiness means the Steam web UI is available; it does not authenticate
-your account or guarantee every Library feature or game works. A persistent status
-bar shows the current stage, with no invented progress percentages.
+your account or guarantee every Library feature or game works. An operation
+status row appears below the library while work is active, with no invented
+progress percentages.
 
 ## Everyday use
 
-The sidebar opens to **All Installed Games** on every app launch. Switch between
+The native macOS sidebar opens to **All Installed Games** on every app launch.
+The sidebar button sits in the titlebar above the left pane, beside the window
+controls; use it to slide the pane closed or open. The game-details
+inspector opens when you select a game or press the toolbar's info button. Both
+panes follow your system appearance and accessibility settings. Switch between
 box-art grid and native table using the toolbar buttons; selection, search and filters
 are shared. **Cover size** sets the width of grid artwork; resizing the window
 rearranges columns without stretching the covers. The toolbar Sort menu can
@@ -71,10 +76,10 @@ order by name, launcher, state or Steam-reported size (unknown sizes sort last).
 Use the **Favorites** sidebar destination and the star in a cover's upper-right
 corner to keep a local list. The star appears when you hover over or select a
 cover; the sidebar star animates when the Favorites list changes.
-Only managed Windows Steam is a configured launcher in this version. Its
-transparent Steam icon appears in the upper-left of each cover and compact
-table thumbnail, with the text **Windows Steam** beneath the cover and in the
-table. Gamekit remembers browsing preferences;
+Only managed Windows Steam is a configured launcher in this version. Its icon
+appears in the launcher sidebar row; the transparent mark also appears on covers
+and compact table thumbnails, with **Windows Steam** beneath each cover and in
+the table. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
 [editable SVG](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/icon-case.svg);
@@ -83,13 +88,13 @@ its asset-generation instructions are in the
 Use arrow keys to move between focused covers or adjacent table rows; Home/End
 move to the first/last game. Return or Space selects and opens the inspector;
 movement alone does not start a game. Hover a ready cover for its Play button;
-**Command-F** enters library search, and
+**Command-F** focuses the native toolbar search field, and
 Escape collapses the inspector. Clicking a title or row once also selects;
 double-clicking a ready title requests Play once.
 Hover over buttons, including icon-only controls, for a description of their action.
 
 **Settings** (Command-comma) replaces the sidebar with **General**, **Game
-defaults**, **Launchers** and **Storage**. **Back to Library** returns to your
+defaults**, **Launchers**, **Storage** and **Diagnostics**. **Back to Library** returns to your
 previous library filter. The Settings category sidebar appears even if you hid
 the library sidebar; collapsing Settings does not change the saved library
 preference, and Back to Library stays in the toolbar. Shared graphics and
@@ -97,7 +102,7 @@ fullscreen-Space defaults are under **Game defaults**. **Settings → Launchers*
 holds Steam setup/recovery, prerequisite checks, validated runtime selection
 and rollback, Launch/Show/Stop, and the managed environment summary together.
 Archive/cache inspection and the steamapps Finder shortcut are under **Storage**;
-logs and safe exports are under **Diagnostics**. Successful managed Steam setup
+logs and safe exports are under **Settings → Diagnostics**. Successful managed Steam setup
 returns from Settings → Launchers to the library; if it is empty, install games
 within Windows Steam.
 Changing destinations does not stop Steam or cancel a launch being observed.
@@ -107,7 +112,7 @@ operation when one was recorded, without putting raw logs in the library.
 
 ### Debug capture
 
-Under **Diagnostics**, enable **Debug mode — capture game startup
+Under **Settings → Diagnostics**, enable **Debug mode — capture game startup
 performance** before launching a game from Gamekit. It records up to 60 seconds
 of read-only CPU, memory and disk-I/O counters for one identified owned game
 process. **Stop debug capture** stops only the sampler. Debug mode starts off

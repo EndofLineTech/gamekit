@@ -15,6 +15,7 @@ struct GamekitApp: App {
     var body: some Scene {
         Window("Gamekit", id: "main") {
             ContentView()
+                .background(WindowTitleHider().frame(width: 0, height: 0))
         }
         .defaultSize(width: startingSize.width, height: startingSize.height)
         .windowResizability(.contentMinSize)
@@ -26,6 +27,28 @@ struct GamekitApp: App {
                 .keyboardShortcut(",", modifiers: .command)
                 .help("Open Gamekit Settings (⌘,)")
             }
+            CommandGroup(after: .textEditing) {
+                Button("Search games") {
+                    NotificationCenter.default.post(name: .gamekitFocusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+        }
+    }
+}
+
+/// Keep the window's accessible title while leaving its titlebar visually clear.
+private struct WindowTitleHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleHidingView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        view.window?.titleVisibility = .hidden
+    }
+
+    private final class TitleHidingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
         }
     }
 }
@@ -33,4 +56,5 @@ struct GamekitApp: App {
 extension Notification.Name {
     static let gamekitOpenSettings = Notification.Name("GamekitOpenSettings")
     static let gamekitOpenDiagnostics = Notification.Name("GamekitOpenDiagnostics")
+    static let gamekitFocusSearch = Notification.Name("GamekitFocusSearch")
 }

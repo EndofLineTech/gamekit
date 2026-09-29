@@ -48,14 +48,16 @@ final class LibraryStressUITests: XCTestCase {
         XCTAssertTrue(firstRow.buttons["select-game-100127"].waitForExistence(timeout: 10))
         let sortedAt = clock.now
 
-        let search = app.textFields["library-search"]
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
         search.click(); search.typeText("Fixture 12")
         XCTAssertTrue(app.staticTexts["9 installations · Windows Steam"].waitForExistence(timeout: 10))
         let searchedAt = clock.now
         search.typeKey("a", modifierFlags: .command); search.typeKey(.delete, modifierFlags: [])
 
         try Data("incomplete".utf8).write(to: apps.appendingPathComponent("appmanifest_100000.acf"))
-        XCTAssertTrue(app.staticTexts["1 Steam installation record could not be read. Let Steam finish its changes, then refresh."].waitForExistence(timeout: 15))
+        // A full 128-receipt refresh and SwiftUI table update can overlap on CI.
+        XCTAssertTrue(app.staticTexts["1 Steam installation record could not be read. Let Steam finish its changes, then refresh."].waitForExistence(timeout: 30))
         XCTAssertTrue(app.staticTexts["128 installations · Windows Steam"].exists,
                       "An unreadable manifest must not discard the last known installation or fabricate an empty library")
         XCTAssertTrue(app.buttons["launch-game-100000"].exists, "Selection survives the partial scan")

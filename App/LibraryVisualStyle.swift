@@ -4,8 +4,7 @@ import SwiftUI
 /// Shared native surfaces for the library, inspector and management destinations.
 /// System colors/materials adapt to macOS appearance and accessibility settings.
 enum LibraryVisualStyle {
-    static let accent = Color(red: 0.39, green: 0.49, blue: 0.86)
-    static let canvas = Color(nsColor: .windowBackgroundColor)
+    static let accent = Color.accentColor
     static let panel = Color(nsColor: .controlBackgroundColor)
     static let border = Color.primary.opacity(0.11)
     static let contentSpacing: CGFloat = 28

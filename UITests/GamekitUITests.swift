@@ -87,13 +87,15 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
         XCTAssertTrue(app.buttons["settings-Launchers"].exists)
         XCTAssertTrue(app.buttons["settings-Storage"].exists)
-        app.buttons["toggle-sidebar"].click()
-        XCTAssertFalse(app.buttons["settings-General"].exists)
+        XCTAssertTrue(app.buttons["settings-Diagnostics"].exists)
+        app.buttons["Hide Sidebar"].click()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["settings-General"])
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
         app.buttons["back-to-library"].click()
         XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 10))
         let saved = try await LibraryPreferencesStore(root: root).load()
         XCTAssertFalse(saved.sidebarVisible, "Browsing sidebar preference must not be rewritten by Settings")
-        app.buttons["toggle-sidebar"].click()
+        app.buttons["Hide Sidebar"].click()
         XCTAssertTrue(app.buttons["library-all"].waitForExistence(timeout: 10))
     }
 
@@ -177,9 +179,11 @@ final class GamekitUITests: XCTestCase {
         app.typeKey(.home, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
+        let nextRowID = [43, 44, 45].first { app.buttons["select-game-\($0)"].frame.minY > first.frame.minY + 5 } ?? 45
         app.typeKey(.downArrow, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10), "Down moves by the displayed column count")
+        XCTAssertTrue(app.buttons["launch-game-\(nextRowID)"].waitForExistence(timeout: 10),
+                      "Down moves by the displayed column count")
         app.typeKey(.end, modifierFlags: [])
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-45"].waitForExistence(timeout: 10))
@@ -213,6 +217,7 @@ final class GamekitUITests: XCTestCase {
         item.click()
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
         let hoverPlay = app.buttons["hover-launch-game-42"]
+        app.buttons["refresh-games"].hover()
         item.hover()
         XCTAssertTrue(hoverPlay.waitForExistence(timeout: 5), "Hovering a cover reveals its Play button")
         XCTAssertFalse(hoverPlay.isEnabled, "Unavailable runtime still disables explicit hover Play")
@@ -222,13 +227,13 @@ final class GamekitUITests: XCTestCase {
         add(gridCapture)
         XCTAssertFalse(app.buttons["launch-game-42"].isEnabled)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
-        app.buttons["nav-diagnostics"].click()
+        openDiagnostics(in: app)
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
-        app.buttons["nav-settings"].click()
         XCTAssertTrue(app.buttons["settings-General"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["settings-Game defaults"].exists)
         XCTAssertTrue(app.buttons["settings-Launchers"].exists)
         XCTAssertTrue(app.buttons["settings-Storage"].exists)
+        XCTAssertTrue(app.buttons["settings-Diagnostics"].exists)
         app.buttons["settings-Launchers"].click()
         XCTAssertTrue(app.buttons["refresh-prerequisites"].waitForExistence(timeout: 10))
         app.buttons["back-to-library"].click()
@@ -257,7 +262,8 @@ final class GamekitUITests: XCTestCase {
         let savedMode = try await preferences.load().viewMode
         XCTAssertEqual(savedMode, .list)
         XCTAssertTrue(app.buttons["launch-game-42"].exists, "Grid and list share the inspector selection")
-        let search = app.textFields["library-search"]
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
         search.click(); search.typeText("no match")
         XCTAssertTrue(app.staticTexts["No matching games"].waitForExistence(timeout: 10))
         app.buttons["Clear filters"].click()
@@ -389,7 +395,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
         app.launch()
         defer { app.terminate() }
-        app.buttons["nav-diagnostics"].click()
+        openDiagnostics(in: app)
         let toggle = app.checkBoxes["debug-performance-mode"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         revealRecoveryButton(toggle, in: app)
@@ -397,7 +403,7 @@ final class GamekitUITests: XCTestCase {
         toggle.click()
         XCTAssertEqual(toggle.value as? Int, 1)
         XCTAssertFalse(app.buttons["stop-debug-capture"].isEnabled)
-        app.terminate(); app.launch(); app.buttons["nav-diagnostics"].click()
+        app.terminate(); app.launch(); openDiagnostics(in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? Int, 0)
     }
@@ -958,7 +964,7 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", root.path, "--diagnostics-root", logs.path]
         app.launch()
         defer { app.terminate() }
-        app.buttons["nav-diagnostics"].click()
+        openDiagnostics(in: app)
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
         let exportButton = app.buttons["export-diagnostic-\(summary.id.uuidString)"]
         XCTAssertTrue(exportButton.waitForExistence(timeout: 15),
@@ -994,7 +1000,7 @@ final class GamekitUITests: XCTestCase {
         app.buttons["library-diagnostics-link"].click()
         XCTAssertTrue(app.staticTexts["diagnostics-heading"].waitForExistence(timeout: 10))
         XCTAssertTrue(warning.exists, "The actionable warning must survive navigation")
-        app.buttons["library-all"].click()
+        app.buttons["back-to-library"].click()
         XCTAssertTrue(tile.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["launch-game-42"].exists, "The selected installation survives diagnostics routing")
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/steam.json").path))
@@ -1022,15 +1028,23 @@ final class GamekitUITests: XCTestCase {
         first.click()
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
         app.typeKey(.escape, modifierFlags: [])
-        XCTAssertFalse(app.buttons["launch-game-42"].exists, "Escape collapses the inspector without cancelling work")
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["launch-game-42"])
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed,
+                       "Escape collapses the inspector without cancelling work")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.buttons["launch-game-42"].waitForExistence(timeout: 10))
         app.buttons["library-view-list"].click()
         let row = app.buttons["select-game-42"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         XCTAssertTrue(row.label.contains("Windows Steam") && row.label.contains("Steam-reported size: Unavailable"), row.label)
-        let search = app.textFields["library-search"]
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        app.activate()
         search.click(); search.typeText("Alpha")
+        let searchCapture = XCTAttachment(screenshot: app.screenshot())
+        searchCapture.name = "macos27-search-focused"
+        searchCapture.lifetime = .keepAlways
+        add(searchCapture)
         app.typeKey("f", modifierFlags: .command)
         search.typeText("Beta")
         XCTAssertTrue(app.buttons["select-game-43"].waitForExistence(timeout: 10), "Command-F replaces the previous query")
@@ -1082,6 +1096,13 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
     }
 
+    private func openDiagnostics(in app: XCUIApplication) {
+        app.buttons["nav-settings"].click()
+        let diagnostics = app.buttons["settings-Diagnostics"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 10))
+        diagnostics.click()
+    }
+
     private func openGameInspector(_ appID: UInt32, in app: XCUIApplication) {
         let tile = app.buttons["select-game-\(appID)"]
         XCTAssertTrue(tile.waitForExistence(timeout: 20))
@@ -1093,7 +1114,11 @@ final class GamekitUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 20), .completed)
         if button.isHittable && app.windows["Gamekit"].frame.insetBy(dx: 0, dy: 8).contains(button.frame) { return }
-        let scroll = app.scrollViews.firstMatch
+        // The system inspector has its own scroll view. Scroll the pane that
+        // contains the control, rather than the library content behind it.
+        let scroll = app.scrollViews.allElementsBoundByIndex.first {
+            $0.frame.minX <= button.frame.midX && button.frame.midX <= $0.frame.maxX
+        } ?? app.scrollViews.firstMatch
         // A partially clipped button can report hittable while its center is
         // outside the scroll viewport. Avoid clicking during startup layout shifts.
         for _ in 0..<12 {
