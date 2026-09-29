@@ -80,3 +80,10 @@ the selected prefix, clearing only its `ubisoft.json` lifecycle receipt.
 No account was used and no user-owned Wine processes were signalled. This is
 launcher readiness evidence; a signed-in game catalog and actual gameplay
 remain unverified.
+
+The separate opt-in production acquisition path also streamed the full
+264,786,072-byte official installer over HTTPS into its own disposable
+receipt directory, validated the pinned SHA-256 on download and reopen, and
+did not execute that downloaded copy. The download and validation completed
+in about 14 seconds on the qualification host; the client can still update
+later, so the pinned hash is rechecked at every new installation.

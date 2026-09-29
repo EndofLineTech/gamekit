@@ -291,6 +291,19 @@ struct InstallerAcquisitionTests {
         _ = try await store.validatedURL(for: artifact)
         print("Installer smoke: bytes=\(artifact.byteCount) sha256=\(artifact.provenance.sha256) source=\(artifact.finalURL.absoluteString)")
     }
+
+    @Test("Large official Ubisoft download is bounded, digest-checked and reopenable without execution",
+          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_UBISOFT_DOWNLOAD_SMOKE"] == "1"))
+    func officialLauncherInstaller() async throws {
+        let root = try #require(ProcessInfo.processInfo.environment["GAMEKIT_UBISOFT_DOWNLOAD_ROOT"])
+        let profile = try LauncherProfileStore.bundled("ubisoft")
+        let store = try ManagedLauncherInstallerAcquisition(profile: profile, root: URL(fileURLWithPath: root))
+        let artifact = try await store.acquire()
+        #expect(artifact.byteCount > InstallerSourcePolicy.maximumBytes)
+        #expect(artifact.provenance.sha256 == profile.installer.sha256)
+        _ = try await store.validatedURL(for: artifact)
+        print("Isolated launcher download: bytes=\(artifact.byteCount), SHA-256=\(artifact.provenance.sha256)")
+    }
 }
 
 private extension InstallerPayload {
