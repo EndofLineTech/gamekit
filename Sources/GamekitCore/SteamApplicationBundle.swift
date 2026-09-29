@@ -21,14 +21,15 @@ struct GameApplicationIdentity: Sendable {
 struct SteamApplicationBundle: Sendable {
     let layout: RuntimeLayout
     let game: GameApplicationIdentity?
+    let launcher: LauncherProfile?
     private let driverCompatibilityEnabled: Bool
     private let graphicsPayload: GraphicsPayload?
     private let driverParameters: GameExecutionParameters.Driver?
     private let selectedBackend: GraphicsBackend
     var hasAlternativeGraphics: Bool { graphicsPayload != nil }
-    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, driverCompatibilityEnabled: Bool? = nil,
-         graphicsBackend: GraphicsBackend? = nil) {
-        self.layout = layout; self.game = game
+    init(layout: RuntimeLayout, game: GameApplicationIdentity? = nil, launcher: LauncherProfile? = nil,
+         driverCompatibilityEnabled: Bool? = nil, graphicsBackend: GraphicsBackend? = nil) {
+        self.layout = layout; self.game = game; self.launcher = launcher
         driverParameters = game.flatMap { gameExecution(appID: $0.appID, root: layout.dataRoot).driver }
         self.driverCompatibilityEnabled = driverCompatibilityEnabled ?? driverParameters?.defaultEnabled ?? false
         selectedBackend = graphicsBackend ?? layout.graphicsBackend
@@ -41,7 +42,7 @@ struct SteamApplicationBundle: Sendable {
     }
     static let identifier = "tech.endofline.gamekit.windows-steam"
     static let displayName = "Windows Steam"
-    private var executableName: String { game?.filename ?? Self.displayName }
+    private var executableName: String { game?.filename ?? launcher?.name ?? Self.displayName }
     var driverCompatibility: Bool {
         driverCompatibilityEnabled && driverParameters?.available(revision: layout.profile.revision) == true &&
             driverParameters?.backends.contains(selectedBackend) == true
@@ -69,8 +70,10 @@ struct SteamApplicationBundle: Sendable {
     }
     private var expectedManifest: Manifest { .init(format: game == nil ? 1 : 2, runtime: layout.profile.identity, hashes: layout.profile.hashes) }
     private var info: [String: Any] {
-        ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" } ?? Self.identifier, "CFBundleExecutable": executableName,
-         "CFBundleName": game?.name ?? Self.displayName, "CFBundleDisplayName": game?.name ?? Self.displayName,
+        ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" }
+            ?? launcher.map { "tech.endofline.gamekit.launcher.\($0.id.rawValue)" } ?? Self.identifier,
+         "CFBundleExecutable": executableName,
+         "CFBundleName": executableName, "CFBundleDisplayName": executableName,
          "CFBundlePackageType": "APPL", "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0.0",
          "LSUIElement": true]
     }
@@ -141,13 +144,13 @@ struct SteamApplicationBundle: Sendable {
             else { throw SteamApplicationError.invalidBundle }
             launchers = directory
         }
-        let lock = try launchers.acquireLock(".windows-steam.lock")
+        let lock = try launchers.acquireLock(launcher.map { ".launcher-\($0.id.rawValue).lock" } ?? ".windows-steam.lock")
         defer { withExtendedLifetime(lock) {} }
         if try launchers.directory(bundleName) != nil {
             try validate(bundleURL)
             return bundleURL
         }
-        let stageName = ".windows-steam-" + UUID().uuidString.lowercased()
+        let stageName = ".\(launcher?.id.rawValue ?? "windows-steam")-" + UUID().uuidString.lowercased()
         let stage = try launchers.createExclusiveDirectory(stageName)
         let identity = try stage.identity()
         let stageURL = parentURL.appendingPathComponent(stageName)
@@ -207,8 +210,8 @@ struct SteamApplicationBundle: Sendable {
         return bundleURL
     }
 
-    static func launch(_ request: CommandRequest, layout: RuntimeLayout) async throws {
-        let bundle = try await SteamApplicationBundle(layout: layout).prepare()
+    static func launch(_ request: CommandRequest, layout: RuntimeLayout, launcher: LauncherProfile? = nil) async throws {
+        let bundle = try await SteamApplicationBundle(layout: layout, launcher: launcher).prepare()
         try Task.checkCancellation()
         var arguments = ["-g", "-n", "-a", bundle.path, "--stdin", "/dev/null", "--stdout", "/dev/null", "--stderr", "/dev/null"]
         for (key, value) in request.environment.sorted(by: { $0.key < $1.key }) { arguments += ["--env", "\(key)=\(value)"] }

@@ -73,6 +73,7 @@ final class SteamInstallationModel: ObservableObject {
         case .creatingPrefix: status = "Creating the managed Wine prefix…"
         case .runningInstaller: status = "Installing Steam silently…"
         case .bootstrappingSteam: status = "Steam is starting and updating. Waiting for its managed processes…"
+        case .bootstrappingLauncher: status = "Starting the managed launcher…"
         case .validatingInstallation:
             status = "Checking Steam's client, browser process and window. Setup will restart Steam for normal use when ready…"
         }

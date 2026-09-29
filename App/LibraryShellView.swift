@@ -653,6 +653,7 @@ struct LibraryShellView: View {
                         }
                     }
                     SteamLifecycleView()
+                    UbisoftConnectView()
                     if setup.record?.installation == .installed {
                         Button("Browse installed games") { destination = .steam }
                             .accessibilityIdentifier("browse-steam-games")

@@ -1,0 +1,134 @@
+import Foundation
+import Testing
+@testable import GamekitCore
+
+private actor LauncherFixtureRuntime {
+    var token: String?
+    var prefix: String?
+    var launches = 0
+    var stops = 0
+    var incomplete = false
+    var foreign = false
+
+    func snapshot() -> RuntimeProcessSnapshot {
+        let processes: [ScopedRuntimeProcess] = token.map { session in
+            [.init(identity: .init(pid: 123, startSeconds: 1, startMicroseconds: 0),
+                   role: .launcher, sessionID: foreign ? "foreign" : session),
+             .init(identity: .init(pid: 124, startSeconds: 1, startMicroseconds: 0),
+                   role: .launcherUI, sessionID: session)]
+        } ?? []
+        return .init(processes: processes, complete: !incomplete)
+    }
+    func setForeign(_ value: Bool) { foreign = value }
+    func setIncomplete(_ value: Bool) { incomplete = value }
+    func spawn(_ request: CommandRequest) {
+        launches += 1
+        token = request.environment["GAMEKIT_SESSION_ID"]
+        prefix = request.environment["WINEPREFIX"]
+        #expect(request.outputMode == .discard)
+        #expect(request.timeout == nil)
+    }
+    func stop(_ request: CommandRequest) async throws -> CommandResult {
+        #expect(request.arguments == ["-k"])
+        #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
+        #expect(request.environment["WINEPREFIX"] == prefix)
+        stops += 1; token = nil
+        return try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/true")))
+    }
+    var driver: ManagedLauncherLifecycleDriver {
+        .init(preflight: {}, observe: { _, _ in await self.snapshot() },
+              spawn: { await self.spawn($0) }, execute: { try await self.stop($0) })
+    }
+}
+
+private struct ManagedLauncherLifecycleFixture {
+    let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let profile = try! LauncherProfileStore.bundled("ubisoft")
+    let store: EnvironmentStore
+    let layout: RuntimeLayout
+
+    init() async throws {
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        layout = RuntimeLayout(dataRoot: store.root)
+        _ = try await store.create(EnvironmentRecord(id: profile.id, name: profile.name,
+            runtime: layout.profile.identity,
+            installer: .init(source: profile.installer.url, sha256: profile.installer.sha256, downloadedAt: Date()),
+            steamExecutable: profile.executable,
+            installation: .installed, installationRecipeVersion: 1))
+        let file = store.prefixURL(for: profile.id).appendingPathComponent(profile.executable.rawValue)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: file)
+    }
+    func remove() { try? FileManager.default.removeItem(at: parent) }
+}
+
+@Suite("Persistent managed launcher ownership")
+struct ManagedLauncherLifecycleTests {
+    @Test("Only the launcher prefix is started, survives controller replacement and is stopped")
+    func launchAndStop() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        #expect(try await lifecycle.status() == .stopped)
+        _ = try await lifecycle.launch()
+        #expect(try await lifecycle.status() == .running)
+        #expect(try await lifecycle.show() == 123)
+        _ = try await lifecycle.launch()
+        #expect(await runtime.launches == 1)
+        #expect(await runtime.prefix == fixture.store.prefixURL(for: fixture.profile.id).path)
+        let settings = RuntimeSettingsStore(store: fixture.store)
+        #expect(try await settings.isSelectionLocked())
+        await #expect(throws: EnvironmentStoreError.busy) { try await settings.selectGraphicsBackend(.metal3) }
+
+        let steamReceipt = fixture.store.root.appendingPathComponent("Metadata/Lifecycle/steam.json")
+        let original = Data("unrelated Steam receipt".utf8)
+        try original.write(to: steamReceipt)
+        let reopened = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        #expect(try await reopened.status() == .running, "Ordinary Gamekit Quit does not stop the owned launcher")
+        #expect(try await reopened.stop() == .stopped)
+        #expect(try Data(contentsOf: steamReceipt) == original)
+        #expect(try await reopened.status() == .stopped)
+        #expect(try await settings.isSelectionLocked(), "Steam's separate receipt still locks shared runtime changes")
+        #expect(await runtime.stops == 1)
+        #expect(try await reopened.stop() == .alreadyStopped)
+        try FileManager.default.removeItem(at: steamReceipt)
+        #expect(try await !settings.isSelectionLocked())
+    }
+
+    @Test("Foreign or incomplete observation refuses Stop and preserves the receipt")
+    func refuseUncertainStop() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        await runtime.setIncomplete(true)
+        await #expect(throws: ManagedLauncherLifecycleError.observationUnavailable) { try await lifecycle.stop() }
+        await runtime.setIncomplete(false)
+        await runtime.setForeign(true)
+        await #expect(throws: ManagedLauncherLifecycleError.foreignActivity) { try await lifecycle.stop() }
+        #expect(await runtime.stops == 0)
+        #expect(FileManager.default.fileExists(atPath: fixture.store.root.appendingPathComponent("Metadata/Lifecycle/\(fixture.profile.id.rawValue).json").path))
+        await runtime.setForeign(false)
+        #expect(try await lifecycle.stop() == .stopped)
+    }
+
+    @Test("A replaced prefix cannot inherit an earlier launch receipt")
+    func changedPrefix() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        let prefix = fixture.store.prefixURL(for: fixture.profile.id)
+        try FileManager.default.moveItem(at: prefix, to: fixture.parent.appendingPathComponent("displaced"))
+        let file = prefix.appendingPathComponent(fixture.profile.executable.rawValue)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("replacement".utf8).write(to: file)
+        await #expect(throws: ManagedLauncherLifecycleError.scopeChanged) { try await lifecycle.stop() }
+        #expect(await runtime.stops == 0)
+    }
+}

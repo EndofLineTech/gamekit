@@ -83,7 +83,7 @@ public struct InstallerProvenance: Codable, Equatable, Sendable {
 }
 
 public enum InstallationStage: String, Codable, Sendable {
-    case downloadingInstaller, creatingPrefix, runningInstaller, bootstrappingSteam, validatingInstallation
+    case downloadingInstaller, creatingPrefix, runningInstaller, bootstrappingSteam, bootstrappingLauncher, validatingInstallation
 }
 
 public enum EnvironmentFailure: String, Codable, Sendable {

@@ -74,6 +74,21 @@ final class GamekitUITests: XCTestCase {
                        "Management navigation must not start a managed Steam session")
     }
 
+    func testUbisoftSetupWaitsForValidatedRuntimeAndKeepsSteamControlsSeparate() throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        openLaunchers(in: app)
+        let ubisoft = app.buttons["install-ubisoft"]
+        XCTAssertTrue(ubisoft.waitForExistence(timeout: 10))
+        XCTAssertFalse(ubisoft.isEnabled, "An unavailable runtime cannot install a second managed launcher")
+        XCTAssertTrue(app.buttons["install-steam"].exists, "Steam setup remains independently available")
+        XCTAssertFalse(app.buttons["library-ubisoft"].exists, "Unconfigured launchers do not become library sources")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/ubisoft").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Metadata/Lifecycle/ubisoft.json").path))
+    }
+
     func testSettingsShowsCategoriesAfterLibrarySidebarWasCollapsed() async throws {
         let root = try temporaryRoot()
         _ = try await LibraryPreferencesStore(root: root).setSidebarVisible(false)

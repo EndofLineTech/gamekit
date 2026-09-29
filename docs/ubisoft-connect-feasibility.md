@@ -63,3 +63,27 @@ included here.
 
 This qualifies installer execution and a bounded client startup path, while
 full integration remains gated by owned lifecycle and signed-in game evidence.
+
+## Managed-path follow-up
+
+The separately registered setup now loads its installer/executable/process
+contract from `Sources/GamekitCore/LauncherProfiles/ubisoft.json` and uses
+per-launcher download receipts. An opt-in run with that same locally verified
+installer, the owner's selected Sikarugir driver-version-1 runtime, and a
+fresh disposable Gamekit metadata root installed version `13333`. The
+coordinator observed both the scoped client and web-helper roles for three
+continuous seconds, stopped installation bootstrap, and recorded the Ubisoft
+environment independently of Steam. A replacement lifecycle controller then
+started the derived **Ubisoft Connect.app** identity, observed an owned client
+and web helper for three seconds, verified a client PID for Show, and stopped
+the selected prefix, clearing only its `ubisoft.json` lifecycle receipt.
+No account was used and no user-owned Wine processes were signalled. This is
+launcher readiness evidence; a signed-in game catalog and actual gameplay
+remain unverified.
+
+The separate opt-in production acquisition path also streamed the full
+264,786,072-byte official installer over HTTPS into its own disposable
+receipt directory, validated the pinned SHA-256 on download and reopen, and
+did not execute that downloaded copy. The download and validation completed
+in about 14 seconds on the qualification host; the client can still update
+later, so the pinned hash is rechecked at every new installation.

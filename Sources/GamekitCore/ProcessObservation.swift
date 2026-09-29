@@ -7,7 +7,7 @@ public struct ProcessIdentity: Hashable, Sendable {
     public let startSeconds: UInt64
     public let startMicroseconds: UInt64
 }
-public enum RuntimeProcessRole: Sendable { case steam, steamUI, installer, service, other }
+public enum RuntimeProcessRole: Sendable { case steam, steamUI, launcher, launcherUI, installer, service, other }
 public struct ScopedRuntimeProcess: Sendable {
     public let identity: ProcessIdentity
     public let role: RuntimeProcessRole
@@ -25,6 +25,7 @@ public struct RuntimeProcessSnapshot: Sendable {
     public func observation(installation: InstallationProgress) -> ProcessObservation {
         guard complete else { return .notChecked }
         if processes.contains(where: { $0.role == .steam || $0.role == .steamUI }) { return .steamRunning }
+        if processes.contains(where: { $0.role == .launcher || $0.role == .launcherUI }) { return .launcherRunning }
         if processes.contains(where: { $0.role == .installer }), case .installing(let stage) = installation {
             return .installerRunning(stage)
         }
@@ -92,13 +93,24 @@ public struct RuntimeProcessObserver: Sendable {
         }
         func leaf(_ path: String) -> String { path.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last ?? "" }
         guard let first = arguments.first.map(normalized) else { return .other }
+        let bundled = try? LauncherProfileStore.bundled(record.id.rawValue)
         let isLoader = ["wine", "wine64", "wine-preloader", "wine64-preloader", "windows steam"].contains(leaf(first))
+            || bundled.map { leaf(first) == $0.name.lowercased() } == true
         let target = isLoader && arguments.count > 1 ? normalized(arguments[1]) : first
-        if target == expectedPOSIX || target == expectedWindows { return .steam }
         let posixDirectory = prefix.appendingPathComponent(record.steamExecutable.rawValue).deletingLastPathComponent().path.lowercased() + "/"
         let windowsDirectory = "c:\\" + record.steamExecutable.components.dropFirst().dropLast().joined(separator: "\\").lowercased() + "\\"
-        if leaf(target) == "steamwebhelper.exe", target.hasPrefix(posixDirectory) || target.hasPrefix(windowsDirectory) { return .steamUI }
-        if leaf(target).hasPrefix("steamsetup") && leaf(target).hasSuffix(".exe") { return .installer }
+        if let profile = bundled {
+            guard profile.executable == record.steamExecutable else { return .other }
+            if target == expectedPOSIX || target == expectedWindows { return .launcher }
+            if target == posixDirectory + leaf(target) || target == windowsDirectory + leaf(target) {
+                if profile.clientExecutables.contains(where: { $0.lowercased() == leaf(target) }) { return .launcher }
+                if profile.webExecutables.contains(where: { $0.lowercased() == leaf(target) }) { return .launcherUI }
+            }
+        } else {
+            if target == expectedPOSIX || target == expectedWindows { return .steam }
+            if leaf(target) == "steamwebhelper.exe", target.hasPrefix(posixDirectory) || target.hasPrefix(windowsDirectory) { return .steamUI }
+            if leaf(target).hasPrefix("steamsetup") && leaf(target).hasSuffix(".exe") { return .installer }
+        }
         if ["wineboot", "wineboot.exe"].contains(leaf(target)), case .installing(.creatingPrefix) = record.installation { return .installer }
         if ["wineserver", "services.exe", "winedevice.exe", "explorer.exe", "rpcss.exe", "svchost.exe", "conhost.exe", "plugplay.exe", "steamservice.exe"].contains(leaf(target)) { return .service }
         return .other
@@ -128,7 +140,7 @@ public struct RuntimeProcessObserver: Sendable {
             }
             if first.zombie != 0 || first.uid != getuid() { continue }
             let executable = withUnsafeBytes(of: first.path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
-            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: layout.steamApplicationBundle)
+            guard Self.isWithin(executable, root: layout.engine) || Self.isWithin(executable, root: layout.launchersRoot)
                     || Self.isWithin(executable, root: layout.gameApplicationsRoot) || Self.isWithin(executable, root: prefix) else { continue }
             var buffer: UnsafeMutablePointer<CChar>?, length = 0
             let code = gk_arguments(pid, &buffer, &length)
