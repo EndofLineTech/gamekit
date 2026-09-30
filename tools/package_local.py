@@ -47,7 +47,8 @@ def validate_app(app):
         raise ValueError("Expected a built application directory, not a symlink")
     with (app / "Contents/Info.plist").open("rb") as handle:
         info = plistlib.load(handle)
-    if info.get("CFBundleIdentifier") != "tech.endofline.gamekit" or info.get("CFBundleExecutable") != "Gamekit":
+    if (info.get("CFBundleIdentifier") != "tech.endofline.gamekit" or info.get("CFBundleExecutable") != "Gamekit"
+            or info.get("LSApplicationCategoryType") != "public.app-category.utilities" or info.get("LSSupportsGameMode") is not False):
         raise ValueError("Unexpected application identity")
     icon = app / "Contents/Resources/AppIcon.icns"
     if info.get("CFBundleIconFile") != "AppIcon" or icon.is_symlink() or not icon.is_file():

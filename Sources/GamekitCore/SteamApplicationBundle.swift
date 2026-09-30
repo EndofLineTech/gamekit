@@ -48,11 +48,12 @@ struct SteamApplicationBundle: Sendable {
             driverParameters?.backends.contains(selectedBackend) == true
     }
     private var gameCacheFormat: String {
-        if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision }
+        // A new directory keeps pre-Game-Mode bundles immutable and usable for rollback.
+        if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision + "-game-mode1" }
         if driverParameters?.available(revision: layout.profile.revision) == true {
-            return "shared-pe-v4-driver-" + DriverVersionAdapter.sha256.prefix(12) + (driverCompatibility ? "-on" : "-off")
+            return "shared-pe-v4-driver-" + DriverVersionAdapter.sha256.prefix(12) + (driverCompatibility ? "-on" : "-off") + "-game-mode1"
         }
-        return "shared-pe-v4-base"
+        return "shared-pe-v4-base-game-mode1"
     }
     private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
     private var bundleName: String { executableName + ".app" }
@@ -70,12 +71,17 @@ struct SteamApplicationBundle: Sendable {
     }
     private var expectedManifest: Manifest { .init(format: game == nil ? 1 : 2, runtime: layout.profile.identity, hashes: layout.profile.hashes) }
     private var info: [String: Any] {
-        ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" }
+        var plist: [String: Any] = ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" }
             ?? launcher.map { "tech.endofline.gamekit.launcher.\($0.id.rawValue)" } ?? Self.identifier,
          "CFBundleExecutable": executableName,
          "CFBundleName": executableName, "CFBundleDisplayName": executableName,
          "CFBundlePackageType": "APPL", "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0.0",
          "LSUIElement": true]
+        if game != nil {
+            plist["LSApplicationCategoryType"] = "public.app-category.games"
+            plist["LSSupportsGameMode"] = true
+        }
+        return plist
     }
     private func copiedPath(_ original: String) -> String? {
         let prefix = "Contents/SharedSupport/wine/"

@@ -17,7 +17,8 @@ class LocalPackageTests(unittest.TestCase):
             (app / "Contents/MacOS").mkdir(parents=True)
             (app / "Contents/MacOS/Gamekit").write_bytes(b"fixture")
             with (app / "Contents/Info.plist").open("wb") as handle:
-                plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit", "CFBundleExecutable": "Gamekit"}, handle)
+                plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit", "CFBundleExecutable": "Gamekit",
+                               "LSApplicationCategoryType": "public.app-category.utilities", "LSSupportsGameMode": False}, handle)
             with self.assertRaises(ValueError):
                 MODULE.validate_app(app)
             helper = app / "Contents/Frameworks/WineGameIdentity.dylib"
@@ -44,8 +45,15 @@ class LocalPackageTests(unittest.TestCase):
                 MODULE.validate_app(app)
             with (app / "Contents/Info.plist").open("wb") as handle:
                 plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit", "CFBundleExecutable": "Gamekit",
-                               "CFBundleIconFile": "AppIcon"}, handle)
+                                "CFBundleIconFile": "AppIcon", "LSApplicationCategoryType": "public.app-category.utilities",
+                                "LSSupportsGameMode": False}, handle)
             self.assertEqual(MODULE.validate_app(app)["CFBundleExecutable"], "Gamekit")
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleIdentifier": "tech.endofline.gamekit.manager", "CFBundleExecutable": "Gamekit",
+                                "CFBundleIconFile": "AppIcon", "LSApplicationCategoryType": "public.app-category.utilities",
+                                "LSSupportsGameMode": False}, handle)
+            with self.assertRaisesRegex(ValueError, "identity"):
+                MODULE.validate_app(app)
 
     def test_refuses_existing_destination_and_wrong_app(self):
         with tempfile.TemporaryDirectory() as temporary:
