@@ -60,11 +60,16 @@ public actor ManagedLauncherLifecycle {
               let metadata = try root.directory("Metadata", create: create) else { return nil }
         return try metadata.directory("Lifecycle", create: create)
     }
-    private func receipt() throws -> ManagedLauncherReceipt? {
+    private func savedReceipt() throws -> ManagedLauncherReceipt? {
         guard let data = try receipts(create: false)?.read(filename) else { return nil }
         let receipt = try JSONDecoder().decode(ManagedLauncherReceipt.self, from: data)
-        guard receipt.schemaVersion == 1, receipt.id == profile.id, receipt.runtime == layout.profile.identity,
-              let prefix = try ManagedDirectory.openRoot(store.prefixURL(for: profile.id), create: false),
+        guard receipt.schemaVersion == 1, receipt.id == profile.id, receipt.runtime == layout.profile.identity
+        else { throw ManagedLauncherLifecycleError.scopeChanged }
+        return receipt
+    }
+    private func receipt() throws -> ManagedLauncherReceipt? {
+        guard let receipt = try savedReceipt() else { return nil }
+        guard let prefix = try ManagedDirectory.openRoot(store.prefixURL(for: profile.id), create: false),
               try prefix.identity() == (receipt.device, receipt.inode)
         else { throw ManagedLauncherLifecycleError.scopeChanged }
         return receipt
@@ -194,6 +199,34 @@ public actor ManagedLauncherLifecycle {
             try await Task.sleep(for: .milliseconds(250))
         }
         throw ManagedLauncherLifecycleError.cleanupFailed
+    }
+
+    /// An explicit recovery for a quiescent, registered prefix whose device
+    /// number changed across a restart. Never adopt a replacement inode or
+    /// retire the receipt while any process is observed in this prefix.
+    public func recoverStoppedReceipt() async throws {
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: profile.id)
+        defer { withExtendedLifetime(lease) {} }
+        guard driver.runtimeAvailable(), let old = try savedReceipt(),
+              old.inode == lease.prefixIdentity.inode, old.device != lease.prefixIdentity.device
+        else { throw ManagedLauncherLifecycleError.scopeChanged }
+        let snapshot = await driver.observe(record, lease.prefix)
+        guard snapshot.complete else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        guard snapshot.processes.isEmpty else { throw ManagedLauncherLifecycleError.foreignActivity }
+        try Task.checkCancellation(); try lease.validate()
+        guard let directory = try receipts(create: false) else { throw ManagedLauncherLifecycleError.scopeChanged }
+        try directory.withWriteLock {
+            guard let saved = try savedReceipt(), saved.token == old.token,
+                  saved.device == old.device, saved.inode == old.inode else { throw ManagedLauncherLifecycleError.scopeChanged }
+            try lease.validate()
+            try directory.removeRegularFile(filename)
+        }
+        emptySince = nil
     }
 
     private func ownedSnapshot(_ record: EnvironmentRecord, lease: EnvironmentExecutionLease,

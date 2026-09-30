@@ -21,6 +21,7 @@ private actor LauncherFixtureRuntime {
     }
     func setForeign(_ value: Bool) { foreign = value }
     func setIncomplete(_ value: Bool) { incomplete = value }
+    func exitExternally() { token = nil }
     func spawn(_ request: CommandRequest) {
         launches += 1
         token = request.environment["GAMEKIT_SESSION_ID"]
@@ -129,6 +130,34 @@ struct ManagedLauncherLifecycleTests {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("replacement".utf8).write(to: file)
         await #expect(throws: ManagedLauncherLifecycleError.scopeChanged) { try await lifecycle.stop() }
+        await #expect(throws: ManagedLauncherLifecycleError.scopeChanged) { try await lifecycle.recoverStoppedReceipt() }
         #expect(await runtime.stops == 0)
+    }
+
+    @Test("A reboot-renumbered device can retire only an idle receipt for the same prefix inode")
+    func renumberedDevice() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        _ = try await lifecycle.launch()
+        let receipt = fixture.store.root.appendingPathComponent("Metadata/Lifecycle/\(fixture.profile.id.rawValue).json")
+        var saved = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: receipt)) as? [String: Any])
+        saved["device"] = try #require(saved["device"] as? Int) + 1
+        try JSONSerialization.data(withJSONObject: saved).write(to: receipt)
+        await #expect(throws: ManagedLauncherLifecycleError.scopeChanged) { try await lifecycle.status() }
+        await #expect(throws: ManagedLauncherLifecycleError.foreignActivity) { try await lifecycle.recoverStoppedReceipt() }
+        #expect(FileManager.default.fileExists(atPath: receipt.path))
+        await runtime.setIncomplete(true)
+        await runtime.exitExternally()
+        await #expect(throws: ManagedLauncherLifecycleError.observationUnavailable) { try await lifecycle.recoverStoppedReceipt() }
+        #expect(FileManager.default.fileExists(atPath: receipt.path))
+        await runtime.setIncomplete(false)
+        try await lifecycle.recoverStoppedReceipt()
+        #expect(!FileManager.default.fileExists(atPath: receipt.path))
+        #expect(try await lifecycle.status() == .stopped)
+        #expect(await runtime.stops == 0)
+        #expect(try await lifecycle.launch() == .running)
+        #expect(try await lifecycle.stop() == .stopped)
     }
 }

@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class UbisoftConnectModel: ObservableObject {
-    enum Action { case install, resume, verify, launch, show, stop }
+    enum Action { case install, resume, verify, launch, show, stop, recover }
     @Published private(set) var state: ManagedLauncherState = .notInstalled
     @Published private(set) var installation: InstallationProgress = .notStarted
     @Published private(set) var prefixExists = false
@@ -31,7 +31,11 @@ final class UbisoftConnectModel: ObservableObject {
             } else {
                 installation = .notStarted; prefixExists = false; executableExists = false
             }
-            state = try await lifecycle(setup: setup).status()
+            do { state = try await lifecycle(setup: setup).status() }
+            catch {
+                state = .unverified
+                message = AppFailure.message(error)
+            }
         } catch {
             state = .unverified
             installation = .failed(.invalidRuntime)
@@ -45,7 +49,8 @@ final class UbisoftConnectModel: ObservableObject {
             : action == .resume ? "Retrying Ubisoft Connect installation"
             : action == .verify ? "Verifying Ubisoft Connect"
             : action == .launch ? "Launching Ubisoft Connect"
-            : action == .stop ? "Stopping Ubisoft Connect" : "Showing Ubisoft Connect") else { return }
+            : action == .stop ? "Stopping Ubisoft Connect"
+            : action == .recover ? "Recovering stopped Ubisoft Connect session" : "Showing Ubisoft Connect") else { return }
         busy = true; message = nil; stage = nil
         Task { [self] in
             do {
@@ -79,6 +84,9 @@ final class UbisoftConnectModel: ObservableObject {
                 case .stop:
                     let result = try await lifecycle(setup: setup).stop()
                     message = result == .stopped ? "Ubisoft Connect stopped in its own environment." : "Ubisoft Connect was already stopped."
+                case .recover:
+                    try await lifecycle(setup: setup).recoverStoppedReceipt()
+                    message = "Stopped Ubisoft Connect session recovered. You can launch it again."
                 }
             } catch { message = AppFailure.message(error) }
             busy = false; stage = nil
@@ -138,6 +146,12 @@ struct UbisoftConnectView: View {
                             .accessibilityIdentifier("verify-ubisoft")
                     }
                     if model.installation == .installed {
+                        if model.state == .unverified {
+                            Button("Recover stopped Ubisoft session") { model.control(.recover, setup: setup, diagnostics: diagnostics) }
+                                .disabled(model.busy || setup.isBusy || !setup.isReady)
+                                .accessibilityIdentifier("recover-ubisoft-session")
+                                .help("Only clears a stale receipt after checking that the same prefix is idle. It never resets Ubisoft or Steam files.")
+                        }
                         Button("Launch Ubisoft Connect") { model.control(.launch, setup: setup, diagnostics: diagnostics) }
                             .disabled(model.busy || setup.isBusy || model.state != .stopped)
                             .accessibilityIdentifier("launch-ubisoft")
