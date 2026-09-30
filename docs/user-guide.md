@@ -295,6 +295,8 @@ title while Steam remains **Windows Steam**.
 Restart Steam after updating Gamekit to pick up this helper. Keep the app bundle
 in place while Steam is running; stop Steam before moving/removing it. The helper
 routes the Wine child to that identity and retains the game's Windows-provided icon.
+Gamekit's library opts out of Game Mode; the game-named bundle opts in.
+macOS controls Game Mode for eligible games and turns it off when a game quits.
 See the [Dock identity contract](https://github.com/EndofLineTech/gamekit/blob/dev/docs/game-dock-identity.md)
 for scope and validation.
 

@@ -113,7 +113,7 @@ struct SteamApplicationBundleTests {
         let maintenance = LauncherCacheMaintenance(store: store, layouts: [fixture.layout], idle: { true })
         let entries = try await maintenance.inspect()
         let old = try #require(entries.first(where: { $0.status == .obsolete }))
-        #expect(entries.contains { $0.status == .retained && !$0.canClean })
+        #expect(entries.contains { $0.id.contains("game-mode1") && $0.status == .retained && !$0.canClean })
         await #expect(throws: SteamRecoveryError.confirmationRequired) { try await maintenance.clean(old, confirmed: false) }
         #expect(FileManager.default.fileExists(atPath: legacy.path))
         try await maintenance.clean(old, confirmed: true)
@@ -229,6 +229,15 @@ struct SteamApplicationBundleTests {
         let steam = try await SteamApplicationBundle(layout: fixture.layout).prepare()
         let builder = SteamApplicationBundle(layout: fixture.layout, game: .init(appID: 526870, name: "Satisfactory"))
         let game = try await builder.prepare()
+        func plist(_ bundle: URL) throws -> [String: Any] {
+            let data = try Data(contentsOf: bundle.appendingPathComponent("Contents/Info.plist"))
+            return try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        }
+        #expect(try plist(steam)["LSApplicationCategoryType"] == nil)
+        #expect(try plist(steam)["LSSupportsGameMode"] == nil)
+        #expect(try plist(game)["LSApplicationCategoryType"] as? String == "public.app-category.games")
+        #expect(try plist(game)["LSSupportsGameMode"] as? Bool == true)
+        #expect(game.deletingLastPathComponent().lastPathComponent.hasSuffix("-game-mode1"))
         #expect(game.lastPathComponent == "Satisfactory.app")
         #expect(game.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "526870")
         #expect(game != steam)
