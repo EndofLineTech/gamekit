@@ -35,6 +35,7 @@ Run from the repository root:
 | `make check` | Run core/Python tests and build the native app |
 | `make run` | Build and open the native app |
 | `make package` | Build a local Release candidate, verify signing/architecture and write a versioned package with build manifest |
+| `make dev-dmg` | From a clean commit, build an ad-hoc signed dev-preview DMG, Applications link, documentation and SHA-256 manifest; normal downloaded first launch is not notarized |
 
 Default app: `.build/xcode/Build/Products/Debug/Gamekit.app`.
 
@@ -88,6 +89,11 @@ E4.4 adds [stage-aware recovery and download-preserving reset](steam-recovery.md
 `project.yml` uses **Sign to Run Locally** (ad-hoc identity `-`) without a developer
 team. App Sandbox and Hardened Runtime are off for this local prototype. Public
 distribution must choose its own signing/entitlement/notarization policy later.
+The explicitly waived `v0.1.0-dev.1` preview is separately packaged by
+`make dev-dmg` from a clean source commit. Its ad-hoc signature is verified but
+does not confer Developer ID/Gatekeeper trust on a downloaded copy; the DMG
+includes a per-app first-launch notice and does not include the external runtime.
+The final normally opening direct-download release still follows `gamekit-lon`.
 
 ```bash
 codesign --verify --deep --strict --verbose=2 \

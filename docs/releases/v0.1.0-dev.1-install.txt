@@ -1,0 +1,16 @@
+Gamekit 0.1.0 dev preview 1 — macOS 27, Apple silicon
+
+1. Drag Gamekit.app onto the Applications shortcut in this disk image.
+2. Open Gamekit from Applications. This dev preview is ad-hoc signed, not
+   Developer ID-signed or notarized. macOS may block its first launch after
+   download. For this app only, use System Settings > Privacy & Security >
+   Open Anyway if you decide to trust this preview. Do not disable Gatekeeper
+   globally or remove the download's quarantine attribute.
+3. Read Documentation/USER-GUIDE.md for setup and prerequisites. The Wine
+   runtime and Apple graphics payload are not included in this download;
+   obtain and validate them separately before using Windows launchers.
+
+This is a development preview, not the final notarized direct-download build.
+Documentation/ contains the license, third-party notices, Wine source patch
+and build instructions, and linked user guides. The tag's GitHub source archive
+provides the corresponding Gamekit source.
