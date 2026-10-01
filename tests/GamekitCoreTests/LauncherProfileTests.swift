@@ -25,6 +25,16 @@ struct LauncherProfileTests {
             return try JSONSerialization.data(withJSONObject: values)
         }
         for data in try [changed { $0["schemaVersion"] = 2 },
+                         changed {
+                             var catalog = $0["gameCatalog"] as! [String: Any]
+                             catalog["installsRegistryKey"] = "HKCU\\Software\\Credentials\\Installs"
+                             $0["gameCatalog"] = catalog
+                         },
+                         changed {
+                             var catalog = $0["gameCatalog"] as! [String: Any]
+                             catalog["launchURI"] = "uplay://launch/{id}/../other"
+                             $0["gameCatalog"] = catalog
+                         },
                          changed { $0["launchArguments"] = ["--invalid=value"] },
                          changed { $0["launchArguments"] = Array(repeating: "--duplicate", count: 9) },
                          changed { $0["executable"] = "../untrusted.exe" },

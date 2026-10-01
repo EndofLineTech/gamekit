@@ -158,7 +158,8 @@ def package(app, destination, root):
                       "per-game-graphics-backends.md", "cold-steam-game-launch.md",
                       "graphics-backends.md", "graphics-backend-research.md", "uninstall-games.md",
                       "runtime-text-input-delivery.md", "persistent-graphics-backend.md",
-                      "satisfactory-backend-gameplay.md", "helldivers-dx11-backends.md", "ubisoft-installer-paint.md"):
+                      "satisfactory-backend-gameplay.md", "helldivers-dx11-backends.md", "ubisoft-installer-paint.md",
+                      "ubisoft-game-catalog.md"):
             command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
         validate_guide_links(stage)
         for source in ("DXMTCompatibility", "DXVKCompatibility"):

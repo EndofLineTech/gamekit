@@ -3,8 +3,8 @@ import GamekitCore
 import SwiftUI
 
 private enum LibraryDestination: Hashable {
-    case all, favorites, steam, settings
-    var isLibrary: Bool { self == .all || self == .favorites || self == .steam }
+    case all, favorites, steam, ubisoft, settings
+    var isLibrary: Bool { self == .all || self == .favorites || self == .steam || self == .ubisoft }
 }
 
 private enum LibraryInstallationFilter: String, CaseIterable {
@@ -22,6 +22,8 @@ struct LibraryShellView: View {
     @EnvironmentObject private var diagnostics: AppDiagnosticsModel
     @EnvironmentObject private var games: InstalledGamesModel
     @EnvironmentObject private var steam: SteamLifecycleModel
+    @EnvironmentObject private var ubisoft: UbisoftConnectModel
+    @EnvironmentObject private var ubisoftGames: UbisoftCatalogModel
     @EnvironmentObject private var installation: SteamInstallationModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var destination: LibraryDestination = .all
@@ -33,6 +35,7 @@ struct LibraryShellView: View {
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
+    @State private var selectedUbisoftID: UInt32?
     @State private var hoveredGameID: UInt32?
     @State private var inspectorVisible = false
     @State private var compatibilityGame: InstalledSteamGame?
@@ -46,6 +49,11 @@ struct LibraryShellView: View {
     private var sidebarAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.28) }
 
     private var sidebarVisible: Bool { destination == .settings ? settingsSidebarVisible : preferences.sidebarVisible }
+    private var librarySourceSummary: String {
+        if destination == .ubisoft { return "Ubisoft Connect" }
+        if destination == .all && ubisoft.installation == .installed { return "Windows Steam / Ubisoft Connect" }
+        return "Windows Steam"
+    }
     private var columnVisibility: Binding<NavigationSplitViewVisibility> {
         Binding(get: { sidebarVisible ? .all : .detailOnly }, set: { visibility in
             let visible = visibility != .detailOnly
@@ -55,14 +63,29 @@ struct LibraryShellView: View {
     }
 
     private var selectedGame: InstalledSteamGame? { games.games.first { $0.id == selectedGameID } }
+    private var selectedUbisoftGame: InstalledUbisoftGame? { ubisoftGames.games.first { $0.id == selectedUbisoftID } }
 
     private var visibleGames: [InstalledSteamGame] {
+        guard destination != .ubisoft else { return [] }
         let matches = games.games.filter { game in
             (destination != .favorites || preferences.favorites.contains(.init(environmentID: SteamInstallationRecipe.environmentID, appID: game.id)))
                 && (filter == .all || filter == .ready && game.state == .ready || filter == .attention && game.state != .ready)
                 && (query.isEmpty || game.name.localizedStandardContains(query))
         }
         return preferences.sortOrder.sorted(matches)
+    }
+
+    private var visibleUbisoftGames: [InstalledUbisoftGame] {
+        guard destination == .all || destination == .ubisoft else { return [] }
+        let matches = ubisoftGames.games.filter { game in
+            (filter == .all || filter == .ready && game.state == .installed || filter == .attention && game.state != .installed)
+                && (query.isEmpty || game.name.localizedStandardContains(query))
+        }
+        return matches.sorted {
+            if preferences.sortOrder == .state && $0.state != $1.state { return $0.state == .installed }
+            let order = $0.name.localizedStandardCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
     }
 
     var body: some View {
@@ -104,6 +127,11 @@ struct LibraryShellView: View {
             }
             if let focusedListID, !current.contains(where: { $0.id == focusedListID }), !games.libraryStale {
                 self.focusedListID = nil
+            }
+        }
+        .onChange(of: ubisoftGames.games) { _, current in
+            if let selectedUbisoftID, !current.contains(where: { $0.id == selectedUbisoftID }), ubisoftGames.current {
+                self.selectedUbisoftID = nil
             }
         }
         .onChange(of: preferences.viewMode) { _, mode in
@@ -163,6 +191,15 @@ struct LibraryShellView: View {
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("library-steam")
                     .help("Open Windows Steam games")
+                }
+                if ubisoft.installation == .installed {
+                    Button { destination = .ubisoft } label: {
+                        sidebarRow("Ubisoft Connect", active: destination == .ubisoft) {
+                            Image(systemName: "gamecontroller.fill").accessibilityHidden(true)
+                        }
+                    }
+                    .buttonStyle(.plain).accessibilityIdentifier("library-ubisoft")
+                    .help("Show games installed in managed Ubisoft Connect")
                 }
                 sidebarHeading("Management")
                 navButton("Settings", symbol: "gearshape", active: false, identifier: "nav-settings") { openSettings() }
@@ -238,17 +275,21 @@ struct LibraryShellView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(destination == .all ? "All Installed Games" : destination == .favorites ? "Favorites" : "Windows Steam")
+                            Text(destination == .all ? "All Installed Games" : destination == .favorites ? "Favorites"
+                                 : destination == .ubisoft ? "Ubisoft Connect" : "Windows Steam")
                                 .font(.largeTitle.bold()).accessibilityIdentifier("library-heading")
-                            Text("\(visibleGames.count) installations · Windows Steam")
+                            Text("\(visibleGames.count + visibleUbisoftGames.count) installations · \(librarySourceSummary)")
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button("Refresh") { Task { await games.refresh(setup: setup) } }
+                        Button("Refresh") { Task {
+                            await games.refresh(setup: setup)
+                            await ubisoftGames.refresh(setup: setup)
+                        } }
                             // Background polling already coalesces in refresh(); toggling
                             // this button's disabled state every poll makes it flash.
                             .disabled(setup.isBusy).accessibilityIdentifier("refresh-games")
-                            .help("Refresh installed games from managed Windows Steam")
+                            .help("Refresh installed games from managed launchers")
                     }
                     HStack(spacing: 8) {
                         ForEach(LibraryInstallationFilter.allCases, id: \.self) { choice in
@@ -286,13 +327,23 @@ struct LibraryShellView: View {
                                 .help("Open local diagnostics for this library warning")
                         }
                     }
-                    if games.refreshing && games.games.isEmpty { ProgressView("Reading installed games…") }
-                    else if visibleGames.isEmpty { emptyLibrary }
-                    else if preferences.viewMode == .grid {
-                        coverGrid(width: geometry.size.width - 2 * LibraryVisualStyle.contentSpacing)
+                    if destination == .all || destination == .ubisoft, let warning = ubisoftGames.warning {
+                        Label(warning, systemImage: "info.circle").foregroundStyle(.secondary)
+                            .accessibilityIdentifier("ubisoft-library-warning")
                     }
-                    else { gameList.frame(height: max(250, geometry.size.height - 220)) }
+                    if (games.refreshing || ubisoftGames.refreshing) && games.games.isEmpty && ubisoftGames.games.isEmpty {
+                        ProgressView("Reading installed games…")
+                    } else if visibleGames.isEmpty && visibleUbisoftGames.isEmpty { emptyLibrary }
+                    else {
+                        if !visibleGames.isEmpty {
+                            if preferences.viewMode == .grid {
+                                coverGrid(width: geometry.size.width - 2 * LibraryVisualStyle.contentSpacing)
+                            } else { gameList.frame(height: max(250, geometry.size.height - 220)) }
+                        }
+                        if !visibleUbisoftGames.isEmpty { ubisoftLibrary }
+                    }
                     if let message = games.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
+                    if let message = ubisoftGames.message { Text(message).font(.callout).accessibilityIdentifier("ubisoft-game-launch-status") }
                 }
                 .padding(LibraryVisualStyle.contentSpacing)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -302,6 +353,41 @@ struct LibraryShellView: View {
         .inspector(isPresented: $inspectorVisible) {
             inspector.inspectorColumnWidth(min: 255, ideal: 290, max: 320)
         }
+    }
+
+    private var ubisoftLibrary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Ubisoft Connect", systemImage: "gamecontroller.fill")
+                .font(.title3.bold()).accessibilityIdentifier("ubisoft-library-heading")
+            if preferences.viewMode == .grid {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 18)], alignment: .leading, spacing: 18) {
+                    ForEach(visibleUbisoftGames) { game in ubisoftGameCard(game) }
+                }
+            } else {
+                ForEach(visibleUbisoftGames) { game in ubisoftGameCard(game) }
+            }
+        }
+    }
+
+    private func ubisoftGameCard(_ game: InstalledUbisoftGame) -> some View {
+        Button {
+            selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                UbisoftGameIcon(data: game.icon)
+                    .frame(maxWidth: .infinity).frame(height: 110)
+                Text(game.name).font(.headline).lineLimit(3)
+                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+                Text(game.state == .installed ? "Installed" : "Installation incomplete")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(LibraryVisualStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
+        .accessibilityLabel("\(game.name), Ubisoft Connect, \(game.state == .installed ? "installed" : "incomplete")")
+        .help("Inspect \(game.name) from Ubisoft Connect")
     }
 
     private func coverGrid(width: CGFloat) -> some View {
@@ -466,23 +552,28 @@ struct LibraryShellView: View {
     private var emptyLibrary: some View {
         let initial = query.isEmpty && filter == .all
         let favoritesEmpty = initial && destination == .favorites
+        let ubisoftEmpty = initial && destination == .ubisoft
         return LibraryPanel {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "square.grid.2x2").font(.largeTitle).foregroundStyle(LibraryVisualStyle.accent)
-                Text(favoritesEmpty ? "No favorites yet" : initial ? "Your library starts here" : "No matching games")
+                Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
+                     : initial ? "Your library starts here" : "No matching games")
                     .font(.title2.bold()).accessibilityIdentifier("games-empty")
-                Text(favoritesEmpty ? "Mark a game as a favorite in your library." : initial
-                     ? setup.record?.installation == .installed
+                Text(favoritesEmpty ? "Mark a game as a favorite in your library."
+                     : ubisoftEmpty ? "Launch Ubisoft Connect to verify installed games, then refresh this library."
+                     : initial ? (setup.record?.installation == .installed
                          ? "Install games in Windows Steam to see them here."
-                         : "Set up Windows Steam, then install a game to see it here."
+                         : "Set up Windows Steam, then install a game to see it here.")
                      : "Try another search or clear the filters.")
                     .foregroundStyle(.secondary)
-                Button(favoritesEmpty ? "Browse all games" : initial ? "Manage Windows Steam" : "Clear filters") {
+                Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
+                       : initial ? "Manage Windows Steam" : "Clear filters") {
                     if favoritesEmpty { destination = .all }
                     else if initial { openSettings(.launchers) }
                     else { query = ""; filter = .all }
                 }
-                .help(favoritesEmpty ? "Return to all installed games" : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
+                .help(favoritesEmpty ? "Return to all installed games" : ubisoftEmpty ? "Open Ubisoft Connect controls"
+                      : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
             }
         }
     }
@@ -557,6 +648,25 @@ struct LibraryShellView: View {
                         }
                     }
                     InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
+                } else if let game = selectedUbisoftGame {
+                    UbisoftGameIcon(data: game.icon).frame(width: 160, height: 160)
+                    Text(game.name).font(.title2.bold())
+                    Text("Ubisoft Connect · \(game.state == .installed ? "Installed" : "Installation incomplete")")
+                        .foregroundStyle(.secondary)
+                    Text("Ubisoft has not provided an installed-size figure for this entry.").font(.callout)
+                    Button { ubisoftGames.requestPlay(game, setup: setup) } label: {
+                        Label("Play \(game.name)", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(game.state != .installed || !ubisoftGames.current || ubisoft.state != .running
+                              || ubisoftGames.pendingGame != nil || setup.isBusy)
+                    .accessibilityIdentifier("launch-ubisoft-game-\(game.id)")
+                    .help("Request this installed game once through the managed Ubisoft Connect session")
+                    Button(ubisoft.state == .running ? "Show Ubisoft Connect" : "Launch Ubisoft Connect") {
+                        ubisoft.control(ubisoft.state == .running ? .show : .launch, setup: setup, diagnostics: diagnostics)
+                    }
+                    .disabled(setup.isBusy || ubisoft.state != .running && ubisoft.state != .stopped)
+                    .accessibilityIdentifier("show-ubisoft-for-game")
                 } else {
                     Text("Select a game").font(.title2.bold())
                     Text("Artwork, launch status and settings appear here.").foregroundStyle(.secondary)
@@ -699,6 +809,7 @@ struct LibraryShellView: View {
     }
 
     private func select(_ game: InstalledSteamGame) {
+        selectedUbisoftID = nil
         selectedGameID = game.id
         if preferences.viewMode == .list { focusedListID = game.id }
         else { focusedGameID = game.id }

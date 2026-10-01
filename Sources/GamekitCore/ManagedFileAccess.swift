@@ -298,6 +298,14 @@ final class ManagedDirectory {
         return true
     }
 
+    func regularFileSize(_ name: String) throws -> Int64? {
+        guard let fd = try regularFile(name) else { return nil }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { throw ioError("stat regular file") }
+        return info.st_size
+    }
+
     func read(_ name: String, maximumBytes: Int = ManagedDirectory.maximumDocumentBytes) throws -> Data? {
         guard let fd = try regularFile(name) else { return nil }
         defer { Darwin.close(fd) }

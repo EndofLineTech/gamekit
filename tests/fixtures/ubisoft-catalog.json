@@ -1,0 +1,8 @@
+{
+  "id": 568,
+  "name": "Tom Clancy's The Division",
+  "folder": "Tom Clancy's The Division",
+  "iconName": "b42e7d967e3b646523c970a28645384e.ico",
+  "installs": "\r\nHKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Ubisoft\\Launcher\\Installs\\568\r\n    InstallDir    REG_SZ    C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/games/Tom Clancy's The Division/\r\n    Language    REG_SZ    en-US\r\n",
+  "uninstall": "\r\nHKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Uplay Install 568\r\n    DisplayIcon    REG_SZ    C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/data/b42e7d967e3b646523c970a28645384e.ico\r\n    DisplayName    REG_SZ    Tom Clancy's The Division\r\n    InstallLocation    REG_SZ    C:/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/games/Tom Clancy's The Division/\r\n    NoModify    REG_DWORD    0x1\r\n    Publisher    REG_SZ    Ubisoft\r\n"
+}
