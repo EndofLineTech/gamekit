@@ -1159,7 +1159,7 @@ final class GamekitUITests: XCTestCase {
 
         XCTAssertTrue(app.windows["Gamekit"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["games-empty"].exists)
+        XCTAssertTrue(app.staticTexts["games-empty"].waitForExistence(timeout: 10))
         openLaunchers(in: app)
         XCTAssertTrue(app.staticTexts["metadata-empty"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Set up Windows Steam"].exists)
