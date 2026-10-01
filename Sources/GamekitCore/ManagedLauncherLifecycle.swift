@@ -5,7 +5,7 @@ public enum ManagedLauncherState: String, Sendable {
 }
 public enum ManagedLauncherStopResult: Sendable { case alreadyStopped, stopped }
 public enum ManagedLauncherLifecycleError: Error, Equatable {
-    case notInstalled, foreignActivity, observationUnavailable, scopeChanged, cleanupFailed
+    case notInstalled, foreignActivity, observationUnavailable, scopeChanged, cleanupFailed, gameUnavailable
 }
 
 struct ManagedLauncherLifecycleDriver: Sendable {
@@ -156,6 +156,56 @@ public actor ManagedLauncherLifecycle {
             throw ManagedLauncherLifecycleError.observationUnavailable
         }
         return client.identity.pid
+    }
+
+    /// Only the configured install registry subtree is queried, in the existing
+    /// owned client session. Never boot a stopped prefix merely to browse games.
+    func gameRegistry(_ key: String) async throws -> String {
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        guard let catalog = profile.gameCatalog,
+              key == catalog.installsRegistryKey ||
+                (key.hasPrefix(catalog.uninstallRegistryKey + "\\" + catalog.uninstallKeyPrefix) &&
+                 UInt32(key.dropFirst((catalog.uninstallRegistryKey + "\\" + catalog.uninstallKeyPrefix).count)) != nil)
+        else { throw ManagedLauncherLifecycleError.gameUnavailable }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: profile.id)
+        defer { withExtendedLifetime(lease) {} }
+        guard driver.runtimeAvailable(), let owned = try receipt() else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        let snapshot = try await ownedSnapshot(record, lease: lease, receipt: owned)
+        guard state(snapshot, receipt: owned) == .running else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        try Task.checkCancellation(); try lease.validate()
+        let result = try await driver.execute(.init(executable: layout.wine, arguments: ["reg.exe", "query", key, "/s"],
+            environment: layout.environment(prefix: lease.prefix, session: owned.token.uuidString),
+            workingDirectory: lease.prefix, timeout: 10, outputLimit: 65_536))
+        try lease.validate()
+        guard result.termination == .exited(0), !result.stdoutTruncated, !result.outputIncomplete,
+              let output = String(data: result.stdout, encoding: .utf8) else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        return output
+    }
+
+    /// The vendor's registered protocol is dispatched once through its pinned
+    /// executable in the *same* verified session; this does not claim a game started.
+    func requestGameLaunch(_ id: UInt32) async throws {
+        guard !busy else { throw EnvironmentStoreError.busy }
+        busy = true; defer { busy = false }
+        guard id > 0, let catalog = profile.gameCatalog else { throw ManagedLauncherLifecycleError.gameUnavailable }
+        let installation = try await store.installationLease()
+        defer { withExtendedLifetime(installation) {} }
+        let record = try await installed()
+        let lease = try await store.executionLease(for: profile.id)
+        defer { withExtendedLifetime(lease) {} }
+        guard driver.runtimeAvailable(), let owned = try receipt() else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        let snapshot = try await ownedSnapshot(record, lease: lease, receipt: owned)
+        guard state(snapshot, receipt: owned) == .running else { throw ManagedLauncherLifecycleError.observationUnavailable }
+        try Task.checkCancellation(); try lease.validate()
+        let executable = lease.prefix.appendingPathComponent(profile.executable.rawValue)
+        let uri = catalog.launchURI.replacingOccurrences(of: "{id}", with: String(id))
+        try await driver.spawn(.init(executable: layout.wine, arguments: [executable.path, uri],
+            environment: layout.environment(prefix: lease.prefix, session: owned.token.uuidString),
+            workingDirectory: executable.deletingLastPathComponent(), timeout: nil, outputMode: .discard))
     }
 
     public func stop() async throws -> ManagedLauncherStopResult {

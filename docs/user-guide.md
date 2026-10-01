@@ -76,10 +76,12 @@ order by name, launcher, state or Steam-reported size (unknown sizes sort last).
 Use the **Favorites** sidebar destination and the star in a cover's upper-right
 corner to keep a local list. The star appears when you hover over or select a
 cover; the sidebar star animates when the Favorites list changes.
-The game library currently lists managed Windows Steam installations. Its icon
-appears in the launcher sidebar row; the transparent mark also appears on covers
-and compact table thumbnails, with **Windows Steam** beneath each cover and in
-the table. Gamekit remembers browsing preferences;
+The game library lists managed Windows Steam and verified Ubisoft Connect
+installations. Each configured launcher has its own sidebar row. Ubisoft games
+appear in **All Installed Games** and the **Ubisoft Connect** source view using
+the installed client's icon; Steam's transparent mark appears on Steam covers
+and compact table thumbnails. Steam Favorites, per-game compatibility settings,
+uninstall and reported-size controls apply only to Steam games. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
 [editable SVG](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/icon-case.svg);
@@ -121,9 +123,16 @@ Connect** opens its own window for you to sign in; Gamekit never reads your
 password. **Show** brings that verified client forward, while **Stop** shuts
 down only its owned Wine environment. Ordinary Gamekit Quit leaves it running.
 
-Ubisoft game discovery and Play are not yet available in Gamekit. Installing
-the client or signing in does not fabricate installed game entries; real
-signed-in receipts and a guarded Play request must be validated separately.
+After a game finishes installing in Ubisoft Connect, use **Refresh** in Gamekit's
+All Installed Games or Ubisoft Connect view. Gamekit matches Ubisoft's registered
+install ID and uninstall title/location to files in its own managed prefix; it
+does not enumerate your account, infer installed games from Library tiles, or
+report an estimated disk size. Selecting a Ubisoft game opens its inspector.
+When the owned client is running and its install record is current, **Play**
+sends one request through that client. A request is not proof of gameplay; check
+the game's window. If Ubisoft is stopped, last-known entries remain visible but
+Play stays disabled until you launch Ubisoft Connect and the record is verified.
+See [Ubisoft game discovery](ubisoft-game-catalog.md) for evidence and limits.
 
 ### Debug capture
 

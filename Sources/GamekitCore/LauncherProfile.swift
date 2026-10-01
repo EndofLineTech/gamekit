@@ -19,6 +19,16 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
         public let replacementSHA256: String
         public let resource: String
     }
+    public struct GameCatalog: Codable, Equatable, Sendable {
+        public let installsRegistryKey: String
+        public let uninstallRegistryKey: String
+        public let uninstallKeyPrefix: String
+        public let publisher: String
+        public let gamesDirectory: RelativePath
+        public let iconDirectory: RelativePath
+        public let installMarkers: [String]
+        public let launchURI: String
+    }
 
     public let schemaVersion: Int
     public let id: EnvironmentID
@@ -30,6 +40,7 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
     public let versionFile: RelativePath
     public let launchArguments: [String]?
     public let runtimeModule: RuntimeModule?
+    public let gameCatalog: GameCatalog?
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 16_384 else { throw LauncherProfileError.invalidProfile }
@@ -56,6 +67,30 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
                 validHash(module.replacementSHA256) && module.originalSHA256 != module.replacementSHA256 &&
                 module.resource.range(of: "\\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\\.so\\z", options: .regularExpression) != nil
         } ?? true
+        let catalogValid = gameCatalog.map { catalog in
+            func registryKey(_ key: String, ending: String) -> Bool {
+                key.hasPrefix("HKLM\\Software\\") && key.hasSuffix(ending) && key.count <= 256 &&
+                    key.range(of: "\\A[A-Za-z0-9 _\\\\-]+\\z", options: .regularExpression) != nil
+            }
+            func marker(_ name: String) -> Bool {
+                name.range(of: "\\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\\z", options: .regularExpression) != nil
+            }
+            let parent = Array(executable.components.dropLast())
+            return registryKey(catalog.installsRegistryKey, ending: "\\Installs") &&
+                registryKey(catalog.uninstallRegistryKey, ending: "\\Uninstall") &&
+                catalog.uninstallKeyPrefix.range(of: "\\A[A-Za-z0-9 ]{1,48}\\z", options: .regularExpression) != nil &&
+                !catalog.publisher.isEmpty && catalog.publisher.count <= 100 &&
+                catalog.publisher.rangeOfCharacter(from: .controlCharacters) == nil &&
+                catalog.gamesDirectory.components.starts(with: parent) &&
+                catalog.gamesDirectory.components.count == parent.count + 1 &&
+                catalog.iconDirectory.components.starts(with: parent) &&
+                catalog.iconDirectory.components.count == parent.count + 1 &&
+                (1...4).contains(catalog.installMarkers.count) &&
+                Set(catalog.installMarkers).count == catalog.installMarkers.count &&
+                catalog.installMarkers.allSatisfy(marker) &&
+                catalog.launchURI.range(of: "\\A[a-z][a-z0-9+.-]{0,31}://launch/\\{id\\}(?:/[0-9]{1,3})?\\z",
+                                        options: .regularExpression) != nil
+        } ?? true
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               name.count <= 100, name != ".", name != "..",
               name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil,
@@ -71,6 +106,7 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
               (launchArguments?.count ?? 0) <= 8,
               launchArguments?.allSatisfy({ $0.range(of: "\\A--[a-z][a-z0-9-]{0,62}\\z", options: .regularExpression) != nil }) != false,
               moduleValid,
+              catalogValid,
               executable.components.first == "drive_c", validExecutableName(executable.components.last ?? ""),
               versionFile.components.dropLast() == directory, versionFile.components.last == "version.txt",
               !clientExecutables.isEmpty, clientExecutables.count <= 8, webExecutables.count <= 8,

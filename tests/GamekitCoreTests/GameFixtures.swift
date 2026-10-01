@@ -41,6 +41,18 @@ enum GameFixtures {
         let document = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
         return try! LauncherProfile.decode(JSONSerialization.data(withJSONObject: document[key]!))
     }
+    struct UbisoftCatalog: Decodable {
+        let id: UInt32
+        let name: String
+        let folder: String
+        let iconName: String
+        let installs: String
+        let uninstall: String
+    }
+    static let ubisoftCatalog: UbisoftCatalog = {
+        let url = file.deletingLastPathComponent().appendingPathComponent("ubisoft-catalog.json")
+        return try! JSONDecoder().decode(UbisoftCatalog.self, from: Data(contentsOf: url))
+    }()
     struct Settings: Decodable, Sendable {
         let registry: String
         let syntheticDriverVersion: [Int]

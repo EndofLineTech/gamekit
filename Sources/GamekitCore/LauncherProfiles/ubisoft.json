@@ -18,5 +18,15 @@
     "replacementSHA256": "791440e7394236738f8ffefbf6ce7643e801aa5d74e3a092e2dd755eeec020c5",
     "resource": "win32u-remote-surface-2.so"
   },
+  "gameCatalog": {
+    "installsRegistryKey": "HKLM\\Software\\Wow6432Node\\Ubisoft\\Launcher\\Installs",
+    "uninstallRegistryKey": "HKLM\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+    "uninstallKeyPrefix": "Uplay Install ",
+    "publisher": "Ubisoft",
+    "gamesDirectory": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/games",
+    "iconDirectory": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/data",
+    "installMarkers": ["uplay_install.state", "uplay_install.manifest"],
+    "launchURI": "uplay://launch/{id}/0"
+  },
   "versionFile": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/version.txt"
 }

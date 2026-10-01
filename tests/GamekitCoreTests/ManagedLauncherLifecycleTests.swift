@@ -8,6 +8,7 @@ private actor LauncherFixtureRuntime {
     var launches = 0
     var stops = 0
     var launchArguments: [String] = []
+    var registryQueries: [String] = []
     var incomplete = false
     var foreign = false
 
@@ -31,7 +32,17 @@ private actor LauncherFixtureRuntime {
         #expect(request.outputMode == .discard)
         #expect(request.timeout == nil)
     }
-    func stop(_ request: CommandRequest) async throws -> CommandResult {
+    func execute(_ request: CommandRequest) async throws -> CommandResult {
+        if request.arguments.first == "reg.exe" {
+            let key = try #require(request.arguments.dropFirst(2).first)
+            #expect(request.arguments == ["reg.exe", "query", key, "/s"])
+            #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
+            #expect(request.environment["WINEPREFIX"] == prefix)
+            registryQueries.append(key)
+            return .init(termination: .exited(0), stdout: Data(GameFixtures.ubisoftCatalog.installs.utf8), stderr: Data(),
+                stdoutBytes: GameFixtures.ubisoftCatalog.installs.utf8.count, stderrBytes: 0,
+                stdoutTruncated: false, stderrTruncated: false, outputIncomplete: false, duration: 0.01)
+        }
         #expect(request.arguments == ["-k"])
         #expect(request.environment["GAMEKIT_SESSION_ID"] == token)
         #expect(request.environment["WINEPREFIX"] == prefix)
@@ -40,7 +51,7 @@ private actor LauncherFixtureRuntime {
     }
     var driver: ManagedLauncherLifecycleDriver {
         .init(preflight: {}, observe: { _, _ in await self.snapshot() },
-              spawn: { await self.spawn($0) }, execute: { try await self.stop($0) })
+               spawn: { await self.spawn($0) }, execute: { try await self.execute($0) })
     }
 }
 
@@ -163,5 +174,41 @@ struct ManagedLauncherLifecycleTests {
         #expect(await runtime.stops == 0)
         #expect(try await lifecycle.launch() == .running)
         #expect(try await lifecycle.stop() == .stopped)
+    }
+
+    @Test("Registry discovery and vendor Play require the same owned launcher session")
+    func registeredGames() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        let catalog = try #require(fixture.profile.gameCatalog)
+        let id = GameFixtures.ubisoftCatalog.id
+        await #expect(throws: ManagedLauncherLifecycleError.observationUnavailable) {
+            try await lifecycle.gameRegistry(catalog.installsRegistryKey)
+        }
+        _ = try await lifecycle.launch()
+        #expect(try await lifecycle.gameRegistry(catalog.installsRegistryKey) == GameFixtures.ubisoftCatalog.installs)
+        #expect(await runtime.registryQueries == [catalog.installsRegistryKey])
+        await #expect(throws: ManagedLauncherLifecycleError.gameUnavailable) {
+            try await lifecycle.gameRegistry("HKLM\\Software\\Unrelated")
+        }
+        await runtime.setForeign(true)
+        await #expect(throws: ManagedLauncherLifecycleError.foreignActivity) {
+            try await lifecycle.gameRegistry(catalog.installsRegistryKey)
+        }
+        await #expect(throws: ManagedLauncherLifecycleError.foreignActivity) {
+            try await lifecycle.requestGameLaunch(id)
+        }
+        await runtime.setForeign(false)
+        try await lifecycle.requestGameLaunch(id)
+        #expect(await runtime.launches == 2)
+        #expect(await runtime.launchArguments == [fixture.store.prefixURL(for: fixture.profile.id)
+            .appendingPathComponent(fixture.profile.executable.rawValue).path,
+            catalog.launchURI.replacingOccurrences(of: "{id}", with: String(id))])
+        #expect(try await lifecycle.stop() == .stopped)
+        await #expect(throws: ManagedLauncherLifecycleError.observationUnavailable) {
+            try await lifecycle.requestGameLaunch(id)
+        }
     }
 }
