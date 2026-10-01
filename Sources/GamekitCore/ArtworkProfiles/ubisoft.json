@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "launcherID": "ubisoft",
+  "covers": [
+    {
+      "gameID": 568,
+      "sourcePage": "https://store.ubisoft.com/us/tom-clancys-the-division/56c494ad88a7e300458b4d62.html",
+      "role": "edition_packshot",
+      "imageURL": "https://store.ubisoft.com/on/demandware.static/-/Sites-masterCatalog/default/dw440d8fae/images/large/56c494ad88a7e300458b4d62.jpg",
+      "sha256": "9eb314a57a19a96b8b2137f3570ddc048983fd63a443be9d1d2a254f0669e4af"
+    }
+  ]
+}

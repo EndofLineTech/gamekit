@@ -34,13 +34,16 @@ struct LibraryCover<Mark: View>: View {
     let favorite: Bool
     let mark: Mark
     var fallbackIcon: NSImage? = nil
+    var preservePortrait = false
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 if let portrait {
-                    Image(nsImage: portrait).resizable().scaledToFill()
+                    Image(nsImage: portrait).resizable()
+                        .aspectRatio(contentMode: preservePortrait ? .fit : .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                        .background(Color(nsColor: .underPageBackgroundColor))
                 } else {
                     LinearGradient(colors: [LibraryVisualStyle.accent.opacity(0.85), Color.teal.opacity(0.65),
                                             Color(nsColor: .underPageBackgroundColor)],
@@ -104,11 +107,12 @@ struct LibraryGameTile<Mark: View>: View {
     let mark: Mark
     var fallbackIcon: NSImage? = nil
     var sizeProvenance = "Steam-reported size"
+    var preservePortrait = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             LibraryCover(title: title, portrait: portrait, selected: selected, favorite: favorite,
-                         mark: mark, fallbackIcon: fallbackIcon)
+                         mark: mark, fallbackIcon: fallbackIcon, preservePortrait: preservePortrait)
             Text(title).font(.headline).lineLimit(2)
             Text("\(source) · \(reportedSize)").font(.caption).foregroundStyle(.secondary).lineLimit(2)
             if needsAttention {

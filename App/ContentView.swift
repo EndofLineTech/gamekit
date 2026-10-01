@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var steam = SteamLifecycleModel()
     @StateObject private var ubisoft = UbisoftConnectModel()
     @StateObject private var ubisoftGames = UbisoftCatalogModel()
+    @StateObject private var ubisoftPortraits = UbisoftPortraitModel()
     @StateObject private var installation = SteamInstallationModel()
     @StateObject private var portraits = SteamPortraitModel()
     @Environment(\.scenePhase) private var scenePhase
@@ -54,6 +55,7 @@ struct ContentView: View {
         .environmentObject(steam)
         .environmentObject(ubisoft)
         .environmentObject(ubisoftGames)
+        .environmentObject(ubisoftPortraits)
         .environmentObject(installation)
         .environmentObject(portraits)
         .task {

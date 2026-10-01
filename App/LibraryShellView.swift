@@ -376,20 +376,11 @@ struct LibraryShellView: View {
         }
     }
 
-    private func ubisoftMark() -> some View {
-        Text("U").font(.system(size: 25, weight: .heavy, design: .rounded)).frame(width: 25, height: 25)
-    }
-
     private func ubisoftGameCard(_ game: InstalledUbisoftGame) -> some View {
         Button {
             selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
         } label: {
-            LibraryGameTile(title: game.name, source: "Ubisoft Connect",
-                            state: game.state == .installed ? "Installed" : "Installation incomplete",
-                            needsAttention: game.state != .installed, reportedSize: "Size not reported",
-                            portrait: nil, selected: selectedUbisoftID == game.id, favorite: false,
-                            mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
-                            sizeProvenance: "Installed size")
+            UbisoftGameTile(game: game, selected: selectedUbisoftID == game.id)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
@@ -676,8 +667,7 @@ struct LibraryShellView: View {
                     }
                     InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
                 } else if let game = selectedUbisoftGame {
-                    LibraryCover(title: game.name, portrait: nil, selected: false, favorite: false,
-                                 mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)))
+                    UbisoftPortraitCover(game: game)
                         .frame(width: 205, height: 308)
                     Text(game.name).font(.title2.bold())
                     Text("Ubisoft Connect · \(game.state == .installed ? "Installed" : "Installation incomplete")")
