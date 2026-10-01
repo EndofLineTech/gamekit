@@ -37,6 +37,7 @@ struct LibraryShellView: View {
     @State private var selectedGameID: UInt32?
     @State private var selectedUbisoftID: UInt32?
     @State private var hoveredGameID: UInt32?
+    @State private var hoveredUbisoftID: UInt32?
     @State private var inspectorVisible = false
     @State private var compatibilityGame: InstalledSteamGame?
     @State private var compatibilityRevision = 0
@@ -384,7 +385,8 @@ struct LibraryShellView: View {
     }
 
     private func ubisoftGameCard(_ game: InstalledUbisoftGame) -> some View {
-        Button {
+        let coverWidth = CGFloat(preferences.coverSize)
+        return Button {
             selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
         } label: {
             UbisoftGameTile(game: game, selected: selectedUbisoftID == game.id)
@@ -392,6 +394,29 @@ struct LibraryShellView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
         .help("Inspect \(game.name) from Ubisoft Connect")
+        .overlay(alignment: .topTrailing) {
+            if hoveredUbisoftID == game.id && game.state == .installed {
+                Button { ubisoftGames.requestPlay(game, setup: setup) } label: {
+                    Image(systemName: "play.fill").frame(width: 30, height: 30)
+                }
+                .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                .tint(LibraryVisualStyle.accent)
+                .disabled(!ubisoftGames.current || ubisoft.state != .running
+                          || ubisoftGames.pendingGame != nil || setup.isBusy)
+                .accessibilityLabel("Play \(game.name)")
+                .accessibilityHint("Send one Play request through the verified Ubisoft Connect session; gameplay is not confirmed.")
+                .accessibilityIdentifier("hover-launch-ubisoft-game-\(game.id)")
+                .help(ubisoftGames.current && ubisoft.state == .running
+                      ? "Request Play for \(game.name) through Ubisoft Connect"
+                      : "Launch Ubisoft Connect to verify this game before Play")
+                .padding(12)
+                .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottomTrailing)
+            }
+        }
+        .onHover { hovering in
+            if hovering { hoveredUbisoftID = game.id }
+            else if hoveredUbisoftID == game.id { hoveredUbisoftID = nil }
+        }
     }
 
     private func ubisoftGameRow(_ game: InstalledUbisoftGame) -> some View {
@@ -457,7 +482,7 @@ struct LibraryShellView: View {
                             .padding(7)
                         }
                     }
-                    .overlay(alignment: .top) {
+                    .overlay(alignment: .topTrailing) {
                         if hoveredGameID == game.id && game.state == .ready {
                             let running = games.runningGames.contains(game.id)
                             Button { if running { stop(game) } else { play(game) } } label: {
@@ -473,8 +498,8 @@ struct LibraryShellView: View {
                                                : playHint(for: game))
                             .accessibilityIdentifier("\(running ? "hover-stop-game" : "hover-launch-game")-\(game.id)")
                             .help("\(running ? "Stop" : "Play") \(game.name)")
-                            .padding(.bottom, 12)
-                            .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottom)
+                            .padding(12)
+                            .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottomTrailing)
                         }
                     }
                     .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
