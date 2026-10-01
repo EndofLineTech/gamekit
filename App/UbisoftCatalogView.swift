@@ -53,6 +53,57 @@ final class UbisoftCatalogModel: ObservableObject {
     }
 }
 
+@MainActor
+final class UbisoftPortraitModel: ObservableObject {
+    private let cache = try? UbisoftPortraitArtworkCache()
+
+    func image(for id: UInt32) async -> NSImage? {
+        guard let bytes = await cache?.portrait(for: id), !Task.isCancelled else { return nil }
+        return NSImage(data: bytes)
+    }
+}
+
+struct UbisoftCoverMark: View {
+    var body: some View {
+        Image("UbisoftLauncherMark").resizable().interpolation(.high).frame(width: 25, height: 25)
+    }
+}
+
+struct UbisoftGameTile: View {
+    @EnvironmentObject private var portraits: UbisoftPortraitModel
+    let game: InstalledUbisoftGame
+    let selected: Bool
+    @State private var portrait: NSImage?
+
+    var body: some View {
+        LibraryGameTile(title: game.name, source: "Ubisoft Connect",
+                        state: game.state == .installed ? "Installed" : "Installation incomplete",
+                        needsAttention: game.state != .installed, reportedSize: "Size not reported",
+                        portrait: portrait, selected: selected, favorite: false,
+                        mark: UbisoftCoverMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
+                        sizeProvenance: "Installed size")
+            .task(id: game.id) {
+                portrait = nil
+                portrait = await portraits.image(for: game.id)
+            }
+    }
+}
+
+struct UbisoftPortraitCover: View {
+    @EnvironmentObject private var portraits: UbisoftPortraitModel
+    let game: InstalledUbisoftGame
+    @State private var portrait: NSImage?
+
+    var body: some View {
+        LibraryCover(title: game.name, portrait: portrait, selected: false, favorite: false,
+                     mark: UbisoftCoverMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)))
+            .task(id: game.id) {
+                portrait = nil
+                portrait = await portraits.image(for: game.id)
+            }
+    }
+}
+
 struct UbisoftGameIcon: View {
     let data: Data?
 

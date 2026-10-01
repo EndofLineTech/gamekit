@@ -10,9 +10,24 @@ The optional icon comes from the vendor's registered icon path under the
 profile's bounded `iconDirectory`. Gamekit does not scan account/token files,
 read a full registry hive, parse game-content manifests, or invent game sizes.
 The vendor's installed-game record provides a small icon, not portrait box art.
-Gamekit presents it within the same 2:3 cover fallback used for Steam titles
-without artwork, rather than stretching the icon or inferring a different
-store's game identity.
+For explicitly verified game IDs in `Sources/GamekitCore/ArtworkProfiles/ubisoft.json`,
+Gamekit requests a public Ubisoft Store edition packshot over HTTPS and accepts
+only the pinned SHA-256 JPEG with bounded portrait dimensions. The packshot
+fills the shared 2:3 cover with a small centered crop at the sides. If an ID is
+not mapped or the request is offline, redirected or changed, Gamekit displays
+the same 2:3 icon/title fallback instead. Art is an in-memory cache, separate
+from the managed game prefix; Gamekit does not scrape the Store by title or query account
+data. New mappings require independent evidence linking the Store's
+`uplayGameID` to a real installed Ubisoft ID.
+
+The public [Ubisoft Store page for The Division](https://store.ubisoft.com/us/tom-clancys-the-division/56c494ad88a7e300458b4d62.html)
+explicitly identifies `uplayGameID: 568` and its `edition_packshot` as
+`images/large/56c494ad88a7e300458b4d62.jpg` on the same product. On
+2026-10-01 the official Store JPEG was 464×608, 61,125 bytes, with SHA-256
+`9eb314a57a19a96b8b2137f3570ddc048983fd63a443be9d1d2a254f0669e4af`.
+These are public product/artwork facts; no retail image is bundled or copied
+into the repository. A Store update that changes those bytes requires new
+verification and a JSON profile update.
 
 On 2026-09-30, the owner's signed-in isolated Ubisoft Connect build 13368 wrote
 `HKLM\Software\Wow6432Node\Ubisoft\Launcher\Installs\568` for the installed

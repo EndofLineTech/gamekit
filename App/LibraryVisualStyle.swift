@@ -65,10 +65,11 @@ struct LibraryCover<Mark: View>: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(max(8, geometry.size.width * 0.09))
+                    .padding(.bottom, max(35, geometry.size.width * 0.27))
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .overlay(alignment: .topLeading) {
+            .overlay(alignment: .bottomLeading) {
                 mark.foregroundStyle(.white).opacity(LibraryVisualStyle.launcherMarkOpacity)
                     .shadow(color: .black.opacity(0.8), radius: 3)
                     .padding(max(5, geometry.size.width * 0.07))

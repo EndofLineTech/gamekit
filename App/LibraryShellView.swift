@@ -37,6 +37,7 @@ struct LibraryShellView: View {
     @State private var selectedGameID: UInt32?
     @State private var selectedUbisoftID: UInt32?
     @State private var hoveredGameID: UInt32?
+    @State private var hoveredUbisoftID: UInt32?
     @State private var inspectorVisible = false
     @State private var compatibilityGame: InstalledSteamGame?
     @State private var compatibilityRevision = 0
@@ -195,7 +196,7 @@ struct LibraryShellView: View {
                 if ubisoft.installation == .installed {
                     Button { destination = .ubisoft } label: {
                         sidebarRow("Ubisoft Connect", active: destination == .ubisoft) {
-                            Image(systemName: "gamecontroller.fill").accessibilityHidden(true)
+                            ubisoftLauncherIcon
                         }
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("library-ubisoft")
@@ -241,6 +242,13 @@ struct LibraryShellView: View {
 
     private var steamLauncherIcon: some View {
         Image("SteamLauncherMark").resizable().frame(width: 16, height: 16)
+            .frame(width: 22, height: 22)
+            .background(.black.opacity(0.85), in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    private var ubisoftLauncherIcon: some View {
+        Image("UbisoftLauncherMark").resizable().frame(width: 16, height: 16)
             .frame(width: 22, height: 22)
             .background(.black.opacity(0.85), in: Circle())
             .accessibilityHidden(true)
@@ -376,24 +384,39 @@ struct LibraryShellView: View {
         }
     }
 
-    private func ubisoftMark() -> some View {
-        Text("U").font(.system(size: 25, weight: .heavy, design: .rounded)).frame(width: 25, height: 25)
-    }
-
     private func ubisoftGameCard(_ game: InstalledUbisoftGame) -> some View {
-        Button {
+        let coverWidth = CGFloat(preferences.coverSize)
+        return Button {
             selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
         } label: {
-            LibraryGameTile(title: game.name, source: "Ubisoft Connect",
-                            state: game.state == .installed ? "Installed" : "Installation incomplete",
-                            needsAttention: game.state != .installed, reportedSize: "Size not reported",
-                            portrait: nil, selected: selectedUbisoftID == game.id, favorite: false,
-                            mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
-                            sizeProvenance: "Installed size")
+            UbisoftGameTile(game: game, selected: selectedUbisoftID == game.id)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
         .help("Inspect \(game.name) from Ubisoft Connect")
+        .overlay(alignment: .topTrailing) {
+            if hoveredUbisoftID == game.id && game.state == .installed {
+                Button { ubisoftGames.requestPlay(game, setup: setup) } label: {
+                    Image(systemName: "play.fill").frame(width: 30, height: 30)
+                }
+                .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                .tint(LibraryVisualStyle.accent)
+                .disabled(!ubisoftGames.current || ubisoft.state != .running
+                          || ubisoftGames.pendingGame != nil || setup.isBusy)
+                .accessibilityLabel("Play \(game.name)")
+                .accessibilityHint("Send one Play request through the verified Ubisoft Connect session; gameplay is not confirmed.")
+                .accessibilityIdentifier("hover-launch-ubisoft-game-\(game.id)")
+                .help(ubisoftGames.current && ubisoft.state == .running
+                      ? "Request Play for \(game.name) through Ubisoft Connect"
+                      : "Launch Ubisoft Connect to verify this game before Play")
+                .padding(12)
+                .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottomTrailing)
+            }
+        }
+        .onHover { hovering in
+            if hovering { hoveredUbisoftID = game.id }
+            else if hoveredUbisoftID == game.id { hoveredUbisoftID = nil }
+        }
     }
 
     private func ubisoftGameRow(_ game: InstalledUbisoftGame) -> some View {
@@ -459,7 +482,7 @@ struct LibraryShellView: View {
                             .padding(7)
                         }
                     }
-                    .overlay(alignment: .top) {
+                    .overlay(alignment: .topTrailing) {
                         if hoveredGameID == game.id && game.state == .ready {
                             let running = games.runningGames.contains(game.id)
                             Button { if running { stop(game) } else { play(game) } } label: {
@@ -475,8 +498,8 @@ struct LibraryShellView: View {
                                                : playHint(for: game))
                             .accessibilityIdentifier("\(running ? "hover-stop-game" : "hover-launch-game")-\(game.id)")
                             .help("\(running ? "Stop" : "Play") \(game.name)")
-                            .padding(.bottom, 12)
-                            .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottom)
+                            .padding(12)
+                            .frame(width: coverWidth, height: coverWidth * 1.5, alignment: .bottomTrailing)
                         }
                     }
                     .simultaneousGesture(TapGesture(count: 2).onEnded { play(game) })
@@ -676,8 +699,7 @@ struct LibraryShellView: View {
                     }
                     InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
                 } else if let game = selectedUbisoftGame {
-                    LibraryCover(title: game.name, portrait: nil, selected: false, favorite: false,
-                                 mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)))
+                    UbisoftPortraitCover(game: game)
                         .frame(width: 205, height: 308)
                     Text(game.name).font(.title2.bold())
                     Text("Ubisoft Connect · \(game.state == .installed ? "Installed" : "Installation incomplete")")

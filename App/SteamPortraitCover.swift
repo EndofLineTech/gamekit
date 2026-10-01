@@ -45,12 +45,13 @@ struct SteamPortraitCover: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(markSize < 20 ? 3 : 12)
+                .padding(.bottom, markSize < 20 ? 0 : markSize + 10)
             }
         }
         .aspectRatio(2 / 3, contentMode: .fit)
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(alignment: .topLeading) {
+        .overlay(alignment: .bottomLeading) {
             Image("SteamLauncherMark").resizable().interpolation(.high)
                 .frame(width: markSize, height: markSize)
                 .opacity(LibraryVisualStyle.launcherMarkOpacity)

@@ -80,9 +80,12 @@ The game library lists managed Windows Steam and verified Ubisoft Connect
 installations. Each configured launcher has its own sidebar row. Ubisoft games
 appear in **All Installed Games** and the **Ubisoft Connect** source view in the
 same portrait cover layout as Steam. Ubisoft's registered game icon appears in
-the cover placeholder; it is not a full-size box-art image. Steam's transparent
-mark appears on Steam covers and compact table thumbnails. Steam Favorites,
-per-game compatibility settings, uninstall and reported-size controls apply
+the cover placeholder; verified Ubisoft Store edition packshots appear for
+explicitly mapped game IDs when available. Offline or unavailable artwork
+returns to the icon/title placeholder. Steam's transparent mark appears on
+Steam covers and compact table thumbnails. The launcher marks sit at the
+lower-left of covers; a ready cover's hover Play control sits at the lower-right.
+Steam Favorites, per-game compatibility settings, uninstall and reported-size controls apply
 only to Steam games. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
@@ -131,8 +134,9 @@ install ID and uninstall title/location to files in its own managed prefix; it
 does not enumerate your account, infer installed games from Library tiles, or
 report an estimated disk size. Selecting a Ubisoft game opens its inspector.
 When the owned client is running and its install record is current, **Play**
-sends one request through that client. A request is not proof of gameplay; check
-the game's window. If Ubisoft is stopped, last-known entries remain visible but
+in the inspector or the cover's lower-right hover control sends one request
+through that client. A request is not proof of gameplay; check the game's
+window. If Ubisoft is stopped, last-known entries remain visible but
 Play stays disabled until you launch Ubisoft Connect and the record is verified.
 See [Ubisoft game discovery](ubisoft-game-catalog.md) for evidence and limits.
 
