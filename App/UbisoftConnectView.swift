@@ -12,11 +12,17 @@ final class UbisoftConnectModel: ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var stage: InstallationStage?
     @Published private(set) var message: String?
+    private var lifecycleRevision: UUID?
+    private var activeLifecycle: ManagedLauncherLifecycle?
 
     private func profile() throws -> LauncherProfile { try LauncherProfileStore.bundled("ubisoft") }
     private func store() throws -> EnvironmentStore { try EnvironmentStore(root: AppStorageLocations.metadata) }
     private func lifecycle(setup: SetupModel) throws -> ManagedLauncherLifecycle {
-        try ManagedLauncherLifecycle(store: store(), layout: setup.layout, profile: profile())
+        if lifecycleRevision == setup.selectionRevision, let activeLifecycle { return activeLifecycle }
+        let lifecycle = try ManagedLauncherLifecycle(store: store(), layout: setup.layout, profile: profile())
+        activeLifecycle = lifecycle
+        lifecycleRevision = setup.selectionRevision
+        return lifecycle
     }
 
     func refresh(setup: SetupModel) async {
