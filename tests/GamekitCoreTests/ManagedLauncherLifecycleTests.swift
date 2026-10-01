@@ -114,6 +114,22 @@ struct ManagedLauncherLifecycleTests {
         #expect(try await !settings.isSelectionLocked())
     }
 
+    @Test("An externally exited owned client settles from Starting to Stopped before relaunch")
+    func externalExitSettles() async throws {
+        let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }
+        let runtime = LauncherFixtureRuntime()
+        let lifecycle = try ManagedLauncherLifecycle(store: fixture.store, layout: fixture.layout,
+            profile: fixture.profile, driver: await runtime.driver)
+        #expect(try await lifecycle.launch() == .running)
+        await runtime.exitExternally()
+        #expect(try await lifecycle.status() == .starting)
+        try await Task.sleep(for: .seconds(5.1))
+        #expect(try await lifecycle.status() == .stopped)
+        #expect(try await lifecycle.launch() == .running)
+        #expect(await runtime.launches == 2)
+        #expect(try await lifecycle.stop() == .stopped)
+    }
+
     @Test("Foreign or incomplete observation refuses Stop and preserves the receipt")
     func refuseUncertainStop() async throws {
         let fixture = try await ManagedLauncherLifecycleFixture(); defer { fixture.remove() }

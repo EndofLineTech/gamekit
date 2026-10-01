@@ -127,6 +127,9 @@ Ubisoft Connect** action instead of repeating a fresh install. **Launch Ubisoft
 Connect** opens its own window for you to sign in; Gamekit never reads your
 password. **Show** brings that verified client forward, while **Stop** shuts
 down only its owned Wine environment. Ordinary Gamekit Quit leaves it running.
+If the owned client exits on its own, a brief **Starting** status settles to
+**Stopped** after Gamekit confirms the environment has been empty for five
+seconds; **Launch Ubisoft Connect** then becomes available again.
 
 After a game finishes installing in Ubisoft Connect, use **Refresh** in Gamekit's
 All Installed Games or Ubisoft Connect view. Gamekit matches Ubisoft's registered
