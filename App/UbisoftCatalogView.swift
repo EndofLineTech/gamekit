@@ -65,7 +65,7 @@ final class UbisoftPortraitModel: ObservableObject {
 
 struct UbisoftCoverMark: View {
     var body: some View {
-        Text("U").font(.system(size: 25, weight: .heavy, design: .rounded)).frame(width: 25, height: 25)
+        Image("UbisoftLauncherMark").resizable().interpolation(.high).frame(width: 25, height: 25)
     }
 }
 
@@ -81,7 +81,7 @@ struct UbisoftGameTile: View {
                         needsAttention: game.state != .installed, reportedSize: "Size not reported",
                         portrait: portrait, selected: selected, favorite: false,
                         mark: UbisoftCoverMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
-                        sizeProvenance: "Installed size", preservePortrait: true)
+                        sizeProvenance: "Installed size")
             .task(id: game.id) {
                 portrait = nil
                 portrait = await portraits.image(for: game.id)
@@ -96,8 +96,7 @@ struct UbisoftPortraitCover: View {
 
     var body: some View {
         LibraryCover(title: game.name, portrait: portrait, selected: false, favorite: false,
-                     mark: UbisoftCoverMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
-                     preservePortrait: true)
+                     mark: UbisoftCoverMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)))
             .task(id: game.id) {
                 portrait = nil
                 portrait = await portraits.image(for: game.id)

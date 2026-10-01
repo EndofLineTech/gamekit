@@ -12,11 +12,11 @@ read a full registry hive, parse game-content manifests, or invent game sizes.
 The vendor's installed-game record provides a small icon, not portrait box art.
 For explicitly verified game IDs in `Sources/GamekitCore/ArtworkProfiles/ubisoft.json`,
 Gamekit requests a public Ubisoft Store edition packshot over HTTPS and accepts
-only the pinned SHA-256 JPEG with bounded portrait dimensions. The original
-packshot fits within the 2:3 cover without cropping. If an ID is not mapped or
-the request is offline, redirected or changed, Gamekit displays the same 2:3
-icon/title fallback instead. Art is an in-memory cache, separate from the
-managed game prefix; Gamekit does not scrape the Store by title or query account
+only the pinned SHA-256 JPEG with bounded portrait dimensions. The packshot
+fills the shared 2:3 cover with a small centered crop at the sides. If an ID is
+not mapped or the request is offline, redirected or changed, Gamekit displays
+the same 2:3 icon/title fallback instead. Art is an in-memory cache, separate
+from the managed game prefix; Gamekit does not scrape the Store by title or query account
 data. New mappings require independent evidence linking the Store's
 `uplayGameID` to a real installed Ubisoft ID.
 

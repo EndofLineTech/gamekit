@@ -195,7 +195,7 @@ struct LibraryShellView: View {
                 if ubisoft.installation == .installed {
                     Button { destination = .ubisoft } label: {
                         sidebarRow("Ubisoft Connect", active: destination == .ubisoft) {
-                            Image(systemName: "gamecontroller.fill").accessibilityHidden(true)
+                            ubisoftLauncherIcon
                         }
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("library-ubisoft")
@@ -241,6 +241,13 @@ struct LibraryShellView: View {
 
     private var steamLauncherIcon: some View {
         Image("SteamLauncherMark").resizable().frame(width: 16, height: 16)
+            .frame(width: 22, height: 22)
+            .background(.black.opacity(0.85), in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    private var ubisoftLauncherIcon: some View {
+        Image("UbisoftLauncherMark").resizable().frame(width: 16, height: 16)
             .frame(width: 22, height: 22)
             .background(.black.opacity(0.85), in: Circle())
             .accessibilityHidden(true)
