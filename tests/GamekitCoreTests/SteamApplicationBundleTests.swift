@@ -39,7 +39,13 @@ struct SteamApplicationBundleTests {
     @Test("An independent launcher identity keeps the Steam bundle and source runtime intact")
     func separateLauncherBundle() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
-        let profile = try LauncherProfileStore.bundled("ubisoft")
+        let profile = GameFixtures.launcher("vanilla")
+        let variantProfile = GameFixtures.launcher("variant")
+        let module = try #require(variantProfile.runtimeModule)
+        let original = Data("original native module".utf8)
+        let source = fixture.layout.engine.appendingPathComponent(module.path.rawValue)
+        try FileManager.default.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try original.write(to: source)
         let steam = try await SteamApplicationBundle(layout: fixture.layout).prepare()
         let builder = SteamApplicationBundle(layout: fixture.layout, launcher: profile)
         let launcher = try await builder.prepare()
@@ -51,6 +57,17 @@ struct SteamApplicationBundleTests {
         #expect(plist["CFBundleDisplayName"] as? String == profile.name)
         #expect(plist["CFBundleIdentifier"] as? String == "tech.endofline.gamekit.launcher.\(profile.id.rawValue)")
         #expect(try await builder.prepare() == launcher)
+        let variantBuilder = SteamApplicationBundle(layout: fixture.layout, launcher: variantProfile)
+        let variant = try await variantBuilder.prepare()
+        #expect(variant != launcher && variant.deletingLastPathComponent().lastPathComponent == String(module.replacementSHA256.prefix(12)))
+        try variantBuilder.validate(variant)
+        let replacement = variant.appendingPathComponent("Contents/" + module.path.rawValue)
+        #expect(RuntimeDetector.matches(replacement, root: variant, hash: module.replacementSHA256))
+        #expect(try Data(contentsOf: source) == original)
+        #expect(try await variantBuilder.prepare() == variant)
+        try Data("tampered".utf8).write(to: replacement)
+        await #expect(throws: SteamApplicationError.invalidBundle) { try await variantBuilder.prepare() }
+        try builder.validate(launcher)
         #expect(try Data(contentsOf: fixture.layout.wine) == Data("wine fixture".utf8))
         #expect(try Data(contentsOf: steam.appendingPathComponent("Contents/MacOS/Windows Steam")) == Data("wine fixture".utf8))
     }

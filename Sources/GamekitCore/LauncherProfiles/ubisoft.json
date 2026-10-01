@@ -11,5 +11,12 @@
   "executable": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/UbisoftConnect.exe",
   "clientExecutables": ["upc.exe"],
   "webExecutables": ["UplayWebCore.exe"],
+  "launchArguments": ["--disable-gpu"],
+  "runtimeModule": {
+    "path": "lib/wine/x86_64-unix/win32u.so",
+    "originalSHA256": "dc40c864f9442c9299df2b75d40e78a9550cb7fbdab64dc0ff06941efcec64b9",
+    "replacementSHA256": "791440e7394236738f8ffefbf6ce7643e801aa5d74e3a092e2dd755eeec020c5",
+    "resource": "win32u-remote-surface-2.so"
+  },
   "versionFile": "drive_c/Program Files (x86)/Ubisoft/Ubisoft Game Launcher/version.txt"
 }
