@@ -2,8 +2,9 @@ SHELL := /bin/bash
 DERIVED_DATA ?= .build/xcode
 CONFIGURATION ?= Debug
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/Gamekit.app
+DEV_TAG ?= v0.1.0-dev.1
 
-.PHONY: generate build core-test python-test test ui-test check run package
+.PHONY: generate build core-test python-test test ui-test check run package dev-dmg
 
 generate:
 	xcodegen generate --spec project.yml
@@ -31,3 +32,8 @@ package:
 	$(MAKE) build CONFIGURATION=Release
 	mkdir -p .build/packages
 	python3 tools/package_local.py --app "$(DERIVED_DATA)/Build/Products/Release/Gamekit.app" --output ".build/packages/Gamekit-$$(date -u +%Y%m%dT%H%M%SZ)"
+
+dev-dmg:
+	$(MAKE) build CONFIGURATION=Release
+	mkdir -p .build/packages
+	python3 -m tools.package_dev_dmg --app "$(DERIVED_DATA)/Build/Products/Release/Gamekit.app" --output ".build/packages/Gamekit-$(DEV_TAG)" --tag "$(DEV_TAG)"
