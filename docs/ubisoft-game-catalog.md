@@ -9,6 +9,10 @@ manifest markers must exist as nonempty regular files for the **Installed** stat
 The optional icon comes from the vendor's registered icon path under the
 profile's bounded `iconDirectory`. Gamekit does not scan account/token files,
 read a full registry hive, parse game-content manifests, or invent game sizes.
+The vendor's installed-game record provides a small icon, not portrait box art.
+Gamekit presents it within the same 2:3 cover fallback used for Steam titles
+without artwork, rather than stretching the icon or inferring a different
+store's game identity.
 
 On 2026-09-30, the owner's signed-in isolated Ubisoft Connect build 13368 wrote
 `HKLM\Software\Wow6432Node\Ubisoft\Launcher\Installs\568` for the installed

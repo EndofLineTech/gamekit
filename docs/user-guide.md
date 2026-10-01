@@ -78,10 +78,12 @@ corner to keep a local list. The star appears when you hover over or select a
 cover; the sidebar star animates when the Favorites list changes.
 The game library lists managed Windows Steam and verified Ubisoft Connect
 installations. Each configured launcher has its own sidebar row. Ubisoft games
-appear in **All Installed Games** and the **Ubisoft Connect** source view using
-the installed client's icon; Steam's transparent mark appears on Steam covers
-and compact table thumbnails. Steam Favorites, per-game compatibility settings,
-uninstall and reported-size controls apply only to Steam games. Gamekit remembers browsing preferences;
+appear in **All Installed Games** and the **Ubisoft Connect** source view in the
+same portrait cover layout as Steam. Ubisoft's registered game icon appears in
+the cover placeholder; it is not a full-size box-art image. Steam's transparent
+mark appears on Steam covers and compact table thumbnails. Steam Favorites,
+per-game compatibility settings, uninstall and reported-size controls apply
+only to Steam games. Gamekit remembers browsing preferences;
 installed games, saves, graphics overrides and imported profiles are preserved.
 The original game-case app icon comes from the approved
 [editable SVG](https://github.com/EndofLineTech/gamekit/blob/dev/docs/design/library-v1/icon-case.svg);

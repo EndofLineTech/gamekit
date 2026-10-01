@@ -340,7 +340,9 @@ struct LibraryShellView: View {
                                 coverGrid(width: geometry.size.width - 2 * LibraryVisualStyle.contentSpacing)
                             } else { gameList.frame(height: max(250, geometry.size.height - 220)) }
                         }
-                        if !visibleUbisoftGames.isEmpty { ubisoftLibrary }
+                        if !visibleUbisoftGames.isEmpty {
+                            ubisoftLibrary(width: geometry.size.width - 2 * LibraryVisualStyle.contentSpacing)
+                        }
                     }
                     if let message = games.message { Text(message).font(.callout).accessibilityIdentifier("game-launch-status") }
                     if let message = ubisoftGames.message { Text(message).font(.callout).accessibilityIdentifier("ubisoft-game-launch-status") }
@@ -355,38 +357,63 @@ struct LibraryShellView: View {
         }
     }
 
-    private var ubisoftLibrary: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Ubisoft Connect", systemImage: "gamecontroller.fill")
-                .font(.title3.bold()).accessibilityIdentifier("ubisoft-library-heading")
+    private func ubisoftLibrary(width: CGFloat) -> some View {
+        let coverWidth = CGFloat(preferences.coverSize)
+        let spacing: CGFloat = 18
+        let columns = max(1, Int((max(width, coverWidth) + spacing) / (coverWidth + spacing)))
+        return VStack(alignment: .leading, spacing: 12) {
+            if destination == .all {
+                Text("Ubisoft Connect").font(.title3.bold()).accessibilityIdentifier("ubisoft-library-heading")
+            }
             if preferences.viewMode == .grid {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 18)], alignment: .leading, spacing: 18) {
-                    ForEach(visibleUbisoftGames) { game in ubisoftGameCard(game) }
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(coverWidth), spacing: spacing), count: columns),
+                          alignment: .leading, spacing: 23) {
+                    ForEach(visibleUbisoftGames) { game in ubisoftGameCard(game).frame(width: coverWidth) }
                 }
             } else {
-                ForEach(visibleUbisoftGames) { game in ubisoftGameCard(game) }
+                ForEach(visibleUbisoftGames) { game in ubisoftGameRow(game) }
             }
         }
+    }
+
+    private func ubisoftMark() -> some View {
+        Text("U").font(.system(size: 25, weight: .heavy, design: .rounded)).frame(width: 25, height: 25)
     }
 
     private func ubisoftGameCard(_ game: InstalledUbisoftGame) -> some View {
         Button {
             selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                UbisoftGameIcon(data: game.icon)
-                    .frame(maxWidth: .infinity).frame(height: 110)
-                Text(game.name).font(.headline).lineLimit(3)
-                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
-                Text(game.state == .installed ? "Installed" : "Installation incomplete")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            .background(LibraryVisualStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+            LibraryGameTile(title: game.name, source: "Ubisoft Connect",
+                            state: game.state == .installed ? "Installed" : "Installation incomplete",
+                            needsAttention: game.state != .installed, reportedSize: "Size not reported",
+                            portrait: nil, selected: selectedUbisoftID == game.id, favorite: false,
+                            mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)),
+                            sizeProvenance: "Installed size")
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
-        .accessibilityLabel("\(game.name), Ubisoft Connect, \(game.state == .installed ? "installed" : "incomplete")")
+        .help("Inspect \(game.name) from Ubisoft Connect")
+    }
+
+    private func ubisoftGameRow(_ game: InstalledUbisoftGame) -> some View {
+        Button {
+            selectedGameID = nil; selectedUbisoftID = game.id; inspectorVisible = true
+        } label: {
+            HStack(spacing: 10) {
+                UbisoftGameIcon(data: game.icon).frame(width: 32, height: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(game.name).font(.headline)
+                    Text("Ubisoft Connect · \(game.state == .installed ? "Installed" : "Installation incomplete")")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("select-ubisoft-game-\(game.id)")
+        .accessibilityLabel("\(game.name), Ubisoft Connect, \(game.state == .installed ? "installed" : "incomplete"), size not reported")
         .help("Inspect \(game.name) from Ubisoft Connect")
     }
 
@@ -649,7 +676,9 @@ struct LibraryShellView: View {
                     }
                     InspectorCompatibilitySummary(game: game, revision: compatibilityRevision)
                 } else if let game = selectedUbisoftGame {
-                    UbisoftGameIcon(data: game.icon).frame(width: 160, height: 160)
+                    LibraryCover(title: game.name, portrait: nil, selected: false, favorite: false,
+                                 mark: ubisoftMark(), fallbackIcon: game.icon.flatMap(NSImage.init(data:)))
+                        .frame(width: 205, height: 308)
                     Text(game.name).font(.title2.bold())
                     Text("Ubisoft Connect · \(game.state == .installed ? "Installed" : "Installation incomplete")")
                         .foregroundStyle(.secondary)

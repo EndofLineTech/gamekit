@@ -33,6 +33,7 @@ struct LibraryCover<Mark: View>: View {
     let selected: Bool
     let favorite: Bool
     let mark: Mark
+    var fallbackIcon: NSImage? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -46,9 +47,16 @@ struct LibraryCover<Mark: View>: View {
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                     VStack(alignment: .leading) {
                         Spacer()
-                        Image(systemName: "gamecontroller.fill")
-                            .font(.system(size: max(20, geometry.size.width * 0.22)))
-                            .accessibilityHidden(true)
+                        Group {
+                            if let fallbackIcon {
+                                Image(nsImage: fallbackIcon).resizable().scaledToFit()
+                                    .frame(width: geometry.size.width * 0.32, height: geometry.size.width * 0.32)
+                            } else {
+                                Image(systemName: "gamecontroller.fill")
+                                    .font(.system(size: max(20, geometry.size.width * 0.22)))
+                            }
+                        }
+                        .accessibilityHidden(true)
                         Text(title)
                             .font(.system(size: min(24, max(13, geometry.size.width * 0.14)), weight: .bold))
                             .lineLimit(3)
@@ -94,10 +102,13 @@ struct LibraryGameTile<Mark: View>: View {
     let selected: Bool
     let favorite: Bool
     let mark: Mark
+    var fallbackIcon: NSImage? = nil
+    var sizeProvenance = "Steam-reported size"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            LibraryCover(title: title, portrait: portrait, selected: selected, favorite: favorite, mark: mark)
+            LibraryCover(title: title, portrait: portrait, selected: selected, favorite: favorite,
+                         mark: mark, fallbackIcon: fallbackIcon)
             Text(title).font(.headline).lineLimit(2)
             Text("\(source) · \(reportedSize)").font(.caption).foregroundStyle(.secondary).lineLimit(2)
             if needsAttention {
@@ -106,7 +117,7 @@ struct LibraryGameTile<Mark: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title), \(source), \(state), Steam-reported size: \(reportedSize)\(favorite ? ", favorite" : "")")
+        .accessibilityLabel("\(title), \(source), \(state), \(sizeProvenance): \(reportedSize)\(favorite ? ", favorite" : "")")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
