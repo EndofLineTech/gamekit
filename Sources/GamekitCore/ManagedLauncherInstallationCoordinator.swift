@@ -152,7 +152,7 @@ public actor ManagedLauncherInstallationCoordinator {
             record = try await advance(record, to: stage, operation: operation)
             await onStage(stage)
             let executable = try await store.checkedPrefixURL(for: id).appendingPathComponent(profile.executable.rawValue)
-            process = try await driver.start(record, [executable.path], 1200)
+            process = try await driver.start(record, [executable.path] + (profile.launchArguments ?? []), 1200)
             let deadline = ContinuousClock.now.advanced(by: .seconds(1200))
             var readySince: ContinuousClock.Instant?
             stage = .validatingInstallation

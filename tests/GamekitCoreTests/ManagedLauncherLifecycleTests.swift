@@ -7,6 +7,7 @@ private actor LauncherFixtureRuntime {
     var prefix: String?
     var launches = 0
     var stops = 0
+    var launchArguments: [String] = []
     var incomplete = false
     var foreign = false
 
@@ -26,6 +27,7 @@ private actor LauncherFixtureRuntime {
         launches += 1
         token = request.environment["GAMEKIT_SESSION_ID"]
         prefix = request.environment["WINEPREFIX"]
+        launchArguments = request.arguments
         #expect(request.outputMode == .discard)
         #expect(request.timeout == nil)
     }
@@ -78,6 +80,8 @@ struct ManagedLauncherLifecycleTests {
         #expect(try await lifecycle.show() == 123)
         _ = try await lifecycle.launch()
         #expect(await runtime.launches == 1)
+        #expect(await runtime.launchArguments == [fixture.store.prefixURL(for: fixture.profile.id)
+            .appendingPathComponent(fixture.profile.executable.rawValue).path] + (fixture.profile.launchArguments ?? []))
         #expect(await runtime.prefix == fixture.store.prefixURL(for: fixture.profile.id).path)
         let settings = RuntimeSettingsStore(store: fixture.store)
         #expect(try await settings.isSelectionLocked())

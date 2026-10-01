@@ -13,6 +13,12 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
         public let maximumBytes: Int
         public let arguments: [String]
     }
+    public struct RuntimeModule: Codable, Equatable, Sendable {
+        public let path: RelativePath
+        public let originalSHA256: String
+        public let replacementSHA256: String
+        public let resource: String
+    }
 
     public let schemaVersion: Int
     public let id: EnvironmentID
@@ -22,6 +28,8 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
     public let clientExecutables: [String]
     public let webExecutables: [String]
     public let versionFile: RelativePath
+    public let launchArguments: [String]?
+    public let runtimeModule: RuntimeModule?
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 16_384 else { throw LauncherProfileError.invalidProfile }
@@ -38,6 +46,16 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
             !name.isEmpty && name.count <= 128 && name.lowercased().hasSuffix(".exe") &&
                 name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil
         }
+        func validHash(_ hash: String) -> Bool {
+            hash.count == 64 && hash.allSatisfy { "0123456789abcdef".contains($0) }
+        }
+        let moduleValid = runtimeModule.map { module in
+            let path = module.path.components
+            return path.count == 4 && path[0] == "lib" && path[1] == "wine" && path[2] == "x86_64-unix" &&
+                path[3].hasSuffix(".so") && validHash(module.originalSHA256) &&
+                validHash(module.replacementSHA256) && module.originalSHA256 != module.replacementSHA256 &&
+                module.resource.range(of: "\\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\\.so\\z", options: .regularExpression) != nil
+        } ?? true
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               name.count <= 100, name != ".", name != "..",
               name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:").union(.controlCharacters)) == nil,
@@ -50,6 +68,9 @@ public struct LauncherProfile: Codable, Equatable, Sendable {
               installer.arguments.count <= 8,
               installer.arguments.allSatisfy({ !$0.isEmpty && $0.count <= 64 &&
                   $0.rangeOfCharacter(from: .controlCharacters) == nil }),
+              (launchArguments?.count ?? 0) <= 8,
+              launchArguments?.allSatisfy({ $0.range(of: "\\A--[a-z][a-z0-9-]{0,62}\\z", options: .regularExpression) != nil }) != false,
+              moduleValid,
               executable.components.first == "drive_c", validExecutableName(executable.components.last ?? ""),
               versionFile.components.dropLast() == directory, versionFile.components.last == "version.txt",
               !clientExecutables.isEmpty, clientExecutables.count <= 8, webExecutables.count <= 8,

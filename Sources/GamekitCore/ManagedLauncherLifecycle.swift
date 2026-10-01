@@ -141,7 +141,7 @@ public actor ManagedLauncherLifecycle {
                                 beforeCommit: { try lease.validate() })
         }
         let executable = lease.prefix.appendingPathComponent(profile.executable.rawValue)
-        try await driver.spawn(.init(executable: layout.wine, arguments: [executable.path],
+        try await driver.spawn(.init(executable: layout.wine, arguments: [executable.path] + (profile.launchArguments ?? []),
             environment: layout.environment(prefix: lease.prefix, session: receipt.token.uuidString),
             workingDirectory: executable.deletingLastPathComponent(), timeout: nil, outputMode: .discard))
         emptySince = .now

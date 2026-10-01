@@ -12,6 +12,7 @@ struct LauncherProfileTests {
         #expect(profile.installer.url.scheme == "https")
         #expect(profile.installer.maximumBytes > 32 * 1024 * 1024)
         #expect(profile.executable.components.first == "drive_c")
+        #expect(profile.launchArguments?.count == 1)
     }
 
     @Test("Invalid or modified launcher execution policy is refused")
@@ -24,6 +25,8 @@ struct LauncherProfileTests {
             return try JSONSerialization.data(withJSONObject: values)
         }
         for data in try [changed { $0["schemaVersion"] = 2 },
+                         changed { $0["launchArguments"] = ["--invalid=value"] },
+                         changed { $0["launchArguments"] = Array(repeating: "--duplicate", count: 9) },
                          changed { $0["executable"] = "../untrusted.exe" },
                          changed { $0["clientExecutables"] = ["../untrusted.exe"] },
                          changed { $0["installer"] = ["url": "http://example.test/setup.exe", "sha256": profile.installer.sha256,

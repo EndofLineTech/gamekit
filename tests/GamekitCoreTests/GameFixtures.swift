@@ -1,4 +1,5 @@
 import Foundation
+import GamekitCore
 
 /// Shared by unit and UI tests. Game identities and expected settings are data.
 enum GameFixtures {
@@ -35,6 +36,11 @@ enum GameFixtures {
     static let desktop = load("legacyDesktop")
     static let other = load("other")
     static let trace = load("legacyTrace")
+    static func launcher(_ key: String) -> LauncherProfile {
+        let url = file.deletingLastPathComponent().appendingPathComponent("launchers.json")
+        let document = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        return try! LauncherProfile.decode(JSONSerialization.data(withJSONObject: document[key]!))
+    }
     struct Settings: Decodable, Sendable {
         let registry: String
         let syntheticDriverVersion: [Int]

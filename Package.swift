@@ -9,7 +9,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "CProcessSupport"),
-        .target(name: "GamekitCore", dependencies: ["CProcessSupport"], resources: [.copy("GameProfiles"), .copy("ExecutionAdapters"), .copy("LauncherProfiles")]),
+        .target(name: "GamekitCore", dependencies: ["CProcessSupport"], resources: [.copy("GameProfiles"), .copy("ExecutionAdapters"), .copy("LauncherProfiles"), .copy("RuntimeModules")]),
         .testTarget(name: "GamekitCoreTests", dependencies: ["GamekitCore"], path: "tests/GamekitCoreTests"),
     ]
 )

@@ -1,0 +1,40 @@
+{
+  "vanilla": {
+    "schemaVersion": 1,
+    "id": "fixture-launcher",
+    "name": "Fixture Launcher",
+    "installer": {
+      "url": "https://example.invalid/fixture.exe",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "maximumBytes": 1000,
+      "arguments": []
+    },
+    "executable": "drive_c/Fixture/FixtureClient.exe",
+    "clientExecutables": ["FixtureClient.exe"],
+    "webExecutables": [],
+    "versionFile": "drive_c/Fixture/version.txt",
+    "launchArguments": []
+  },
+  "variant": {
+    "schemaVersion": 1,
+    "id": "fixture-launcher",
+    "name": "Fixture Launcher",
+    "installer": {
+      "url": "https://example.invalid/fixture.exe",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "maximumBytes": 1000,
+      "arguments": []
+    },
+    "executable": "drive_c/Fixture/FixtureClient.exe",
+    "clientExecutables": ["FixtureClient.exe"],
+    "webExecutables": [],
+    "versionFile": "drive_c/Fixture/version.txt",
+    "launchArguments": [],
+    "runtimeModule": {
+      "path": "lib/wine/x86_64-unix/win32u.so",
+      "originalSHA256": "792cc9d716b891c9084a4032dc15ab57625f69494d7300c383cab787eaf1aed6",
+      "replacementSHA256": "791440e7394236738f8ffefbf6ce7643e801aa5d74e3a092e2dd755eeec020c5",
+      "resource": "win32u-remote-surface-2.so"
+    }
+  }
+}

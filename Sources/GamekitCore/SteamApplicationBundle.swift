@@ -59,6 +59,9 @@ struct SteamApplicationBundle: Sendable {
     private var bundleName: String { executableName + ".app" }
     private var parentURL: URL {
         if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/\(gameCacheFormat)") }
+        else if let launcher, let module = launcher.runtimeModule {
+            layout.launchersRoot.appendingPathComponent("Variants/\(launcher.id.rawValue)/\(module.replacementSHA256.prefix(12))")
+        }
         else { layout.launchersRoot }
     }
     var bundleURL: URL { parentURL.appendingPathComponent(bundleName) }
@@ -69,7 +72,14 @@ struct SteamApplicationBundle: Sendable {
         let runtime: RuntimeIdentity
         let hashes: [String: String]
     }
-    private var expectedManifest: Manifest { .init(format: game == nil ? 1 : 2, runtime: layout.profile.identity, hashes: layout.profile.hashes) }
+    private var expectedManifest: Manifest {
+        var hashes = layout.profile.hashes
+        if let module = launcher?.runtimeModule {
+            hashes["Contents/SharedSupport/wine/" + module.path.rawValue] = module.replacementSHA256
+        }
+        return .init(format: game != nil || launcher?.runtimeModule != nil ? 2 : 1,
+                     runtime: layout.profile.identity, hashes: hashes)
+    }
     private var info: [String: Any] {
         var plist: [String: Any] = ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" }
             ?? launcher.map { "tech.endofline.gamekit.launcher.\($0.id.rawValue)" } ?? Self.identifier,
@@ -102,7 +112,7 @@ struct SteamApplicationBundle: Sendable {
               NSDictionary(dictionary: plist).isEqual(to: info),
               try FileManager.default.destinationOfSymbolicLink(atPath: bundle.appendingPathComponent("Contents/bin").path) == "MacOS"
         else { throw SteamApplicationError.invalidBundle }
-        for (path, hash) in layout.profile.hashes {
+        for (path, hash) in manifest.hashes {
             guard let copy = copiedPath(path) else { continue }
             if let graphicsPayload, path.hasPrefix("Contents/SharedSupport/wine/lib/wine/"),
                graphicsPayload.hashes[String(path.dropFirst("Contents/SharedSupport/wine/lib/wine/".count))] != nil { continue }
@@ -133,6 +143,17 @@ struct SteamApplicationBundle: Sendable {
     }
     private func prepareSynchronously() throws -> URL {
         try graphicsPayload?.validate(layout: layout)
+        let moduleBytes: Data?
+        if let module = launcher?.runtimeModule {
+            let source = layout.engine.appendingPathComponent(module.path.rawValue)
+            let name = String(module.resource.dropLast(3))
+            guard RuntimeDetector.matches(source, root: layout.bundle, hash: module.originalSHA256),
+                  let url = Bundle.module.url(forResource: name, withExtension: "so", subdirectory: "RuntimeModules"),
+                  RuntimeDetector.matches(url, root: Bundle.module.bundleURL, hash: module.replacementSHA256),
+                  let bytes = try? Data(contentsOf: url), bytes.count <= 16 * 1024 * 1024
+            else { throw SteamApplicationError.invalidRuntime }
+            moduleBytes = bytes
+        } else { moduleBytes = nil }
         guard RuntimeDetector.safeBundle(layout),
               let wineHash = layout.profile.hashes["Contents/SharedSupport/wine/bin/wine"],
               RuntimeDetector.matches(layout.wine, root: layout.bundle, hash: wineHash),
@@ -147,6 +168,13 @@ struct SteamApplicationBundle: Sendable {
         if let game {
             guard game.appID > 0, !game.name.isEmpty, game.name.rangeOfCharacter(from: .controlCharacters) == nil,
                   let directory = try launchers.directory("Games", create: true)?.directory(String(game.appID), create: true)?.directory(gameCacheFormat, create: true)
+            else { throw SteamApplicationError.invalidBundle }
+            launchers = directory
+        }
+        if let launcher, let module = launcher.runtimeModule {
+            guard let directory = try launchers.directory("Variants", create: true)?
+                .directory(launcher.id.rawValue, create: true)?
+                .directory(String(module.replacementSHA256.prefix(12)), create: true)
             else { throw SteamApplicationError.invalidBundle }
             launchers = directory
         }
@@ -202,6 +230,13 @@ struct SteamApplicationBundle: Sendable {
             // Remove only the newly staged hard link, never overwrite its inode.
             try modules.removeRegularFile("dxgi.dll")
             try modules.write(payload, to: "dxgi.dll", createOnly: true, beforeCommit: {})
+        }
+        if let module = launcher?.runtimeModule, let moduleBytes {
+            let parts = module.path.components
+            guard let unix = try contents.directory(parts[0])?.directory(parts[1])?.directory(parts[2])
+            else { throw SteamApplicationError.invalidRuntime }
+            try unix.removeRegularFile(parts[3])
+            try unix.write(moduleBytes, to: parts[3], createOnly: true, maximumBytes: 16 * 1024 * 1024, beforeCommit: {})
         }
         try contents.moveDirectory("bin", to: contents, as: "MacOS")
         guard let executables = try contents.directory("MacOS") else { throw SteamApplicationError.invalidBundle }
