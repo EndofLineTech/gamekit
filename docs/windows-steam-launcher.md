@@ -5,8 +5,9 @@ Dock icons and apparent Gamekit quit/reopen trouble while Steam remained alive.
 
 ## Launch path
 
-Persistent Steam launches now go through macOS Launch Services using a separately
-named, local application bundle and an independent launch helper:
+Persistent Steam launches go through macOS Launch Services using a separately
+named, local application bundle and an independent launch helper. The original
+cache layout, retained for rollback, was:
 
 ```text
 ~/Library/Application Support/Gamekit/Launchers/Windows Steam.app/
@@ -49,6 +50,40 @@ engine. UID/start-time, prefix, session-token and prefix-identity checks continu
 to apply. The `/usr/bin/open` helper receives literal arguments and explicit
 `--env` entries, with the launched application's standard streams connected to
 `/dev/null`. Use Gamekit to initiate launches.
+
+## Locally sealed caches and Gatekeeper (`gamekit-xke`)
+
+For a real Mach-O Wine runtime, new launchers are staged under
+`Launchers/Sealed-v1/` and per-game caches have a `-sealed-v1` version suffix.
+Existing launcher and game caches remain untouched for rollback. The derived
+bundle moves its non-code version and runtime-manifest files into
+`Contents/Resources/`, retaining relative symlinks at their old paths for Wine
+and Gamekit consumers. Gamekit then ad-hoc-seals the **completed, derived** app,
+verifies its strict nested code signature and source-pinned payload hashes, and
+refuses altered caches. The original Sikarugir runtime and Apple framework are
+not re-signed or modified. `RuntimeModules` and game execution inputs remain in
+their JSON profiles. Synthetic non-Mach-O test fixtures retain their old path;
+the real external runtime follows the sealed path.
+
+An ad-hoc seal fixes the previously observed **invalid Info.plist** rejection
+from `codesign --verify --deep --strict`, but **does not make a generated app
+Developer ID-signed or notarized**. `spctl --assess --type execute` still rejects
+the isolated, valid ad-hoc launcher. Apple documents a per-app **Open Anyway**
+flow for users who explicitly trust separately sourced, unnotarized software;
+that scoped first-run behavior for the Wine host and derived Steam/game bundles
+still requires a genuinely clean macOS 27 account before public distribution.
+Neither the notarized Gamekit parent nor a successful Steam game in an existing
+account supplies this evidence. Never disable Gatekeeper/SIP globally, strip
+quarantine silently, or re-sign Apple's original D3DMetal framework.
+
+An opt-in fresh-prefix-free signing probe copies the pinned local runtime into
+disposable derived Steam/game bundles, verifies both code seals, original Wine
+and Apple hashes, and confirms each copied loader still reports its pinned Wine
+version. It records the expected initial Gatekeeper assessment separately:
+
+```bash
+GAMEKIT_SEALED_BUNDLE_SMOKE=1 swift test --filter SteamApplicationBundleTests/installedRuntimeSealing
+```
 
 ## Independent macOS ownership
 
