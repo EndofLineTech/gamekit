@@ -37,6 +37,7 @@ Run from the repository root:
 | `make package` | Build a local Release candidate, verify signing/architecture and write a versioned package with build manifest |
 | `make dev-dmg` | From a clean commit, build an ad-hoc signed dev-preview DMG, Applications link, documentation and SHA-256 manifest; normal downloaded first launch is not notarized |
 | `make developer-id-app GAMEKIT_DISTRIBUTION_TEAM=<team>` | On the owner release Mac, build a clean-source Developer ID-signed Xcode archive and locally export/verify an app candidate; no notarization or DMG |
+| `make notarized-dmg-rehearsal GAMEKIT_DISTRIBUTION_TEAM=<team> GAMEKIT_NOTARY_PROFILE=<profile> RELEASE_TAG=<tag>` | On the owner release Mac, privately notarize and staple app and DMG; no public upload |
 
 Default app: `.build/xcode/Build/Products/Debug/Gamekit.app`.
 
@@ -146,6 +147,28 @@ runtime or that a real game renders; those require the subsequent isolated runti
 and clean-Mac gates. `spctl` is expected to reject an **unnotarized** signed app.
 The later DMG/notarization and clean-install external-runtime acceptance remain
 `gamekit-lon.5`–`.8`; only the owner release Mac signs and submits artifacts.
+
+### Private notarized DMG rehearsal (`gamekit-lon.6`)
+
+From a clean committed task branch on the release Mac, with the Developer ID
+identity and a validated **local** notarytool Keychain profile:
+
+```bash
+make notarized-dmg-rehearsal GAMEKIT_DISTRIBUTION_TEAM=<team-from-certificate> \
+  GAMEKIT_NOTARY_PROFILE=<local-profile-name> RELEASE_TAG=v0.1.0
+```
+
+This command builds a fresh Developer ID archive/export from the same source,
+submits the signed app ZIP to Apple, checks the **Accepted** log for any issues,
+staples and validates the app, packages it with the operating guide, source/license
+notices and an Applications shortcut, then submits/staples/validates the DMG. It
+checks the app through `spctl`, strict code signatures and the mounted DMG, and
+writes local non-secret source/signature/notary IDs and final post-staple hashes.
+Any rejected/incomplete response, warning, changed signature/JSON, missing
+ticket or mismatched source stops before publishing even the private output. The
+DMG has a **PRIVATE REHEARSAL** notice because the guide and clean-install/game
+acceptance are still pending. Do not attach it to a public GitHub release;
+`gamekit-lon.7`–`.10` govern first run, gameplay, final docs and owner GO.
 
 Generated projects, SwiftPM state, derived data, user settings, test results,
 runtime binaries, evaluation prefixes, installers and logs are ignored. Edit
