@@ -3,8 +3,9 @@ DERIVED_DATA ?= .build/xcode
 CONFIGURATION ?= Debug
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/Gamekit.app
 DEV_TAG ?= v0.1.0-dev.1
+GAMEKIT_DISTRIBUTION_TEAM ?=
 
-.PHONY: generate build core-test python-test test ui-test check run package dev-dmg
+.PHONY: generate build core-test python-test test ui-test check run package dev-dmg developer-id-app
 
 generate:
 	xcodegen generate --spec project.yml
@@ -37,3 +38,7 @@ dev-dmg:
 	$(MAKE) build CONFIGURATION=Release
 	mkdir -p .build/packages
 	python3 -m tools.package_dev_dmg --app "$(DERIVED_DATA)/Build/Products/Release/Gamekit.app" --output ".build/packages/Gamekit-$(DEV_TAG)" --tag "$(DEV_TAG)"
+
+developer-id-app:
+	mkdir -p .build/packages
+	python3 -m tools.export_developer_id --team "$(GAMEKIT_DISTRIBUTION_TEAM)" --output ".build/packages/Gamekit-DeveloperID-$$(date -u +%Y%m%dT%H%M%SZ)"

@@ -36,6 +36,7 @@ Run from the repository root:
 | `make run` | Build and open the native app |
 | `make package` | Build a local Release candidate, verify signing/architecture and write a versioned package with build manifest |
 | `make dev-dmg` | From a clean commit, build an ad-hoc signed dev-preview DMG, Applications link, documentation and SHA-256 manifest; normal downloaded first launch is not notarized |
+| `make developer-id-app GAMEKIT_DISTRIBUTION_TEAM=<team>` | On the owner release Mac, build a clean-source Developer ID-signed Xcode archive and locally export/verify an app candidate; no notarization or DMG |
 
 Default app: `.build/xcode/Build/Products/Debug/Gamekit.app`.
 
@@ -105,6 +106,46 @@ codesign --verify --deep --strict --verbose=2 \
   .build/xcode/Build/Products/Debug/Gamekit.app
 file .build/xcode/Build/Products/Debug/Gamekit.app/Contents/MacOS/Gamekit
 ```
+
+### Local Developer ID archive/export (`gamekit-lon.4`)
+
+On the designated release Mac with a valid local **Developer ID Application**
+identity for the owner-approved team, run from a clean committed task branch:
+
+```bash
+make developer-id-app GAMEKIT_DISTRIBUTION_TEAM=<team-from-certificate>
+```
+
+`Distribution` is an explicit release-only Xcode configuration. Normal Debug,
+Release, `make check`, `make ui-test`, `make package` and PR CI retain ad-hoc
+signing. The tool requires a clean source commit and an unambiguous local signing
+identity, creates a new no-clobber output under `.build/packages/`, archives and
+exports with Xcode using the owner's local Keychain, and verifies **every** shipped
+Mach-O for Developer ID team, timestamp and absence of shipping debugging/runtime
+exceptions. Gamekit and its process counter require Hardened Runtime; libraries
+do not receive executable entitlements. The bundled Wine compatibility module is
+signed locally, and its signed-byte hash is derived into the **exported** launcher
+JSON; Xcode's export re-signs nested code, so the tool updates that JSON and
+re-seals/verifies the final app after export. The source JSON and CI fixture keep
+their tested ad-hoc module hash. The output manifest records both module signing
+hash transitions and the source commit, without keys or credentials.
+
+This output is a **signed app candidate**, not a notarized download. It omits
+Wine, Apple D3DMetal, Steam and Ubisoft Connect installers/clients, and games.
+For a local, opt-in Wine smoke against its signed x86_64 identity library,
+with the selected external runtime left intact and a disposable prefix:
+
+```bash
+GAMEKIT_RUNTIME_SMOKE=1 GAMEKIT_SIGNED_APP_SMOKE=/path/to/export/Gamekit.app \
+  swift test --filter LiveRuntimeTests
+```
+
+That short command probe checks the selected runtime, scoped lifecycle and signed
+helper path. It does not prove that Gatekeeper trusts a downloaded external Wine
+runtime or that a real game renders; those require the subsequent isolated runtime
+and clean-Mac gates. `spctl` is expected to reject an **unnotarized** signed app.
+The later DMG/notarization and clean-install external-runtime acceptance remain
+`gamekit-lon.5`–`.8`; only the owner release Mac signs and submits artifacts.
 
 Generated projects, SwiftPM state, derived data, user settings, test results,
 runtime binaries, evaluation prefixes, installers and logs are ignored. Edit
