@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "27.0"
   createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+  Distribution: release
 packages:
   GamekitCore:
     path: .
@@ -16,6 +20,12 @@ settings:
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+  configs:
+    Distribution:
+      CODE_SIGN_IDENTITY: Developer ID Application
+      DEVELOPMENT_TEAM: $(GAMEKIT_DISTRIBUTION_TEAM)
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+      OTHER_CODE_SIGN_FLAGS: --timestamp
 targets:
   GamekitProcessCounters:
     type: tool
@@ -31,6 +41,10 @@ targets:
         HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/CProcessSupport/include"]
         GCC_TREAT_WARNINGS_AS_ERRORS: YES
         SKIP_INSTALL: YES
+      configs:
+        Distribution:
+          ENABLE_HARDENED_RUNTIME: YES
+          PRODUCT_BUNDLE_IDENTIFIER: tech.endofline.gamekit.process-counters
   WineGameIdentity:
     type: library.dynamic
     platform: macOS
@@ -79,6 +93,9 @@ targets:
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 2
         ENABLE_APP_SANDBOX: NO
+      configs:
+        Distribution:
+          ENABLE_HARDENED_RUNTIME: YES
   GamekitUITests:
     type: bundle.ui-testing
     platform: macOS

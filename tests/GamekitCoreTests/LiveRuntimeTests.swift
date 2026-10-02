@@ -20,7 +20,17 @@ private final class SmokeOutput: @unchecked Sendable {
 struct LiveRuntimeTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_RUNTIME_SMOKE"] == "1"))
     func installedRuntime() async throws {
-        let layout = RuntimeLayout()
+        // A signed-app smoke points only the Wine-side helper at the exported
+        // candidate. Runtime and prefix ownership remain independently scoped.
+        let signedApp = ProcessInfo.processInfo.environment["GAMEKIT_SIGNED_APP_SMOKE"]
+        let helper = signedApp.map { URL(fileURLWithPath: $0).appendingPathComponent("Contents/Frameworks/WineGameIdentity.dylib") }
+        let layout = RuntimeLayout(identityHelper: helper)
+        if let helper {
+            let signature = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+                arguments: ["--verify", "--strict", helper.path], timeout: 10, outputLimit: 4096))
+            #expect(signature.termination == .exited(0))
+            #expect(layout.hasGameIdentityHelper)
+        }
         let report = try await RuntimeDetector().detect(layout, selection: layout.profile.identity)
         #expect(report.prerequisites == .ready)
         guard report.prerequisites == .ready else { return }
@@ -33,6 +43,9 @@ struct LiveRuntimeTests {
         record.installation = .installing(.creatingPrefix)
         record = try await store.save(record)
         try FileManager.default.createDirectory(at: store.prefixURL(for: record.id), withIntermediateDirectories: true)
+        if let helper {
+            #expect(layout.environment(prefix: store.prefixURL(for: record.id), session: "smoke")["DYLD_INSERT_LIBRARIES"] == helper.path)
+        }
         let output = SmokeOutput()
         let session = try await RuntimeSession.start(store: store, id: record.id, layout: layout,
                                                       arguments: ["cmd", "/c", "echo", "GAMEKIT_RUNTIME_SMOKE"],
