@@ -55,6 +55,7 @@ private struct WindowTitleHider: NSViewRepresentable {
 
 extension Notification.Name {
     static let gamekitOpenSettings = Notification.Name("GamekitOpenSettings")
+    static let gamekitOpenLauncherSetup = Notification.Name("GamekitOpenLauncherSetup")
     static let gamekitOpenDiagnostics = Notification.Name("GamekitOpenDiagnostics")
     static let gamekitFocusSearch = Notification.Name("GamekitFocusSearch")
 }

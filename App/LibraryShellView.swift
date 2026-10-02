@@ -111,6 +111,7 @@ struct LibraryShellView: View {
             preferencesWarning = restored.savedPreferencesUnavailable
         }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenSettings)) { _ in openSettings() }
+        .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenLauncherSetup)) { _ in openSettings(.launchers) }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in openSettings(.diagnostics) }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitFocusSearch)) { _ in focusSearch() }
         .onChange(of: installation.installedSuccessfully) { _, completed in
@@ -615,7 +616,9 @@ struct LibraryShellView: View {
                         .font(.title2.bold()).accessibilityIdentifier("welcome-heading")
                     Text("Your library starts here")
                         .foregroundStyle(.secondary).accessibilityIdentifier("games-empty")
-                    WelcomeSetupView(openLaunchers: { openSettings(.launchers) }, browseLibrary: { welcomeDismissed = true })
+                    WelcomeSetupView(openLaunchers: {
+                        NotificationCenter.default.post(name: .gamekitOpenLauncherSetup, object: nil)
+                    }, browseLibrary: { welcomeDismissed = true })
                 } else {
                     Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
                          : initial ? "Your library starts here" : "No matching games")

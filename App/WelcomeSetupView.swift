@@ -16,6 +16,12 @@ struct WelcomeSetupView: View {
                 .font(.headline)
             Text("Gamekit checks each prerequisite. Obtain Wine and Apple's graphics from their providers, prepare the runtime, then Gamekit can download and install Steam from Valve.")
                 .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Button("Launcher setup and recovery") { openLaunchers() }
+                    .accessibilityIdentifier("welcome-open-launchers")
+                Button("Browse library") { browseLibrary() }
+                    .accessibilityIdentifier("welcome-browse")
+            }
             if let problem = setup.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
@@ -42,18 +48,12 @@ struct WelcomeSetupView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Divider()
-            HStack(spacing: 10) {
-                Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
-                    installation.start(diagnostics: diagnostics, setup: setup, recoveryRetry: setup.actions.retry)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(installation.running || setup.isBusy || !(setup.actions.install || setup.actions.retry))
-                .accessibilityIdentifier("welcome-install-steam")
-                Button("Launcher setup and recovery") { openLaunchers() }
-                    .accessibilityIdentifier("welcome-open-launchers")
-                Button("Browse library") { browseLibrary() }
-                    .accessibilityIdentifier("welcome-browse")
+            Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
+                installation.start(diagnostics: diagnostics, setup: setup, recoveryRetry: setup.actions.retry)
             }
+            .buttonStyle(.borderedProminent)
+            .disabled(installation.running || setup.isBusy || !(setup.actions.install || setup.actions.retry))
+            .accessibilityIdentifier("welcome-install-steam")
             if let status = installation.status {
                 Text(status).font(.callout).accessibilityIdentifier("welcome-installation-status")
             }
