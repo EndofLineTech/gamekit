@@ -6,16 +6,22 @@ import Testing
 private struct ApplicationBundleFixture {
     let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let layout: RuntimeLayout
-    init() throws {
+    init(nativeLoader: Bool = false) throws {
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         let root = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit")).root
-        let wine = Data("wine fixture".utf8), server = Data("server fixture".utf8)
+        let native = try nativeLoader ? Data(contentsOf: URL(fileURLWithPath: "/usr/bin/true")) : Data()
+        let wine = nativeLoader ? native : Data("wine fixture".utf8)
+        let server = nativeLoader ? native : Data("server fixture".utf8)
         func hash(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
         layout = .init(dataRoot: root, profile: .init(identity: RuntimeProfile.sikarugir.identity, bundlePath: "Runtimes/fixture.app", wineVersionOutput: "fixture", hashes: [
             "Contents/SharedSupport/wine/bin/wine": hash(wine), "Contents/SharedSupport/wine/bin/wineserver": hash(server)
         ]))
         try FileManager.default.createDirectory(at: layout.wine.deletingLastPathComponent(), withIntermediateDirectories: true)
         try wine.write(to: layout.wine); try server.write(to: layout.wineserver)
+        if nativeLoader {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: layout.wine.path)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: layout.wineserver.path)
+        }
         let pe = layout.engine.appendingPathComponent("lib/wine/x86_64-windows")
         try FileManager.default.createDirectory(at: pe, withIntermediateDirectories: true)
         try Data("shared PE image".utf8).write(to: pe.appendingPathComponent("ntdll.dll"))
@@ -36,6 +42,103 @@ private struct ApplicationBundleFixture {
 
 @Suite("Windows Steam application identity")
 struct SteamApplicationBundleTests {
+    @Test("Sealed launcher uses a new cache without overwriting the previous local bundle")
+    func preservesPreviousLauncherCache() async throws {
+        let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }
+        let original = try await SteamApplicationBundle(layout: fixture.layout).prepare()
+        let oldLoader = try Data(contentsOf: original.appendingPathComponent("Contents/MacOS/Windows Steam"))
+        let native = try Data(contentsOf: URL(fileURLWithPath: "/usr/bin/true"))
+        try native.write(to: fixture.layout.wine)
+        try native.write(to: fixture.layout.wineserver)
+        var hashes = fixture.layout.profile.hashes
+        for path in ["Contents/SharedSupport/wine/bin/wine", "Contents/SharedSupport/wine/bin/wineserver"] {
+            hashes[path] = SHA256.hash(data: native).map { String(format: "%02x", $0) }.joined()
+        }
+        let profile = RuntimeProfile(identity: fixture.layout.profile.identity, bundlePath: "Runtimes/fixture.app",
+                                     wineVersionOutput: "fixture", hashes: hashes)
+        let layout = RuntimeLayout(dataRoot: fixture.layout.dataRoot, profile: profile)
+        let sealed = try await SteamApplicationBundle(layout: layout).prepare()
+        #expect(sealed != original)
+        #expect(try Data(contentsOf: original.appendingPathComponent("Contents/MacOS/Windows Steam")) == oldLoader)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: sealed.appendingPathComponent("Contents/Gamekit-runtime.json").path)
+                == "Resources/Gamekit-runtime.json")
+        try SteamApplicationBundle(layout: layout).validate(sealed)
+    }
+
+    @Test("Pinned external runtime yields sealed Steam and game bundles without changing its source",
+          .enabled(if: ProcessInfo.processInfo.environment["GAMEKIT_SEALED_BUNDLE_SMOKE"] == "1"))
+    func installedRuntimeSealing() async throws {
+        let selected = RuntimeLayout()
+        let report = try await RuntimeDetector().detect(selected, selection: selected.profile.identity)
+        try #require(report.prerequisites == .ready)
+        let parent = FileManager.default.temporaryDirectory.appendingPathComponent("Gamekit signing smoke " + UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+        let store = try EnvironmentStore(root: parent.appendingPathComponent("Gamekit"))
+        try FileManager.default.createDirectory(at: store.root, withIntermediateDirectories: true)
+        let layout = RuntimeLayout(dataRoot: store.root, profile: selected.profile, bundle: selected.bundle)
+        let beforeWine = try Data(contentsOf: layout.wine)
+        let beforeApple = try Data(contentsOf: layout.graphics.appendingPathComponent("Versions/A/D3DMetal"))
+        let steam = try await SteamApplicationBundle(layout: layout).prepare()
+        let game = GameFixtures.renderer
+        let derived = try await SteamApplicationBundle(layout: layout, game: .init(appID: game.appId, name: game.name)).prepare()
+        for bundle in [steam, derived] {
+            let check = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+                arguments: ["--verify", "--deep", "--strict", bundle.path], timeout: 120, outputLimit: 4096))
+            #expect(check.termination == .exited(0))
+            let appleCopy = bundle.appendingPathComponent("Contents/lib/external/D3DMetal.framework/Versions/A/D3DMetal")
+            #expect(try Data(contentsOf: appleCopy) == beforeApple)
+            let appleSignature = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+                arguments: ["--verify", "--strict", appleCopy.path], timeout: 30, outputLimit: 4096))
+            #expect(appleSignature.termination == .exited(0))
+            let loader = bundle.appendingPathComponent("Contents/MacOS/" + (bundle == steam ? "Windows Steam" : game.name))
+            let version = try await ProcessExecutor().run(.init(executable: loader, arguments: ["--version"],
+                environment: layout.environment(), workingDirectory: layout.engine, timeout: 20, outputLimit: 4096))
+            #expect(version.termination == .exited(0))
+            #expect(version.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) == layout.profile.wineVersionOutput)
+        }
+        #expect(try Data(contentsOf: layout.wine) == beforeWine)
+        #expect(try Data(contentsOf: layout.graphics.appendingPathComponent("Versions/A/D3DMetal")) == beforeApple)
+        try SteamApplicationBundle(layout: layout).validate(steam)
+        try SteamApplicationBundle(layout: layout, game: .init(appID: game.appId, name: game.name)).validate(derived)
+        let policy = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/sbin/spctl"),
+            arguments: ["--assess", "--type", "execute", "-vv", steam.path], timeout: 15, outputLimit: 4096))
+        print("Disposable derived-app Gatekeeper assessment: \(policy.termination), accepted=\(policy.stderrText.contains("accepted"))")
+    }
+
+    @Test("Fresh derived app seals rewritten metadata without mutating its source executable")
+    func sealedLauncherFromNativeFixture() async throws {
+        let fixture = try ApplicationBundleFixture(nativeLoader: true); defer { fixture.remove() }
+        let source = try Data(contentsOf: fixture.layout.wine)
+        let builder = SteamApplicationBundle(layout: fixture.layout)
+        let app = try await builder.prepare()
+        #expect(app.path.contains("Sealed-v1"))
+        #expect(try Data(contentsOf: fixture.layout.wine) == source)
+        #expect(try Data(contentsOf: builder.executable) != source)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: app.appendingPathComponent("Contents/Gamekit-runtime.json").path)
+                == "Resources/Gamekit-runtime.json")
+        let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+            arguments: ["--verify", "--deep", "--strict", app.path], timeout: 60, outputLimit: 4096))
+        #expect(result.termination == .exited(0))
+        try builder.validate(app)
+        #expect(try await builder.prepare() == app)
+        let game = GameFixtures.renderer
+        let gameBuilder = SteamApplicationBundle(layout: fixture.layout, game: .init(appID: game.appId, name: game.name))
+        let gameApp = try await gameBuilder.prepare()
+        let gameSignature = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/codesign"),
+            arguments: ["--verify", "--deep", "--strict", gameApp.path], timeout: 60, outputLimit: 4096))
+        #expect(gameSignature.termination == .exited(0))
+        try gameBuilder.validate(gameApp)
+        let gameInfo = try #require(PropertyListSerialization.propertyList(
+            from: Data(contentsOf: gameApp.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any])
+        #expect(gameInfo["LSApplicationCategoryType"] as? String == "public.app-category.games")
+        #expect(gameInfo["LSSupportsGameMode"] as? Bool == true)
+        let maintenance = LauncherCacheMaintenance(store: try EnvironmentStore(root: fixture.layout.dataRoot),
+            layouts: [fixture.layout], idle: { true })
+        #expect(try await maintenance.inspect().contains { $0.id.contains("-sealed-v1") && $0.status == .retained })
+        try Data("tampered".utf8).write(to: builder.executable)
+        await #expect(throws: SteamApplicationError.invalidBundle) { try await builder.prepare() }
+    }
     @Test("An independent launcher identity keeps the Steam bundle and source runtime intact")
     func separateLauncherBundle() async throws {
         let fixture = try ApplicationBundleFixture(); defer { fixture.remove() }

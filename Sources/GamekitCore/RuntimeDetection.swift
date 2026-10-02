@@ -131,9 +131,13 @@ public struct RuntimeLayout: Sendable {
         let root = dataRoot.appendingPathComponent("Launchers")
         return profile.revision == .original ? root : root.appendingPathComponent("Revisions/\(profile.revision.rawValue)")
     }
-    public var steamApplicationBundle: URL { launchersRoot.appendingPathComponent("Windows Steam.app") }
+    var sealDerivedApplications: Bool { NativeApplicationSignature.isMachO(wine) }
+    var sealedApplicationsRoot: URL { launchersRoot.appendingPathComponent("Sealed-v1") }
+    public var steamApplicationBundle: URL {
+        (sealDerivedApplications ? sealedApplicationsRoot : launchersRoot).appendingPathComponent("Windows Steam.app")
+    }
     public func launcherApplicationBundle(_ profile: LauncherProfile) -> URL {
-        launchersRoot.appendingPathComponent("\(profile.name).app")
+        (sealDerivedApplications ? sealedApplicationsRoot : launchersRoot).appendingPathComponent("\(profile.name).app")
     }
     public var gameApplicationsRoot: URL { launchersRoot.appendingPathComponent("Games") }
     var defaultLibraryPath: String { "\(engine.path)/lib:\(frameworks.path):\(frameworks.path)/GStreamer.framework/Libraries" }

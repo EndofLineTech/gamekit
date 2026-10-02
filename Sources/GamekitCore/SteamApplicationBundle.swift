@@ -49,20 +49,22 @@ struct SteamApplicationBundle: Sendable {
     }
     private var gameCacheFormat: String {
         // A new directory keeps pre-Game-Mode bundles immutable and usable for rollback.
-        if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision + "-game-mode1" }
+        let suffix = layout.sealDerivedApplications ? "-sealed-v1" : ""
+        if let graphicsPayload { return "shared-pe-v3-" + graphicsPayload.revision + "-game-mode1" + suffix }
         if driverParameters?.available(revision: layout.profile.revision) == true {
-            return "shared-pe-v4-driver-" + DriverVersionAdapter.sha256.prefix(12) + (driverCompatibility ? "-on" : "-off") + "-game-mode1"
+            return "shared-pe-v4-driver-" + DriverVersionAdapter.sha256.prefix(12) + (driverCompatibility ? "-on" : "-off") + "-game-mode1" + suffix
         }
-        return "shared-pe-v4-base-game-mode1"
+        return "shared-pe-v4-base-game-mode1" + suffix
     }
     private let dxgiRelative = "Contents/SharedSupport/wine/lib/wine/x86_64-windows/dxgi.dll"
     private var bundleName: String { executableName + ".app" }
     private var parentURL: URL {
-        if let game { layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/\(gameCacheFormat)") }
+        if let game { return layout.gameApplicationsRoot.appendingPathComponent("\(game.appID)/\(gameCacheFormat)") }
         else if let launcher, let module = launcher.runtimeModule {
-            layout.launchersRoot.appendingPathComponent("Variants/\(launcher.id.rawValue)/\(module.replacementSHA256.prefix(12))")
+            let version = String(module.replacementSHA256.prefix(12)) + (layout.sealDerivedApplications ? "-sealed-v1" : "")
+            return layout.launchersRoot.appendingPathComponent("Variants/\(launcher.id.rawValue)/\(version)")
         }
-        else { layout.launchersRoot }
+        else { return layout.sealDerivedApplications ? layout.sealedApplicationsRoot : layout.launchersRoot }
     }
     var bundleURL: URL { parentURL.appendingPathComponent(bundleName) }
     var executable: URL { bundleURL.appendingPathComponent("Contents/MacOS/\(executableName)") }
@@ -77,8 +79,8 @@ struct SteamApplicationBundle: Sendable {
         if let module = launcher?.runtimeModule {
             hashes["Contents/SharedSupport/wine/" + module.path.rawValue] = module.replacementSHA256
         }
-        return .init(format: game != nil || launcher?.runtimeModule != nil ? 2 : 1,
-                     runtime: layout.profile.identity, hashes: hashes)
+        return .init(format: layout.sealDerivedApplications ? 3 : (game != nil || launcher?.runtimeModule != nil ? 2 : 1),
+                      runtime: layout.profile.identity, hashes: hashes)
     }
     private var info: [String: Any] {
         var plist: [String: Any] = ["CFBundleIdentifier": game.map { "tech.endofline.gamekit.game.\($0.appID)" }
@@ -103,17 +105,25 @@ struct SteamApplicationBundle: Sendable {
     }
     func validate(_ bundle: URL, legacyGameCache: Bool = false) throws {
         let manifest = legacyGameCache ? Manifest(format: 1, runtime: layout.profile.identity, hashes: layout.profile.hashes) : expectedManifest
+        let sealed = !legacyGameCache && layout.sealDerivedApplications
         guard let root = try ManagedDirectory.openRoot(bundle, create: false),
-              let contents = try root.directory("Contents"),
-              let manifestData = try contents.read("Gamekit-runtime.json"),
-               try JSONDecoder().decode(Manifest.self, from: manifestData) == manifest,
+               let contents = try root.directory("Contents"),
+               let manifestData = try (sealed ? contents.directory("Resources")?.read("Gamekit-runtime.json") : contents.read("Gamekit-runtime.json")),
+                try JSONDecoder().decode(Manifest.self, from: manifestData) == manifest,
               let plistData = try contents.read("Info.plist"),
               let plist = try PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
               NSDictionary(dictionary: plist).isEqual(to: info),
               try FileManager.default.destinationOfSymbolicLink(atPath: bundle.appendingPathComponent("Contents/bin").path) == "MacOS"
         else { throw SteamApplicationError.invalidBundle }
+        if sealed {
+            guard try FileManager.default.destinationOfSymbolicLink(atPath: bundle.appendingPathComponent("Contents/Gamekit-runtime.json").path)
+                    == "Resources/Gamekit-runtime.json" else { throw SteamApplicationError.invalidBundle }
+        }
         for (path, hash) in manifest.hashes {
             guard let copy = copiedPath(path) else { continue }
+            // Signing the new app re-seals its *copied* loader. The source Wine
+            // digest was checked before staging; the bundle seal checks the copy.
+            if sealed && copy == "Contents/MacOS/\(executableName)" { continue }
             if let graphicsPayload, path.hasPrefix("Contents/SharedSupport/wine/lib/wine/"),
                graphicsPayload.hashes[String(path.dropFirst("Contents/SharedSupport/wine/lib/wine/".count))] != nil { continue }
             let expected = driverCompatibility && path == dxgiRelative ? DriverVersionAdapter.sha256 : hash
@@ -136,12 +146,13 @@ struct SteamApplicationBundle: Sendable {
                 }
             }
         }
+        if sealed { try NativeApplicationSignature.verify(bundle) }
     }
     func prepare() async throws -> URL {
         if game != nil { _ = try await SteamApplicationBundle(layout: layout).prepare() }
-        return try await Task.detached { try prepareSynchronously() }.value
+        return try await Task.detached { try await prepareSynchronously() }.value
     }
-    private func prepareSynchronously() throws -> URL {
+    private func prepareSynchronously() async throws -> URL {
         try graphicsPayload?.validate(layout: layout)
         let moduleBytes: Data?
         if let module = launcher?.runtimeModule {
@@ -165,6 +176,10 @@ struct SteamApplicationBundle: Sendable {
             else { throw SteamApplicationError.invalidBundle }
             launchers = directory
         }
+        if layout.sealDerivedApplications && game == nil && launcher?.runtimeModule == nil {
+            guard let directory = try launchers.directory("Sealed-v1", create: true) else { throw SteamApplicationError.invalidBundle }
+            launchers = directory
+        }
         if let game {
             guard game.appID > 0, !game.name.isEmpty, game.name.rangeOfCharacter(from: .controlCharacters) == nil,
                   let directory = try launchers.directory("Games", create: true)?.directory(String(game.appID), create: true)?.directory(gameCacheFormat, create: true)
@@ -174,7 +189,7 @@ struct SteamApplicationBundle: Sendable {
         if let launcher, let module = launcher.runtimeModule {
             guard let directory = try launchers.directory("Variants", create: true)?
                 .directory(launcher.id.rawValue, create: true)?
-                .directory(String(module.replacementSHA256.prefix(12)), create: true)
+                .directory(String(module.replacementSHA256.prefix(12)) + (layout.sealDerivedApplications ? "-sealed-v1" : ""), create: true)
             else { throw SteamApplicationError.invalidBundle }
             launchers = directory
         }
@@ -243,7 +258,19 @@ struct SteamApplicationBundle: Sendable {
         if executableName != "wine" { try executables.renameRegularFile("wine", to: executableName) }
         try contents.createSymbolicLink("bin", target: "MacOS")
         try contents.write(PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0), to: "Info.plist", createOnly: true, beforeCommit: {})
-        try contents.write(JSONEncoder().encode(expectedManifest), to: "Gamekit-runtime.json", createOnly: true, beforeCommit: {})
+        if layout.sealDerivedApplications {
+            let resources = try contents.createExclusiveDirectory("Resources")
+            if let version = try contents.read("version") {
+                try resources.write(version, to: "version", createOnly: true, beforeCommit: {})
+                try contents.removeRegularFile("version")
+                try contents.createSymbolicLink("version", target: "Resources/version")
+            }
+            try resources.write(JSONEncoder().encode(expectedManifest), to: "Gamekit-runtime.json", createOnly: true, beforeCommit: {})
+            try contents.createSymbolicLink("Gamekit-runtime.json", target: "Resources/Gamekit-runtime.json")
+            try await NativeApplicationSignature.seal(bundle)
+        } else {
+            try contents.write(JSONEncoder().encode(expectedManifest), to: "Gamekit-runtime.json", createOnly: true, beforeCommit: {})
+        }
         try validate(bundle)
         guard let current = try launchers.directory(stageName), try current.identity() == identity else { throw EnvironmentStoreError.identityMismatch }
         try stage.moveDirectory(bundleName, to: launchers, as: bundleName)
