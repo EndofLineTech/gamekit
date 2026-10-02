@@ -94,6 +94,11 @@ The explicitly waived `v0.1.0-dev.1` preview is separately packaged by
 does not confer Developer ID/Gatekeeper trust on a downloaded copy; the DMG
 includes a per-app first-launch notice and does not include the external runtime.
 The final normally opening direct-download release still follows `gamekit-lon`.
+The [Developer ID signing and runtime trust inventory](developer-id-signing-inventory.md)
+records the shipped code, external-runtime boundary, provisional entitlement
+matrix and distribution no-go checks before the signed export work.
+The eventual DMG excludes Steam and Ubisoft Connect installers/clients and games;
+setup retrieves installers from their vendors after installation.
 
 ```bash
 codesign --verify --deep --strict --verbose=2 \
