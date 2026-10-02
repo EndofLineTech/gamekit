@@ -4,8 +4,10 @@ CONFIGURATION ?= Debug
 APP := $(DERIVED_DATA)/Build/Products/$(CONFIGURATION)/Gamekit.app
 DEV_TAG ?= v0.1.0-dev.1
 GAMEKIT_DISTRIBUTION_TEAM ?=
+GAMEKIT_NOTARY_PROFILE ?=
+RELEASE_TAG ?=
 
-.PHONY: generate build core-test python-test test ui-test check run package dev-dmg developer-id-app
+.PHONY: generate build core-test python-test test ui-test check run package dev-dmg developer-id-app notarized-dmg-rehearsal
 
 generate:
 	xcodegen generate --spec project.yml
@@ -42,3 +44,7 @@ dev-dmg:
 developer-id-app:
 	mkdir -p .build/packages
 	python3 -m tools.export_developer_id --team "$(GAMEKIT_DISTRIBUTION_TEAM)" --output ".build/packages/Gamekit-DeveloperID-$$(date -u +%Y%m%dT%H%M%SZ)"
+
+notarized-dmg-rehearsal:
+	mkdir -p .build/packages
+	python3 -m tools.package_notarized_dmg --team "$(GAMEKIT_DISTRIBUTION_TEAM)" --keychain-profile "$(GAMEKIT_NOTARY_PROFILE)" --tag "$(RELEASE_TAG)" --output ".build/packages/Gamekit-$(RELEASE_TAG)-rehearsal-$$(date -u +%Y%m%dT%H%M%SZ)"

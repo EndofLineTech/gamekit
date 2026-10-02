@@ -85,6 +85,25 @@ def validate_guide_links(stage):
             raise ValueError(f"Packaged guide link has no local target: {link}")
 
 
+def copy_documentation(stage, root):
+    command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
+    command("/usr/bin/ditto", str(root / "THIRD_PARTY_NOTICES.md"), str(stage / "THIRD_PARTY_NOTICES.md"))
+    command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/COPYING.LIB"), str(stage / "WINE-LGPL-2.1.txt"))
+    command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/wine-10-remote-surface.patch"), str(stage / "WINE-SOURCE-PATCH.patch"))
+    command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/README.md"), str(stage / "WINE-SOURCE-BUILD.md"))
+    for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md",
+                  "debug-performance-capture.md", "helldivers-startup-hitches.md",
+                  "per-game-graphics-backends.md", "cold-steam-game-launch.md",
+                  "graphics-backends.md", "graphics-backend-research.md", "uninstall-games.md",
+                  "runtime-text-input-delivery.md", "persistent-graphics-backend.md",
+                  "satisfactory-backend-gameplay.md", "helldivers-dx11-backends.md", "ubisoft-installer-paint.md",
+                  "ubisoft-game-catalog.md"):
+        command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
+    validate_guide_links(stage)
+    for source in ("DXMTCompatibility", "DXVKCompatibility"):
+        command("/usr/bin/ditto", str(root / "Sources" / source), str(stage / "renderer-sources" / source))
+
+
 def publish(stage, destination):
     library = ctypes.CDLL(None, use_errno=True)
     rename = library.renamex_np
@@ -148,22 +167,7 @@ def package(app, destination, root):
         if digest(copied / manifest["processCounterHelper"]["path"]) != manifest["processCounterHelper"]["sha256"]:
             raise ValueError("Copied process counter helper changed")
         (stage / "build-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        command("/usr/bin/ditto", str(root / "docs/user-guide.md"), str(stage / "USER-GUIDE.md"))
-        command("/usr/bin/ditto", str(root / "THIRD_PARTY_NOTICES.md"), str(stage / "THIRD_PARTY_NOTICES.md"))
-        command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/COPYING.LIB"), str(stage / "WINE-LGPL-2.1.txt"))
-        command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/wine-10-remote-surface.patch"), str(stage / "WINE-SOURCE-PATCH.patch"))
-        command("/usr/bin/ditto", str(root / "Sources/GamekitCore/RuntimeModules/README.md"), str(stage / "WINE-SOURCE-BUILD.md"))
-        for guide in ("helldivers-driver-runtime.md", "helldivers-driver-warning-research.md",
-                      "debug-performance-capture.md", "helldivers-startup-hitches.md",
-                      "per-game-graphics-backends.md", "cold-steam-game-launch.md",
-                      "graphics-backends.md", "graphics-backend-research.md", "uninstall-games.md",
-                      "runtime-text-input-delivery.md", "persistent-graphics-backend.md",
-                      "satisfactory-backend-gameplay.md", "helldivers-dx11-backends.md", "ubisoft-installer-paint.md",
-                      "ubisoft-game-catalog.md"):
-            command("/usr/bin/ditto", str(root / "docs" / guide), str(stage / guide))
-        validate_guide_links(stage)
-        for source in ("DXMTCompatibility", "DXVKCompatibility"):
-            command("/usr/bin/ditto", str(root / "Sources" / source), str(stage / "renderer-sources" / source))
+        copy_documentation(stage, root)
         # A no-clobber directory move; existing output is never removed or replaced.
         validate_destination(destination)
         publish(stage, destination)
