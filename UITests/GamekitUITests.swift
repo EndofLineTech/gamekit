@@ -17,7 +17,8 @@ final class GamekitUITests: XCTestCase {
         let manage = app.buttons["welcome-open-launchers"]
         revealRecoveryButton(manage, in: app)
         manage.click()
-        XCTAssertTrue(app.buttons["refresh-prerequisites"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["settings-Launchers"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
     }
 
     func testWelcomeRefreshEnablesGuardedSteamInstallWithoutStartingIt() throws {
