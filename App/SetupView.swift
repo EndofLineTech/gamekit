@@ -21,8 +21,8 @@ struct SetupView: View {
                 if let report = setup.report {
                     ForEach(report.checks, id: \.prerequisite) { check in
                         VStack(alignment: .leading, spacing: 3) {
-                            Label(title(check.prerequisite) + ": " + check.detail, systemImage: check.status == .passed ? "checkmark.circle" : "exclamationmark.circle")
-                            if check.status != .passed { Text(advice(check.prerequisite)).font(.callout).foregroundStyle(.secondary) }
+                            Label(PrerequisiteGuidance.title(check.prerequisite) + ": " + check.detail, systemImage: check.status == .passed ? "checkmark.circle" : "exclamationmark.circle")
+                            if check.status != .passed { Text(PrerequisiteGuidance.advice(check.prerequisite)).font(.callout).foregroundStyle(.secondary) }
                         }.accessibilityIdentifier("prerequisite-\(check.prerequisite.rawValue)")
                     }
                 }
@@ -51,33 +51,15 @@ struct SetupView: View {
                 Text("App data: \(setup.layout.dataRoot.path)").font(.caption).textSelection(.enabled)
                 Text("Logs: \(AppStorageLocations.diagnostics.path)").font(.caption).textSelection(.enabled)
                 HStack {
-                    Link("Rosetta help", destination: URL(string: "https://support.apple.com/en-us/102527")!)
+                    Link("Rosetta help", destination: PrerequisiteGuidance.rosetta)
                         .help("Open Apple's Rosetta installation instructions")
-                    Link("Apple GPTK downloads", destination: URL(string: "https://developer.apple.com/download/all/?q=Game%20Porting%20Toolkit")!)
+                    Link("Apple GPTK downloads", destination: PrerequisiteGuidance.graphics)
                         .help("Open Apple's Game Porting Toolkit downloads")
-                    Link("Runtime setup guide", destination: URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!)
+                    Link("Runtime setup guide", destination: PrerequisiteGuidance.guide)
                         .help("Open the validated Gamekit runtime setup guide")
                 }.font(.caption)
                 if let checked = setup.checkedAt { Text("Last checked \(checked.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-        }
-    }
-    private func title(_ value: Prerequisite) -> String {
-        switch value {
-        case .supportedHost: "Mac support"
-        case .rosetta: "Rosetta"
-        case .runtime: "Wine runtime"
-        case .graphicsPayload: "Graphics"
-        case .diskSpace: "Storage"
-        }
-    }
-    private func advice(_ value: Prerequisite) -> String {
-        switch value {
-        case .supportedHost: "This prototype is validated for Apple silicon and macOS 27."
-        case .rosetta: "Install Rosetta using Apple's instructions, then refresh checks. Gamekit does not accept its license for you."
-        case .runtime: "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable."
-        case .graphicsPayload: "Restore the unchanged D3DMetal 4.0b2 payload from the validated setup guide, then refresh."
-        case .diskSpace: "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."
         }
     }
 }

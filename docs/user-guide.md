@@ -38,9 +38,16 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 ## First setup
 
-1. Gamekit opens to **All Installed Games**. Choose **Settings → Launchers**,
-   then review **Setup and prerequisites**. Each failed check explains its next step.
-2. Choose **Use updated runtime** for the prepared runtime with per-game
+1. Gamekit opens to **All Installed Games**. If no managed launcher is installed,
+   the **Welcome to Gamekit** panel checks this Mac, Rosetta, the prepared Wine
+   runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. Follow each
+   failed row's provider download and preparation links; use **Choose prepared
+   runtime…** to select your assembled runtime, then **Refresh checks**. Gamekit
+   does not bundle Wine or Apple's evaluation graphics or accept their terms for
+   you. **Launcher setup and recovery** opens the full controls in **Settings →
+   Launchers**. Existing configured installations open to the library instead of
+   repeating first-run guidance.
+2. In **Settings → Launchers**, choose **Use updated runtime** for the prepared runtime with per-game
    driver-compatibility support (includes text-input 1). **Use text-input runtime
    (rollback)** selects the previous text-input revision, and **Use original
    runtime** selects the original recipe. **Choose runtime…** locates the
@@ -48,8 +55,9 @@ manifest does not assert that release acceptance or reboot testing has passed.
    [driver revision guide](helldivers-driver-runtime.md) and
    [text-input revision guide](runtime-text-input-delivery.md).
    Prefix storage stays fixed; Stop Steam before changing revisions.
-3. Click **Refresh checks** (Command-Shift-R) after fixing prerequisites.
-4. Click **Install Steam**. Gamekit downloads and validates Valve's installer,
+3. Click **Refresh checks** (Command-Shift-R in Settings) after fixing prerequisites.
+4. Click **Install Steam** in Welcome or Settings after all checks are ready.
+   Gamekit downloads and validates Valve's installer,
    initializes its prefix, and invokes the installer silently with `/S`.
 5. Steam updates and starts. Gamekit waits for a consistently owned client and
    browser process with a visible browser window stable for three seconds.

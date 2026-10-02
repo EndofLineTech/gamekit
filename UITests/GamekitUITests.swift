@@ -3,6 +3,40 @@ import XCTest
 
 @MainActor
 final class GamekitUITests: XCTestCase {
+    func testFreshLibraryWelcomesWithDetectedPrerequisitesAndDownloadSteps() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "invalid-runtime"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.descendants(matching: .any)["welcome-prerequisite-runtime"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.links["welcome-download-wine"].exists)
+        XCTAssertTrue(app.links["welcome-download-template"].exists)
+        XCTAssertTrue(app.links["welcome-download-graphics"].exists)
+        XCTAssertTrue(app.buttons["welcome-choose-runtime"].exists)
+        XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
+        let manage = app.buttons["welcome-open-launchers"]
+        revealRecoveryButton(manage, in: app)
+        manage.click()
+        XCTAssertTrue(app.buttons["refresh-prerequisites"].waitForExistence(timeout: 10))
+    }
+
+    func testWelcomeRefreshEnablesGuardedSteamInstallWithoutStartingIt() throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-after-refresh"]
+        app.launch(); defer { app.terminate() }
+        let welcome = app.staticTexts["welcome-heading"]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 15))
+        let install = app.buttons["welcome-install-steam"]
+        XCTAssertFalse(install.isEnabled)
+        let refresh = app.buttons["welcome-refresh"]
+        revealRecoveryButton(refresh, in: app)
+        refresh.click()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
+    }
+
     func testInspectorSummarizesSavedChoicesAndGatesManagedGameFiles() async throws {
         let root = try temporaryRoot()
         let store = try EnvironmentStore(root: root)

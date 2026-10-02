@@ -32,6 +32,7 @@ struct LibraryShellView: View {
     @State private var preferences = LibraryBrowsingPreferences()
     @State private var preferencesWarning = false
     @State private var settingsSidebarVisible = true
+    @State private var welcomeDismissed = false
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
@@ -603,27 +604,39 @@ struct LibraryShellView: View {
         let initial = query.isEmpty && filter == .all
         let favoritesEmpty = initial && destination == .favorites
         let ubisoftEmpty = initial && destination == .ubisoft
+        let needsSetup = initial && destination == .all && !welcomeDismissed &&
+            setup.record?.installation != .installed && ubisoft.installation != .installed
+        let welcome = needsSetup && (setup.checkedAt != nil || setup.problem != nil)
         return LibraryPanel {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "square.grid.2x2").font(.largeTitle).foregroundStyle(LibraryVisualStyle.accent)
-                Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
-                     : initial ? "Your library starts here" : "No matching games")
-                    .font(.title2.bold()).accessibilityIdentifier("games-empty")
-                Text(favoritesEmpty ? "Mark a game as a favorite in your library."
-                     : ubisoftEmpty ? "Launch Ubisoft Connect to verify installed games, then refresh this library."
-                     : initial ? (setup.record?.installation == .installed
-                         ? "Install games in Windows Steam to see them here."
-                         : "Set up Windows Steam, then install a game to see it here.")
-                     : "Try another search or clear the filters.")
-                    .foregroundStyle(.secondary)
-                Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
-                       : initial ? "Manage Windows Steam" : "Clear filters") {
-                    if favoritesEmpty { destination = .all }
-                    else if initial { openSettings(.launchers) }
-                    else { query = ""; filter = .all }
+                if welcome {
+                    Text("Welcome to Gamekit")
+                        .font(.title2.bold()).accessibilityIdentifier("welcome-heading")
+                    Text("Your library starts here")
+                        .foregroundStyle(.secondary).accessibilityIdentifier("games-empty")
+                    WelcomeSetupView(openLaunchers: { openSettings(.launchers) }, browseLibrary: { welcomeDismissed = true })
+                } else {
+                    Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
+                         : initial ? "Your library starts here" : "No matching games")
+                        .font(.title2.bold()).accessibilityIdentifier("games-empty")
+                    Text(favoritesEmpty ? "Mark a game as a favorite in your library."
+                         : ubisoftEmpty ? "Launch Ubisoft Connect to verify installed games, then refresh this library."
+                         : needsSetup ? "Checking this Mac and its setup prerequisites…"
+                         : initial ? (setup.record?.installation == .installed
+                             ? "Install games in Windows Steam to see them here."
+                             : "Set up Windows Steam, then install a game to see it here.")
+                         : "Try another search or clear the filters.")
+                        .foregroundStyle(.secondary)
+                    Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
+                           : initial ? "Manage Windows Steam" : "Clear filters") {
+                        if favoritesEmpty { destination = .all }
+                        else if initial { openSettings(.launchers) }
+                        else { query = ""; filter = .all }
+                    }
+                    .help(favoritesEmpty ? "Return to all installed games" : ubisoftEmpty ? "Open Ubisoft Connect controls"
+                          : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
                 }
-                .help(favoritesEmpty ? "Return to all installed games" : ubisoftEmpty ? "Open Ubisoft Connect controls"
-                      : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
             }
         }
     }
