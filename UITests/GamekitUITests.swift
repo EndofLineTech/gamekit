@@ -48,6 +48,7 @@ final class GamekitUITests: XCTestCase {
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["welcome-install-rosetta"].exists)
+        XCTAssertEqual(app.buttons["welcome-install-rosetta"].label, "Install Rosetta with macOS…")
         XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
         XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
         XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
@@ -849,7 +850,7 @@ final class GamekitUITests: XCTestCase {
     }
 
     func testPrerequisiteFailuresDisableInstallAndExplainNextSteps() throws {
-        for (scenario, explanation) in [("missing-rosetta", "Open Terminal with the copied Apple installer command, review Apple's license, then refresh checks."),
+        for (scenario, explanation) in [("missing-rosetta", "Let macOS download and install Rosetta when requested. Approve Apple's installation prompt if it appears."),
                                         ("low-disk", "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."),
                                         ("invalid-runtime", "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable.")] {
             let app = XCUIApplication()

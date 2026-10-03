@@ -17,6 +17,7 @@ MACH_O_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf",
                  b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe",
                  b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe"}
 MODULES = "Contents/Resources/GamekitCore_GamekitCore.bundle/Contents/Resources"
+ROSETTA_PROBE = "Contents/Resources/RosettaProbe.app/Contents/MacOS/RosettaProbe"
 MODULE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.so\Z")
 TEAM_ID = re.compile(r"[A-Z0-9]{10}\Z")
 
@@ -163,13 +164,19 @@ def signature_details(path, team, *, executable):
 def verify_app(app, team, module_names):
     package_local.validate_app(app)
     resources = app / MODULES
-    expected = {"Contents/MacOS/Gamekit", "Contents/MacOS/GamekitProcessCounters",
-                "Contents/Frameworks/WineGameIdentity.dylib"}
+    expected = {"Contents/MacOS/Gamekit", "Contents/MacOS/GamekitProcessCounters", ROSETTA_PROBE,
+                 "Contents/Frameworks/WineGameIdentity.dylib"}
     expected.update(f"{MODULES}/RuntimeModules/{name}" for name in module_names)
     if mach_o_files(app) != expected:
         raise ValueError("Unexpected or missing shipped Mach-O code")
+    probe = app / "Contents/Resources/RosettaProbe.app"
+    with (probe / "Contents/Info.plist").open("rb") as stream:
+        probe_info = plistlib.load(stream)
+    if (probe_info.get("CFBundleIdentifier") != "tech.endofline.gamekit.rosetta-probe"
+            or probe_info.get("CFBundleExecutable") != "RosettaProbe"):
+        raise ValueError("Unexpected Rosetta request helper identity")
     for relative in sorted(expected):
-        signature_details(app / relative, team, executable=relative.startswith("Contents/MacOS/"))
+        signature_details(app / relative, team, executable=relative.startswith("Contents/MacOS/") or relative == ROSETTA_PROBE)
         run("/usr/bin/codesign", "--verify", "--strict", str(app / relative))
         architecture = "arm64" if relative.startswith("Contents/MacOS/") else "x86_64"
         if run("/usr/bin/lipo", "-archs", str(app / relative)) != architecture:

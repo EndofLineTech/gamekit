@@ -1,5 +1,13 @@
 # Developer ID signing and runtime trust inventory (v1)
 
+> Update for the first-run Rosetta setup work: the current app also embeds an
+> Intel-only `Contents/Resources/RosettaProbe.app/Contents/MacOS/RosettaProbe`.
+> Distribution verification requires it to carry the same Developer ID team,
+> timestamp and Hardened Runtime as Gamekit's other executables. It does no
+> installation itself; macOS Launch Services presents Apple's Rosetta prompt
+> when opening this helper on a Mac without Rosetta. The four-file table below
+> records the original inventory date and predates this addition.
+
 Issue: `gamekit-lon.2`. Inventory date: 2026-10-01. Source: `dev` at
 `ed0fe40` (the Game Mode PR #104 is merged). This is a **pre-distribution
 inventory**, not a signed release or a successful external-runtime qualification.

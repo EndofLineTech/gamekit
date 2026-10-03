@@ -111,8 +111,8 @@ struct WelcomeSetupView: View {
     @ViewBuilder private func resources(for prerequisite: Prerequisite) -> some View {
         switch prerequisite {
         case .rosetta:
-            Button("Copy Rosetta command and open Terminal…") { setup.openRosettaInstallation() }
-                .disabled(setup.isBusy)
+            Button("Install Rosetta with macOS…") { setup.requestRosetta(diagnostics: diagnostics) }
+                .disabled(setup.isBusy || setup.rosettaRequestPending)
                 .accessibilityIdentifier("welcome-install-rosetta")
             if let instruction = setup.rosettaInstruction {
                 Text(instruction).font(.callout).accessibilityIdentifier("welcome-rosetta-instruction")
@@ -166,7 +166,7 @@ enum PrerequisiteGuidance {
     static func advice(_ value: Prerequisite) -> String {
         switch value {
         case .supportedHost: "This prototype is validated for Apple silicon and macOS 27."
-        case .rosetta: "Open Terminal with the copied Apple installer command, review Apple's license, then refresh checks."
+        case .rosetta: "Let macOS download and install Rosetta when requested. Approve Apple's installation prompt if it appears."
         case .runtime: "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable."
         case .graphicsPayload: "Restore the unchanged D3DMetal 4.0b2 payload from the validated setup guide, then refresh."
         case .diskSpace: "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."
