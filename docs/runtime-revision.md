@@ -84,10 +84,14 @@ Apple payload files were not patched, re-signed or downgraded.
 |---|---|
 | [WS12WineSikarugir10.0_6.tar.xz](https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_6.tar.xz) | `9da7ee0cbf386522f3a9906943726d9c3c125dbbd9ab120e3cde80e88d6091b2` |
 | [Template-1.0.11.tar.xz](https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.11.tar.xz) | `9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a` |
-| User-obtained Apple evaluation 4.0 beta 2 DMG | `6248a0edc61553790753e5e9c060b8e53c940ed197f11409dcc34a35e05becc1` |
+| User-obtained outer `Game_Porting_Toolkit_4.0_beta_2.dmg` | `03893ac4fab94ad9ff6aa32e887e2854bbf40fd90796f78a1d9bdbc02526ee5b` |
+| Nested `Evaluation environment for Windows games 4.0 beta 2.dmg` | `6248a0edc61553790753e5e9c060b8e53c940ed197f11409dcc34a35e05becc1` |
 | Installed 4.0b2 framework's actual `D3DMetal` binary | `f5b56df1b8fe8b364dd9530651a3769c8aed948bd343be3b4510604d503e2bad` |
 
-Engine/template downloads matched GitHub release asset digests. Apple hashes
+The setup wizard accepts the original outer Apple download or the extracted
+nested evaluation image. For the outer image it verifies both hashes before
+mounting the evaluation image; neither source DMG is modified. Engine/template
+downloads matched GitHub release asset digests. Apple hashes
 identify the user-supplied payload inspected in E1. The installed framework still
 passes Apple's original code-signature verification. Template 1.0.15 was current
 when researched; 1.0.11 was deliberately pinned to reproduce the documented

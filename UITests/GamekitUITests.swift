@@ -14,7 +14,9 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.links["welcome-download-template"].exists)
         XCTAssertTrue(app.links["welcome-download-graphics"].exists)
         XCTAssertTrue(app.buttons["welcome-choose-runtime"].exists)
+        XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
         XCTAssertTrue(app.buttons["welcome-install-runtime"].exists)
+        XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
         XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
         let manage = app.buttons["welcome-open-launchers"]
         manage.click()
@@ -38,6 +40,17 @@ final class GamekitUITests: XCTestCase {
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
+    }
+
+    func testMissingRosettaDoesNotBlockWinePreparation() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "fresh-missing-rosetta", "--ui-test-wizard"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["welcome-install-rosetta"].exists)
+        XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
+        XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
+        XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
     }
 
     func testInspectorSummarizesSavedChoicesAndGatesManagedGameFiles() async throws {
@@ -836,7 +849,7 @@ final class GamekitUITests: XCTestCase {
     }
 
     func testPrerequisiteFailuresDisableInstallAndExplainNextSteps() throws {
-        for (scenario, explanation) in [("missing-rosetta", "Install Rosetta using Apple's instructions, then refresh checks. Gamekit does not accept its license for you."),
+        for (scenario, explanation) in [("missing-rosetta", "Open Terminal with the copied Apple installer command, review Apple's license, then refresh checks."),
                                         ("low-disk", "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."),
                                         ("invalid-runtime", "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable.")] {
             let app = XCUIApplication()

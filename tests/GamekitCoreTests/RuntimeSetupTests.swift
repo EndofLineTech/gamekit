@@ -42,12 +42,26 @@ struct RuntimeSetupTests {
             try FileManager.default.copyItem(at: original, to: copy)
             return copy
         })
-        let result = try await setup.install(appleDMG: apple)
+        #expect(try await !setup.hasPreparedWine())
+        let prepared = try await setup.prepareWine()
+        #expect(try await setup.hasPreparedWine())
+        let wineReport = try await RuntimeDetector().detect(
+            RuntimeLayout(dataRoot: parent.appendingPathComponent("Gamekit"), bundle: prepared),
+            selection: RuntimeProfile.sikarugir.identity)
+        #expect(wineReport.checks.first(where: { $0.prerequisite == .runtime })?.status == .passed)
+        #expect(wineReport.checks.first(where: { $0.prerequisite == .graphicsPayload })?.status == .failed)
+        #expect(try await setup.prepareWine() == prepared)
+        let resumed = try RuntimeSetup(root: parent.appendingPathComponent("Gamekit"), recipe: recipe, transfer: { _ in
+            throw RuntimeSetupError.invalidDownload
+        })
+        #expect(try await resumed.hasPreparedWine())
+        let result = try await resumed.install(appleDMG: apple)
         #expect(result.resolvingSymlinksInPath() == parent.appendingPathComponent("Gamekit/" + recipe.runtimeBundlePath).resolvingSymlinksInPath())
         let layout = RuntimeLayout(dataRoot: parent.appendingPathComponent("Gamekit"), bundle: result)
         #expect(try await RuntimeDetector().detect(layout, selection: layout.profile.identity).prerequisites == .ready)
         #expect(try sourceHashes() == originalHashes)
-        await #expect(throws: RuntimeSetupError.alreadyInstalled) { try await setup.install(appleDMG: apple) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: downloads.path).isEmpty)
+        await #expect(throws: RuntimeSetupError.alreadyInstalled) { try await resumed.install(appleDMG: apple) }
     }
     @Test("Bundled sources are exact HTTPS downloads and the selected runtime has one destination")
     func sourceRecipe() throws {
@@ -88,7 +102,8 @@ struct RuntimeSetupTests {
         let appleHash = try RuntimeSetup.digest(apple, maximumBytes: 100)
         let recipe = RuntimeSetupRecipe(schemaVersion: bundled.schemaVersion, runtimeBundlePath: bundled.runtimeBundlePath,
             engine: bundled.engine, template: bundled.template,
-            appleDMG: .init(url: nil, sha256: try #require(appleHash), maximumBytes: 100))
+            appleDMG: .init(url: nil, sha256: try #require(appleHash), maximumBytes: 100),
+            applePackageDMG: bundled.applePackageDMG, evaluationImageName: bundled.evaluationImageName)
         let root = parent.appendingPathComponent("Gamekit")
         let setup = try RuntimeSetup(root: root, recipe: recipe, transfer: { _ in
             try Data("wrong archive".utf8).write(to: source)

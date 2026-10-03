@@ -11,6 +11,8 @@ final class SetupModel: ObservableObject {
     @Published private(set) var checkedAt: Date?
     @Published private(set) var activity: String?
     @Published private(set) var runtimeSetupStatus: String?
+    @Published private(set) var winePrepared = false
+    @Published private(set) var rosettaInstruction: String?
     @Published private(set) var selectionLocked = false
     @Published var problem: String?
     @Published var selectionRevision = UUID()
@@ -70,6 +72,7 @@ final class SetupModel: ObservableObject {
                 let actual = try await detector.detect(selected, selection: selected.profile.identity)
                 let validated = fixtureReport() ?? actual
                 await refreshFacts(during: token)
+                winePrepared = (try? await RuntimeSetup(root: AppStorageLocations.metadata).hasPreparedWine()) ?? false
                 report = validated
                 checkedAt = Date()
                 diagnostics.environmentRefreshID = UUID()
@@ -128,33 +131,49 @@ final class SetupModel: ObservableObject {
         }
     }
 
-    func requestRosetta(diagnostics: AppDiagnosticsModel) {
-        guard !isBusy, let token = begin("Requesting Rosetta installation from macOS") else { return }
+    func openRosettaInstallation() {
+        guard !isBusy else { return }
+        let command = "/usr/sbin/softwareupdate --install-rosetta"
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(command, forType: .string) else {
+            problem = "Could not copy the Rosetta command. Open Terminal and run \(command), then Refresh checks."
+            return
+        }
         problem = nil
+        rosettaInstruction = "Paste the copied command into Terminal and press Return. Review and accept Apple's license there; then return to Gamekit and Refresh checks."
+        if !NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")) {
+            problem = "Terminal did not open. Open it yourself, paste the copied Rosetta command and follow Apple's prompts."
+        }
+    }
+
+    func prepareWine(diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, !selectionLocked, let token = begin("Installing verified Wine") else { return }
+        problem = nil
+        runtimeSetupStatus = "Downloading the verified publisher runtime…"
         Task { [self] in
             do {
-                // The Intel slice asks macOS for its own installation prompt;
-                // never pass --agree-to-license or install software silently.
-                let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/arch"),
-                    arguments: ["-x86_64", "/usr/bin/true"], timeout: 600, outputLimit: 4096))
-                guard result.termination == .exited(0) else {
-                    problem = "macOS did not complete Rosetta installation. Use Apple's on-screen prompt or Rosetta instructions, then Refresh checks."
-                    end(token); return
+                _ = try await RuntimeSetup(root: AppStorageLocations.metadata).prepareWine { [weak self] stage in
+                    await MainActor.run { self?.runtimeSetupStatus = stage }
                 }
+                winePrepared = true
                 end(token); refresh(diagnostics: diagnostics)
-            } catch { problem = AppFailure.message(error); end(token) }
+            } catch {
+                runtimeSetupStatus = nil
+                problem = "Wine setup could not finish. " + AppFailure.message(error)
+                end(token)
+            }
         }
     }
 
     func prepareRuntime(diagnostics: AppDiagnosticsModel) {
-        guard !isBusy, !selectionLocked else { return }
+        guard !isBusy, !selectionLocked, winePrepared else { return }
         let panel = NSOpenPanel()
         panel.title = "Choose the Apple Game Porting Toolkit evaluation DMG"
         panel.message = "Sign in at Apple Developer and download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
         panel.allowedContentTypes = [.diskImage]
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let appleDMG = panel.url,
-              let token = begin("Preparing verified Wine and Apple graphics") else { return }
+              let token = begin("Installing Apple graphics into verified Wine") else { return }
         runtimeSetupStatus = "Checking your Apple download…"
         problem = nil
         Task { [self] in
@@ -221,6 +240,7 @@ final class SetupModel: ObservableObject {
         let missing: Set<Prerequisite>
         switch scenario {
         case "missing-rosetta": missing = [.rosetta]
+        case "fresh-missing-rosetta": missing = [.rosetta, .runtime, .graphicsPayload]
         case "low-disk": missing = [.diskSpace]
         case "invalid-runtime": missing = [.runtime, .graphicsPayload]
         case "ready", "ready-with-delay", "queued-game-launch": missing = []
@@ -243,11 +263,13 @@ enum AppFailure {
         case RuntimeSetupError.invalidRecipe:
             "Gamekit's runtime setup recipe is unavailable or invalid. Update Gamekit; no external runtime was changed."
         case RuntimeSetupError.invalidAppleArtifact:
-            "The selected Apple DMG is missing, changed or not the pinned evaluation release. Download the specified Game Porting Toolkit version from Apple and choose that original DMG."
+            "The selected Apple image is missing or differs from the pinned 4.0 beta 2 download. Choose the original outer Apple DMG or its nested evaluation DMG, then retry."
         case RuntimeSetupError.invalidDownload, RuntimeSetupError.invalidArchive:
             "The publisher runtime download was incomplete or did not match its pinned release. Check connectivity and Retry; no runtime was installed."
         case RuntimeSetupError.invalidOverlay:
             "The assembled runtime failed verification. No runtime was installed; use the pinned Apple DMG and Retry."
+        case RuntimeSetupError.invalidPreparedWine:
+            "The prepared Wine files changed or are incomplete. Gamekit left the existing runtime and environments untouched; inspect the prepared copy before retrying."
         case GraphicsPayloadError.unavailable: "The selected graphics payload is missing, changed, or incompatible with this runtime. Install the pinned backend payload and refresh Setup, or select an Apple backend."
         case EnvironmentStoreError.busy: "Another operation or managed launcher session owns this environment. Finish or stop it, then retry."
         case EnvironmentStoreError.unsafePath, EnvironmentStoreError.identityMismatch, SteamLifecycleError.scopeChanged,

@@ -41,18 +41,24 @@ manifest does not assert that release acceptance or reboot testing has passed.
 1. Gamekit opens a **Welcome to Gamekit** setup sheet before the library if no
    managed launcher is installed. It checks this Mac, Rosetta, the pinned Wine
    runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. For a
-   missing Rosetta installation, click **Install Rosetta with macOS…** and follow
-   Apple's system prompt; Gamekit never accepts Apple's terms silently.
-2. Sign in at Apple Developer and download the listed **Game Porting Toolkit 4.0
-   beta 2** DMG yourself. Click **Choose Apple DMG and install Wine + graphics…**,
-   select that original DMG, and wait while Gamekit verifies its SHA-256,
-   downloads/verifies the pinned Sikarugir Wine and template directly from the
-   publishers, and assembles a new runtime in your own Application Support.
+   missing Rosetta installation, click **Copy Rosetta command and open Terminal…**.
+   Paste the copied `/usr/sbin/softwareupdate --install-rosetta` command into
+   Terminal, press Return, review Apple's license and respond yourself. Return
+   to Gamekit and click **Refresh checks**. Gamekit never accepts terms for you.
+2. Click **Install Wine from publisher…** to download and verify the pinned
+   Sikarugir engine and template. This step can run before Rosetta is installed
+   and before you have Apple's image. Wine is prepared in your own Application
+   Support, and is not selected or used to launch Steam before graphics is ready.
+3. Sign in at Apple Developer and download the listed **Game Porting Toolkit 4.0
+   beta 2** DMG yourself. Once Wine and Rosetta are ready, click **Choose Apple
+   DMG and install graphics…**, select the original outer Apple download (or its
+   nested evaluation DMG), and wait while Gamekit verifies the outer and nested
+   SHA-256 digests and assembles a separate complete runtime.
    Existing runtimes, explicit selections and Wine prefixes are left in place.
    Gamekit does not bundle Wine or Apple's evaluation graphics, or enter Apple
    credentials for you. You can close and reopen Welcome or use **Launcher setup
    and recovery** for the full controls in **Settings → Launchers**.
-3. Click **Refresh checks** after any required system install. When all checks pass,
+4. Click **Refresh checks** after any required system install. When all checks pass,
    click **Install Steam**; Gamekit downloads and validates Valve's installer.
    Existing configured installations open to the library instead of repeating
    first-run guidance.
