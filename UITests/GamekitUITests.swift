@@ -5,7 +5,7 @@ import XCTest
 final class GamekitUITests: XCTestCase {
     func testFreshLibraryWelcomesWithDetectedPrerequisitesAndDownloadSteps() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "invalid-runtime"]
+        app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "invalid-runtime", "--ui-test-wizard"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
@@ -26,7 +26,7 @@ final class GamekitUITests: XCTestCase {
     func testWelcomeRefreshEnablesGuardedSteamInstallWithoutStartingIt() throws {
         let root = try temporaryRoot()
         let app = XCUIApplication()
-        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-after-refresh"]
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-after-refresh", "--ui-test-wizard"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
         let welcome = app.staticTexts["welcome-heading"]
