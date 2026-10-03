@@ -162,17 +162,18 @@ final class SetupModel: ObservableObject {
         guard arguments.contains("--metadata-root"), let index = arguments.firstIndex(of: "--ui-test-scenario"), arguments.indices.contains(index + 1) else { return nil }
         let scenario = arguments[index + 1]
         fixtureReads += 1
-        let missing: Prerequisite?
+        let missing: Set<Prerequisite>
         switch scenario {
-        case "missing-rosetta": missing = .rosetta
-        case "low-disk": missing = .diskSpace
-        case "invalid-runtime": missing = .runtime
-        case "ready", "ready-with-delay", "queued-game-launch": missing = nil
-        case "ready-after-refresh": missing = fixtureReads == 1 ? .rosetta : nil
+        case "missing-rosetta": missing = [.rosetta]
+        case "low-disk": missing = [.diskSpace]
+        case "invalid-runtime": missing = [.runtime, .graphicsPayload]
+        case "ready", "ready-with-delay", "queued-game-launch": missing = []
+        case "ready-after-refresh": missing = fixtureReads == 1 ? [.rosetta] : []
         default: return nil
         }
         return .init(checks: [Prerequisite.supportedHost, .rosetta, .runtime, .graphicsPayload, .diskSpace].map {
-            .init(prerequisite: $0, status: $0 == missing ? .failed : .passed, detail: $0 == missing ? "UI test: prerequisite unavailable" : "UI test: prerequisite passed")
+            .init(prerequisite: $0, status: missing.contains($0) ? .failed : .passed,
+                  detail: missing.contains($0) ? "UI test: prerequisite unavailable" : "UI test: prerequisite passed")
         })
         #else
         return nil
