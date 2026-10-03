@@ -41,10 +41,10 @@ manifest does not assert that release acceptance or reboot testing has passed.
 1. Gamekit opens a **Welcome to Gamekit** setup sheet before the library if no
    managed launcher is installed. It checks this Mac, Rosetta, the pinned Wine
    runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. For a
-   missing Rosetta installation, click **Copy Rosetta command and open Terminal…**.
-   Paste the copied `/usr/sbin/softwareupdate --install-rosetta` command into
-   Terminal, press Return, review Apple's license and respond yourself. Return
-   to Gamekit and click **Refresh checks**. Gamekit never accepts terms for you.
+   missing Rosetta installation, click **Install Rosetta with macOS…**. Gamekit
+   opens its signed Intel-only helper through macOS, which requests Rosetta from
+   Apple. Approve the macOS installation dialog if it appears; Gamekit rechecks
+   automatically. No Terminal command or manual Rosetta download is required.
 2. Click **Install Wine from publisher…** to download and verify the pinned
    Sikarugir engine and template. This step can run before Rosetta is installed
    and before you have Apple's image. Wine is prepared in your own Application

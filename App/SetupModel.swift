@@ -13,6 +13,7 @@ final class SetupModel: ObservableObject {
     @Published private(set) var runtimeSetupStatus: String?
     @Published private(set) var winePrepared = false
     @Published private(set) var rosettaInstruction: String?
+    @Published private(set) var rosettaRequestPending = false
     @Published private(set) var selectionLocked = false
     @Published var problem: String?
     @Published var selectionRevision = UUID()
@@ -131,18 +132,37 @@ final class SetupModel: ObservableObject {
         }
     }
 
-    func openRosettaInstallation() {
-        guard !isBusy else { return }
-        let command = "/usr/sbin/softwareupdate --install-rosetta"
-        NSPasteboard.general.clearContents()
-        guard NSPasteboard.general.setString(command, forType: .string) else {
-            problem = "Could not copy the Rosetta command. Open Terminal and run \(command), then Refresh checks."
+    func requestRosetta(diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, !rosettaRequestPending else { return }
+        guard let probe = Bundle.main.resourceURL?.appendingPathComponent("RosettaProbe.app"),
+              FileManager.default.fileExists(atPath: probe.appendingPathComponent("Contents/MacOS/RosettaProbe").path)
+        else {
+            problem = "Gamekit's Rosetta request helper is unavailable. Reinstall Gamekit and retry."
             return
         }
         problem = nil
-        rosettaInstruction = "Paste the copied command into Terminal and press Return. Review and accept Apple's license there; then return to Gamekit and Refresh checks."
-        if !NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")) {
-            problem = "Terminal did not open. Open it yourself, paste the copied Rosetta command and follow Apple's prompts."
+        rosettaInstruction = "macOS is requesting Rosetta. Approve Apple's installation prompt if it appears; Gamekit will check when installation finishes."
+        guard NSWorkspace.shared.open(probe) else {
+            rosettaInstruction = nil
+            problem = "macOS did not open the Rosetta request. Retry the request or follow Apple's Rosetta instructions."
+            return
+        }
+        rosettaRequestPending = true
+        Task { [self] in
+            defer { rosettaRequestPending = false }
+            for _ in 0..<200 {
+                let result = try? await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/arch"),
+                    arguments: ["-x86_64", "/usr/bin/uname", "-m"], timeout: 10, outputLimit: 4096))
+                if result?.termination == .exited(0),
+                   result?.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) == "x86_64" {
+                    rosettaInstruction = nil
+                    refresh(diagnostics: diagnostics)
+                    return
+                }
+                try? await Task.sleep(for: .seconds(3))
+            }
+            rosettaInstruction = nil
+            problem = "Rosetta is still unavailable. If macOS did not complete its prompt, choose Install Rosetta again."
         }
     }
 
