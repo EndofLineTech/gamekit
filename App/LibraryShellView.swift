@@ -656,7 +656,7 @@ struct LibraryShellView: View {
         // Existing isolated UI fixtures exercise Settings and library navigation;
         // the two wizard fixtures explicitly opt into the first-run sheet.
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--ui-test-scenario") && !arguments.contains("--ui-test-wizard") { return }
+        if arguments.contains("--metadata-root") && !arguments.contains("--ui-test-wizard") { return }
         #endif
         guard !wizardOffered, setup.checkedAt != nil || setup.problem != nil,
               setup.record?.installation != .installed, ubisoft.installation != .installed else { return }
