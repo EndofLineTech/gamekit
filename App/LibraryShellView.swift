@@ -32,7 +32,8 @@ struct LibraryShellView: View {
     @State private var preferences = LibraryBrowsingPreferences()
     @State private var preferencesWarning = false
     @State private var settingsSidebarVisible = true
-    @State private var welcomeDismissed = false
+    @State private var wizardOffered = false
+    @State private var showSetupWizard = false
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
@@ -115,7 +116,27 @@ struct LibraryShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gamekitOpenDiagnostics)) { _ in openSettings(.diagnostics) }
         .onReceive(NotificationCenter.default.publisher(for: .gamekitFocusSearch)) { _ in focusSearch() }
         .onChange(of: installation.installedSuccessfully) { _, completed in
-            if completed && destination == .settings && category == .launchers { destination = .all }
+            if completed {
+                showSetupWizard = false
+                if destination == .settings && category == .launchers { destination = .all }
+            }
+        }
+        .onChange(of: setup.checkedAt) { _, _ in offerSetupWizard() }
+        .onChange(of: setup.problem) { _, _ in offerSetupWizard() }
+        .sheet(isPresented: $showSetupWizard) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Welcome to Gamekit")
+                        .font(.largeTitle.bold()).accessibilityIdentifier("welcome-heading")
+                    WelcomeSetupView(openLaunchers: {
+                        showSetupWizard = false
+                        NotificationCenter.default.post(name: .gamekitOpenLauncherSetup, object: nil)
+                    }, browseLibrary: { showSetupWizard = false })
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minWidth: 650, idealWidth: 710, minHeight: 500, idealHeight: 640)
         }
         .onChange(of: destination) { _, current in
             if current.isLibrary { lastLibraryDestination = current }
@@ -605,43 +626,36 @@ struct LibraryShellView: View {
         let initial = query.isEmpty && filter == .all
         let favoritesEmpty = initial && destination == .favorites
         let ubisoftEmpty = initial && destination == .ubisoft
-        let needsSetup = initial && destination == .all && !welcomeDismissed &&
-            setup.record?.installation != .installed && ubisoft.installation != .installed
-        let welcome = needsSetup && (setup.checkedAt != nil || setup.problem != nil)
         return LibraryPanel {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "square.grid.2x2").font(.largeTitle).foregroundStyle(LibraryVisualStyle.accent)
-                if welcome {
-                    Text("Welcome to Gamekit")
-                        .font(.title2.bold()).accessibilityIdentifier("welcome-heading")
-                    Text("Your library starts here")
-                        .foregroundStyle(.secondary).accessibilityIdentifier("games-empty")
-                    WelcomeSetupView(openLaunchers: {
-                        NotificationCenter.default.post(name: .gamekitOpenLauncherSetup, object: nil)
-                    }, browseLibrary: { welcomeDismissed = true })
-                } else {
-                    Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
-                         : initial ? "Your library starts here" : "No matching games")
-                        .font(.title2.bold()).accessibilityIdentifier("games-empty")
-                    Text(favoritesEmpty ? "Mark a game as a favorite in your library."
-                         : ubisoftEmpty ? "Launch Ubisoft Connect to verify installed games, then refresh this library."
-                         : needsSetup ? "Checking this Mac and its setup prerequisites…"
-                         : initial ? (setup.record?.installation == .installed
-                             ? "Install games in Windows Steam to see them here."
-                             : "Set up Windows Steam, then install a game to see it here.")
-                         : "Try another search or clear the filters.")
-                        .foregroundStyle(.secondary)
-                    Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
-                           : initial ? "Manage Windows Steam" : "Clear filters") {
-                        if favoritesEmpty { destination = .all }
-                        else if initial { openSettings(.launchers) }
-                        else { query = ""; filter = .all }
-                    }
-                    .help(favoritesEmpty ? "Return to all installed games" : ubisoftEmpty ? "Open Ubisoft Connect controls"
-                          : initial ? "Open Windows Steam setup and controls" : "Show all games without search or filters")
+                Text(favoritesEmpty ? "No favorites yet" : ubisoftEmpty ? "No Ubisoft games detected"
+                     : initial ? "Your library starts here" : "No matching games")
+                    .font(.title2.bold()).accessibilityIdentifier("games-empty")
+                Text(favoritesEmpty ? "Mark a game as a favorite in your library."
+                     : ubisoftEmpty ? "Launch Ubisoft Connect to verify installed games, then refresh this library."
+                     : initial ? (setup.record?.installation == .installed
+                         ? "Install games in Windows Steam to see them here."
+                         : "Set up Windows Steam, then install a game to see it here.")
+                     : "Try another search or clear the filters.")
+                    .foregroundStyle(.secondary)
+                Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
+                       : initial && setup.record?.installation != .installed ? "Set up Gamekit" : initial ? "Manage Windows Steam" : "Clear filters") {
+                    if favoritesEmpty { destination = .all }
+                    else if initial && setup.record?.installation != .installed { showSetupWizard = true }
+                    else if initial { openSettings(.launchers) }
+                    else { query = ""; filter = .all }
                 }
+                .accessibilityIdentifier(initial && setup.record?.installation != .installed && !ubisoftEmpty ? "open-setup-wizard" : "empty-library-action")
             }
         }
+    }
+
+    private func offerSetupWizard() {
+        guard !wizardOffered, setup.checkedAt != nil || setup.problem != nil,
+              setup.record?.installation != .installed, ubisoft.installation != .installed else { return }
+        wizardOffered = true
+        showSetupWizard = true
     }
 
     private var inspector: some View {

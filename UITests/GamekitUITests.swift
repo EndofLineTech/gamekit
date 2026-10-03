@@ -7,16 +7,18 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "invalid-runtime"]
         app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["welcome-prerequisite-runtime"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.links["welcome-download-wine"].exists)
         XCTAssertTrue(app.links["welcome-download-template"].exists)
         XCTAssertTrue(app.links["welcome-download-graphics"].exists)
         XCTAssertTrue(app.buttons["welcome-choose-runtime"].exists)
+        XCTAssertTrue(app.buttons["welcome-install-runtime"].exists)
         XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
         let manage = app.buttons["welcome-open-launchers"]
-        revealRecoveryButton(manage, in: app)
         manage.click()
+        XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists)
         XCTAssertTrue(app.buttons["settings-Launchers"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
     }
@@ -26,12 +28,12 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-after-refresh"]
         app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
         let welcome = app.staticTexts["welcome-heading"]
         XCTAssertTrue(welcome.waitForExistence(timeout: 15))
         let install = app.buttons["welcome-install-steam"]
         XCTAssertFalse(install.isEnabled)
         let refresh = app.buttons["welcome-refresh"]
-        revealRecoveryButton(refresh, in: app)
         refresh.click()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)

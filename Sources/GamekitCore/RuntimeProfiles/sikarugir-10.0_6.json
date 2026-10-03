@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "runtimeBundlePath": "Runtimes/sikarugir10.0_6-d3dmetal4.0b2/Template-1.0.11.app",
+  "engine": {
+    "url": "https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_6.tar.xz",
+    "sha256": "9da7ee0cbf386522f3a9906943726d9c3c125dbbd9ab120e3cde80e88d6091b2",
+    "maximumBytes": 250000000
+  },
+  "template": {
+    "url": "https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.11.tar.xz",
+    "sha256": "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a",
+    "maximumBytes": 150000000
+  },
+  "appleDMG": {
+    "sha256": "6248a0edc61553790753e5e9c060b8e53c940ed197f11409dcc34a35e05becc1",
+    "maximumBytes": 100000000
+  }
+}

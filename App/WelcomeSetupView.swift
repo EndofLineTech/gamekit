@@ -14,13 +14,21 @@ struct WelcomeSetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Get your Mac ready for Windows games")
                 .font(.headline)
-            Text("Gamekit checks each prerequisite. Obtain Wine and Apple's graphics from their providers, prepare the runtime, then Gamekit can download and install Steam from Valve.")
+            Text("Gamekit checks your Mac, installs the verified Wine runtime from its publisher, and installs Steam from Valve. Sign in to Apple Developer to get the Game Porting Toolkit DMG, then select it here; Gamekit verifies and assembles it for you.")
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button("Launcher setup and recovery") { openLaunchers() }
                     .accessibilityIdentifier("welcome-open-launchers")
                 Button("Browse library") { browseLibrary() }
                     .accessibilityIdentifier("welcome-browse")
+            }
+            HStack(spacing: 10) {
+                Button("Refresh checks") { setup.refresh(diagnostics: diagnostics) }
+                    .disabled(setup.isBusy)
+                    .accessibilityIdentifier("welcome-refresh")
+                Button("Choose prepared runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
+                    .disabled(setup.isBusy || setup.selectionLocked)
+                    .accessibilityIdentifier("welcome-choose-runtime")
             }
             if let problem = setup.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
@@ -31,17 +39,26 @@ struct WelcomeSetupView: View {
                 ForEach(report.checks, id: \.prerequisite) { check in
                     prerequisite(check)
                 }
+                if report.checks.contains(where: { ($0.prerequisite == .runtime || $0.prerequisite == .graphicsPayload) && $0.status != .passed }) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Link("Get Apple Game Porting Toolkit (Apple Developer sign-in)", destination: PrerequisiteGuidance.graphics)
+                            .accessibilityIdentifier("welcome-download-graphics")
+                        Button("Choose Apple DMG and install Wine + graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
+                                [.supportedHost, .rosetta, .diskSpace].contains($0.prerequisite) && $0.status != .passed
+                            }))
+                            .accessibilityIdentifier("welcome-install-runtime")
+                        Text("Gamekit downloads and verifies the exact Sikarugir engine and template, then stages your Apple graphics without changing another runtime or Steam prefix.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
             } else if setup.problem == nil {
                 ProgressView("Checking your Mac…")
                     .accessibilityIdentifier("welcome-checking")
             }
-            HStack(spacing: 10) {
-                Button("Refresh checks") { setup.refresh(diagnostics: diagnostics) }
-                    .disabled(setup.isBusy)
-                    .accessibilityIdentifier("welcome-refresh")
-                Button("Choose prepared runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
-                    .disabled(setup.isBusy || setup.selectionLocked)
-                    .accessibilityIdentifier("welcome-choose-runtime")
+            if let status = setup.runtimeSetupStatus {
+                Text(status).font(.callout).accessibilityIdentifier("welcome-runtime-installation-status")
             }
             if setup.selectionLocked {
                 Text("Stop the managed Steam session before changing runtimes.")
@@ -79,22 +96,21 @@ struct WelcomeSetupView: View {
     @ViewBuilder private func resources(for prerequisite: Prerequisite) -> some View {
         switch prerequisite {
         case .rosetta:
-            Link("Install Rosetta with Apple’s instructions", destination: PrerequisiteGuidance.rosetta)
+            Button("Install Rosetta with macOS…") { setup.requestRosetta(diagnostics: diagnostics) }
+                .disabled(setup.isBusy)
                 .accessibilityIdentifier("welcome-install-rosetta")
+            Link("About Rosetta", destination: PrerequisiteGuidance.rosetta)
         case .runtime:
             HStack(spacing: 12) {
-                Link("Download Wine", destination: PrerequisiteGuidance.wine)
+                Link("Wine publisher", destination: PrerequisiteGuidance.wine)
                     .accessibilityIdentifier("welcome-download-wine")
-                Link("Download template", destination: PrerequisiteGuidance.template)
+                Link("Template publisher", destination: PrerequisiteGuidance.template)
                     .accessibilityIdentifier("welcome-download-template")
-                Link("Preparation guide", destination: PrerequisiteGuidance.guide)
+                Link("Verified recipe", destination: PrerequisiteGuidance.guide)
             }
         case .graphicsPayload:
-            HStack(spacing: 12) {
-                Link("Get Apple Game Porting Toolkit", destination: PrerequisiteGuidance.graphics)
-                    .accessibilityIdentifier("welcome-download-graphics")
-                Link("Prepare graphics", destination: PrerequisiteGuidance.guide)
-            }
+            Text("Gamekit verifies and installs this from the Apple DMG you choose above.")
+                .font(.callout).foregroundStyle(.secondary)
         case .diskSpace:
             Button("Review storage and setup") { openLaunchers() }
                 .accessibilityIdentifier("welcome-storage-help")
@@ -114,8 +130,8 @@ struct WelcomeSetupView: View {
 
 enum PrerequisiteGuidance {
     static let rosetta = URL(string: "https://support.apple.com/en-us/102527")!
-    static let wine = URL(string: "https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_6.tar.xz")!
-    static let template = URL(string: "https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz")!
+    static let wine = (try? RuntimeSetupRecipe.bundled().engine.url) ?? guide
+    static let template = (try? RuntimeSetupRecipe.bundled().template.url) ?? guide
     static let graphics = URL(string: "https://developer.apple.com/download/all/?q=Game%20Porting%20Toolkit")!
     static let guide = URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!
 
