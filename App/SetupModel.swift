@@ -10,6 +10,7 @@ final class SetupModel: ObservableObject {
     @Published private(set) var report: RuntimeReport?
     @Published private(set) var checkedAt: Date?
     @Published private(set) var activity: String?
+    @Published private(set) var runtimeSetupStatus: String?
     @Published private(set) var selectionLocked = false
     @Published var problem: String?
     @Published var selectionRevision = UUID()
@@ -127,6 +128,61 @@ final class SetupModel: ObservableObject {
         }
     }
 
+    func requestRosetta(diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, let token = begin("Requesting Rosetta installation from macOS") else { return }
+        problem = nil
+        Task { [self] in
+            do {
+                // The Intel slice asks macOS for its own installation prompt;
+                // never pass --agree-to-license or install software silently.
+                let result = try await ProcessExecutor().run(.init(executable: URL(fileURLWithPath: "/usr/bin/arch"),
+                    arguments: ["-x86_64", "/usr/bin/true"], timeout: 600, outputLimit: 4096))
+                guard result.termination == .exited(0) else {
+                    problem = "macOS did not complete Rosetta installation. Use Apple's on-screen prompt or Rosetta instructions, then Refresh checks."
+                    end(token); return
+                }
+                end(token); refresh(diagnostics: diagnostics)
+            } catch { problem = AppFailure.message(error); end(token) }
+        }
+    }
+
+    func prepareRuntime(diagnostics: AppDiagnosticsModel) {
+        guard !isBusy, !selectionLocked else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Choose the Apple Game Porting Toolkit evaluation DMG"
+        panel.message = "Sign in at Apple Developer and download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
+        panel.allowedContentTypes = [.diskImage]
+        panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let appleDMG = panel.url,
+              let token = begin("Preparing verified Wine and Apple graphics") else { return }
+        runtimeSetupStatus = "Checking your Apple download…"
+        problem = nil
+        Task { [self] in
+            do {
+                let prepared = try await RuntimeSetup(root: AppStorageLocations.metadata).install(appleDMG: appleDMG) { [weak self] stage in
+                    await MainActor.run { self?.runtimeSetupStatus = stage }
+                }
+                let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: AppStorageLocations.metadata))
+                let current = try await settings.layout()
+                let fallback = current.dataRoot.appendingPathComponent(current.profile.bundlePath)
+                if current.bundle == fallback && current.profile.revision == .original {
+                    try await settings.select(nil, revision: .original)
+                } else {
+                    runtimeSetupStatus = "\(prepared.lastPathComponent) is ready. Your existing runtime selection was kept; choose the new app explicitly if you want to switch."
+                }
+                layout = try await settings.layout(); selectionRevision = UUID()
+                if runtimeSetupStatus?.contains("existing runtime selection") != true { runtimeSetupStatus = "\(prepared.lastPathComponent) is ready. Refreshing checks…" }
+                end(token); refresh(diagnostics: diagnostics)
+            } catch {
+                runtimeSetupStatus = nil
+                problem = error as? RuntimeSetupError == .alreadyInstalled
+                    ? "A runtime already exists at the pinned destination. Gamekit left it untouched. Choose it or use a separate runtime copy."
+                    : "Runtime setup could not finish. Original downloads and existing environments were left untouched. " + AppFailure.message(error)
+                end(token)
+            }
+        }
+    }
+
     func chooseGraphicsBackend(_ backend: D3DMetalBackend, diagnostics: AppDiagnosticsModel) {
         guard !isBusy, !selectionLocked, backend != layout.graphicsBackend,
               let token = begin("Saving graphics backend") else { return }
@@ -184,6 +240,14 @@ final class SetupModel: ObservableObject {
 enum AppFailure {
     static func message(_ error: any Error) -> String {
         switch error {
+        case RuntimeSetupError.invalidRecipe:
+            "Gamekit's runtime setup recipe is unavailable or invalid. Update Gamekit; no external runtime was changed."
+        case RuntimeSetupError.invalidAppleArtifact:
+            "The selected Apple DMG is missing, changed or not the pinned evaluation release. Download the specified Game Porting Toolkit version from Apple and choose that original DMG."
+        case RuntimeSetupError.invalidDownload, RuntimeSetupError.invalidArchive:
+            "The publisher runtime download was incomplete or did not match its pinned release. Check connectivity and Retry; no runtime was installed."
+        case RuntimeSetupError.invalidOverlay:
+            "The assembled runtime failed verification. No runtime was installed; use the pinned Apple DMG and Retry."
         case GraphicsPayloadError.unavailable: "The selected graphics payload is missing, changed, or incompatible with this runtime. Install the pinned backend payload and refresh Setup, or select an Apple backend."
         case EnvironmentStoreError.busy: "Another operation or managed launcher session owns this environment. Finish or stop it, then retry."
         case EnvironmentStoreError.unsafePath, EnvironmentStoreError.identityMismatch, SteamLifecycleError.scopeChanged,

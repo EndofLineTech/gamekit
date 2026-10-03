@@ -38,16 +38,29 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 ## First setup
 
-1. Gamekit opens to **All Installed Games**. If no managed launcher is installed,
-   the **Welcome to Gamekit** panel checks this Mac, Rosetta, the prepared Wine
-   runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. Follow each
-   failed row's provider download and preparation links; use **Choose prepared
-   runtime…** to select your assembled runtime, then **Refresh checks**. Gamekit
-   does not bundle Wine or Apple's evaluation graphics or accept their terms for
-   you. **Launcher setup and recovery** opens the full controls in **Settings →
-   Launchers**. Existing configured installations open to the library instead of
-   repeating first-run guidance.
-2. In **Settings → Launchers**, choose **Use updated runtime** for the prepared runtime with per-game
+1. Gamekit opens a **Welcome to Gamekit** setup sheet before the library if no
+   managed launcher is installed. It checks this Mac, Rosetta, the pinned Wine
+   runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. For a
+   missing Rosetta installation, click **Install Rosetta with macOS…** and follow
+   Apple's system prompt; Gamekit never accepts Apple's terms silently.
+2. Sign in at Apple Developer and download the listed **Game Porting Toolkit 4.0
+   beta 2** DMG yourself. Click **Choose Apple DMG and install Wine + graphics…**,
+   select that original DMG, and wait while Gamekit verifies its SHA-256,
+   downloads/verifies the pinned Sikarugir Wine and template directly from the
+   publishers, and assembles a new runtime in your own Application Support.
+   Existing runtimes, explicit selections and Wine prefixes are left in place.
+   Gamekit does not bundle Wine or Apple's evaluation graphics, or enter Apple
+   credentials for you. You can close and reopen Welcome or use **Launcher setup
+   and recovery** for the full controls in **Settings → Launchers**.
+3. Click **Refresh checks** after any required system install. When all checks pass,
+   click **Install Steam**; Gamekit downloads and validates Valve's installer.
+   Existing configured installations open to the library instead of repeating
+   first-run guidance.
+
+For previously prepared components, choose **Choose prepared runtime…** rather
+than downloading them again. Under **Settings → Launchers**, you can also:
+
+1. Choose **Use updated runtime** for the prepared runtime with per-game
    driver-compatibility support (includes text-input 1). **Use text-input runtime
    (rollback)** selects the previous text-input revision, and **Use original
    runtime** selects the original recipe. **Choose runtime…** locates the
@@ -55,16 +68,16 @@ manifest does not assert that release acceptance or reboot testing has passed.
    [driver revision guide](helldivers-driver-runtime.md) and
    [text-input revision guide](runtime-text-input-delivery.md).
    Prefix storage stays fixed; Stop Steam before changing revisions.
-3. Click **Refresh checks** (Command-Shift-R in Settings) after fixing prerequisites.
-4. Click **Install Steam** in Welcome or Settings after all checks are ready.
-   Gamekit downloads and validates Valve's installer,
-   initializes its prefix, and invokes the installer silently with `/S`.
-5. Steam updates and starts. Gamekit waits for a consistently owned client and
+2. Re-run **Refresh checks** (Command-Shift-R in Settings) after changing runtimes.
+3. Install Steam in Welcome or Settings after all checks are ready. Gamekit
+   initializes its prefix and invokes Valve's verified installer silently with `/S`.
+4. Steam updates and starts. Gamekit waits for a consistently owned client and
    browser process with a visible browser window stable for three seconds.
-6. Gamekit finishes setup and reopens Steam in normal persistent mode. Sign in and
+5. Gamekit finishes setup and reopens Steam in normal persistent mode. Sign in and
    complete Steam Guard inside Steam when requested.
 
-There are no installer-wizard clicks or separate Gamekit readiness confirmation.
+Valve's silent Steam installer needs no installer-wizard clicks or separate
+Gamekit readiness confirmation.
 Automatic readiness means the Steam web UI is available; it does not authenticate
 your account or guarantee every Library feature or game works. An operation
 status row appears below the library while work is active, with no invented
