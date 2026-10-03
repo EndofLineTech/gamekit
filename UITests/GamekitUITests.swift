@@ -849,7 +849,7 @@ final class GamekitUITests: XCTestCase {
     }
 
     func testPrerequisiteFailuresDisableInstallAndExplainNextSteps() throws {
-        for (scenario, explanation) in [("missing-rosetta", "Install Rosetta using Apple's instructions, then refresh checks. Gamekit does not accept its license for you."),
+        for (scenario, explanation) in [("missing-rosetta", "Open Terminal with the copied Apple installer command, review Apple's license, then refresh checks."),
                                         ("low-disk", "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."),
                                         ("invalid-runtime", "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable.")] {
             let app = XCUIApplication()
