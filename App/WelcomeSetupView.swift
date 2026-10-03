@@ -14,7 +14,7 @@ struct WelcomeSetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Get your Mac ready for Windows games")
                 .font(.headline)
-            Text("Gamekit checks your Mac, installs the verified Wine runtime from its publisher, and installs Steam from Valve. Sign in to Apple Developer to get the Game Porting Toolkit DMG, then select it here; Gamekit verifies and assembles it for you.")
+            Text("Gamekit checks your Mac and installs verified Wine from its publisher. Then sign in to Apple Developer, select the Game Porting Toolkit DMG, and finish graphics setup before installing Steam.")
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button("Launcher setup and recovery") { openLaunchers() }
@@ -41,16 +41,31 @@ struct WelcomeSetupView: View {
                 }
                 if report.checks.contains(where: { ($0.prerequisite == .runtime || $0.prerequisite == .graphicsPayload) && $0.status != .passed }) {
                     VStack(alignment: .leading, spacing: 8) {
+                        if !setup.winePrepared {
+                            Button("Install Wine from publisher…") { setup.prepareWine(diagnostics: diagnostics) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
+                                    [.supportedHost, .diskSpace].contains($0.prerequisite) && $0.status != .passed
+                                }))
+                                .accessibilityIdentifier("welcome-install-wine")
+                            Text("Downloads and verifies the pinned Sikarugir engine and template. You can do this before obtaining Apple's DMG or installing Rosetta.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        } else {
+                            Text("Wine is prepared and verified. Finish Apple's graphics step to make it available to Steam.")
+                                .font(.callout).accessibilityIdentifier("welcome-wine-prepared")
+                        }
                         Link("Get Apple Game Porting Toolkit (Apple Developer sign-in)", destination: PrerequisiteGuidance.graphics)
                             .accessibilityIdentifier("welcome-download-graphics")
-                        Button("Choose Apple DMG and install Wine + graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
+                        Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
                             .buttonStyle(.borderedProminent)
-                            .disabled(setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
+                            .disabled(!setup.winePrepared || setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
                                 [.supportedHost, .rosetta, .diskSpace].contains($0.prerequisite) && $0.status != .passed
                             }))
                             .accessibilityIdentifier("welcome-install-runtime")
-                        Text("Gamekit downloads and verifies the exact Sikarugir engine and template, then stages your Apple graphics without changing another runtime or Steam prefix.")
-                            .font(.callout).foregroundStyle(.secondary)
+                        if report.checks.contains(where: { $0.prerequisite == .rosetta && $0.status != .passed }) {
+                            Text("Finish Rosetta installation in Terminal and Refresh checks before installing graphics.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
                     }
                 }
             } else if setup.problem == nil {
@@ -96,9 +111,12 @@ struct WelcomeSetupView: View {
     @ViewBuilder private func resources(for prerequisite: Prerequisite) -> some View {
         switch prerequisite {
         case .rosetta:
-            Button("Install Rosetta with macOS…") { setup.requestRosetta(diagnostics: diagnostics) }
+            Button("Copy Rosetta command and open Terminal…") { setup.openRosettaInstallation() }
                 .disabled(setup.isBusy)
                 .accessibilityIdentifier("welcome-install-rosetta")
+            if let instruction = setup.rosettaInstruction {
+                Text(instruction).font(.callout).accessibilityIdentifier("welcome-rosetta-instruction")
+            }
             Link("About Rosetta", destination: PrerequisiteGuidance.rosetta)
         case .runtime:
             HStack(spacing: 12) {
@@ -148,7 +166,7 @@ enum PrerequisiteGuidance {
     static func advice(_ value: Prerequisite) -> String {
         switch value {
         case .supportedHost: "This prototype is validated for Apple silicon and macOS 27."
-        case .rosetta: "Install Rosetta using Apple's instructions, then refresh checks. Gamekit does not accept its license for you."
+        case .rosetta: "Open Terminal with the copied Apple installer command, review Apple's license, then refresh checks."
         case .runtime: "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable."
         case .graphicsPayload: "Restore the unchanged D3DMetal 4.0b2 payload from the validated setup guide, then refresh."
         case .diskSpace: "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."

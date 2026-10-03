@@ -14,5 +14,10 @@
   "appleDMG": {
     "sha256": "6248a0edc61553790753e5e9c060b8e53c940ed197f11409dcc34a35e05becc1",
     "maximumBytes": 100000000
-  }
+  },
+  "applePackageDMG": {
+    "sha256": "03893ac4fab94ad9ff6aa32e887e2854bbf40fd90796f78a1d9bdbc02526ee5b",
+    "maximumBytes": 150000000
+  },
+  "evaluationImageName": "Evaluation environment for Windows games 4.0 beta 2.dmg"
 }
