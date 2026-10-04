@@ -10,11 +10,12 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["welcome-prerequisite-runtime"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.links["welcome-download-wine"].exists)
-        XCTAssertTrue(app.links["welcome-download-template"].exists)
+        XCTAssertFalse(app.links["welcome-download-wine"].exists)
+        XCTAssertFalse(app.links["welcome-download-template"].exists)
         XCTAssertTrue(app.links["welcome-download-graphics"].exists)
-        XCTAssertTrue(app.buttons["welcome-choose-runtime"].exists)
+        XCTAssertFalse(app.buttons["welcome-choose-runtime"].exists)
         XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
+        XCTAssertEqual(app.buttons["welcome-install-wine"].label, "Install Wine")
         XCTAssertTrue(app.buttons["welcome-install-runtime"].exists)
         XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
         XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
@@ -852,7 +853,7 @@ final class GamekitUITests: XCTestCase {
     func testPrerequisiteFailuresDisableInstallAndExplainNextSteps() throws {
         for (scenario, explanation) in [("missing-rosetta", "Let macOS download and install Rosetta when requested. Approve Apple's installation prompt if it appears."),
                                         ("low-disk", "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."),
-                                        ("invalid-runtime", "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable.")] {
+                                        ("invalid-runtime", "Use Install Wine below; Gamekit downloads and verifies the required files for you.")] {
             let app = XCUIApplication()
             app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", scenario]
             app.launch()

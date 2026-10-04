@@ -141,12 +141,10 @@ final class SetupModel: ObservableObject {
             return
         }
         problem = nil
-        rosettaInstruction = "macOS is requesting Rosetta. Approve Apple's installation prompt if it appears; Gamekit will check when installation finishes."
-        guard NSWorkspace.shared.open(probe) else {
-            rosettaInstruction = nil
-            problem = "macOS did not open the Rosetta request. Retry the request or follow Apple's Rosetta instructions."
-            return
-        }
+        rosettaInstruction = "Checking Rosetta installation. Approve Apple's installation prompt if it appears; Gamekit will check when it finishes."
+        // Launch Services can report false while macOS is presenting the Rosetta
+        // installer. Only the actual Intel execution probe can confirm failure.
+        _ = NSWorkspace.shared.open(probe)
         rosettaRequestPending = true
         Task { [self] in
             defer { rosettaRequestPending = false }
@@ -189,7 +187,7 @@ final class SetupModel: ObservableObject {
         guard !isBusy, !selectionLocked, winePrepared else { return }
         let panel = NSOpenPanel()
         panel.title = "Choose the Apple Game Porting Toolkit evaluation DMG"
-        panel.message = "Sign in at Apple Developer and download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
+        panel.message = "Sign in with a free Apple Developer account to download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
         panel.allowedContentTypes = [.diskImage]
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let appleDMG = panel.url,

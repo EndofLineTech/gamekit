@@ -45,11 +45,11 @@ manifest does not assert that release acceptance or reboot testing has passed.
    opens its signed Intel-only helper through macOS, which requests Rosetta from
    Apple. Approve the macOS installation dialog if it appears; Gamekit rechecks
    automatically. No Terminal command or manual Rosetta download is required.
-2. Click **Install Wine from publisher…** to download and verify the pinned
+2. Click **Install Wine** to download and verify the pinned
    Sikarugir engine and template. This step can run before Rosetta is installed
    and before you have Apple's image. Wine is prepared in your own Application
    Support, and is not selected or used to launch Steam before graphics is ready.
-3. Sign in at Apple Developer and download the listed **Game Porting Toolkit 4.0
+3. Sign in with a **free Apple Developer account** and download the listed **Game Porting Toolkit 4.0
    beta 2** DMG yourself. Once Wine and Rosetta are ready, click **Choose Apple
    DMG and install graphics…**, select the original outer Apple download (or its
    nested evaluation DMG), and wait while Gamekit verifies the outer and nested
@@ -63,8 +63,8 @@ manifest does not assert that release acceptance or reboot testing has passed.
    Existing configured installations open to the library instead of repeating
    first-run guidance.
 
-For previously prepared components, choose **Choose prepared runtime…** rather
-than downloading them again. Under **Settings → Launchers**, you can also:
+For previously prepared runtimes, use **Settings → Launchers → Choose runtime…**
+instead of downloading them again. Under **Settings → Launchers**, you can also:
 
 1. Choose **Use updated runtime** for the prepared runtime with per-game
    driver-compatibility support (includes text-input 1). **Use text-input runtime

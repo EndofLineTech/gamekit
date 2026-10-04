@@ -14,7 +14,7 @@ struct WelcomeSetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Get your Mac ready for Windows games")
                 .font(.headline)
-            Text("Gamekit checks your Mac and installs verified Wine from its publisher. Then sign in to Apple Developer, select the Game Porting Toolkit DMG, and finish graphics setup before installing Steam.")
+            Text("Click Install Wine to let Gamekit download and prepare it. For graphics, a free Apple Developer account is needed to obtain the Game Porting Toolkit DMG; choose that DMG here after Rosetta is ready.")
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button("Launcher setup and recovery") { openLaunchers() }
@@ -26,9 +26,6 @@ struct WelcomeSetupView: View {
                 Button("Refresh checks") { setup.refresh(diagnostics: diagnostics) }
                     .disabled(setup.isBusy)
                     .accessibilityIdentifier("welcome-refresh")
-                Button("Choose prepared runtime…") { setup.chooseRuntime(diagnostics: diagnostics) }
-                    .disabled(setup.isBusy || setup.selectionLocked)
-                    .accessibilityIdentifier("welcome-choose-runtime")
             }
             if let problem = setup.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
@@ -42,19 +39,19 @@ struct WelcomeSetupView: View {
                 if report.checks.contains(where: { ($0.prerequisite == .runtime || $0.prerequisite == .graphicsPayload) && $0.status != .passed }) {
                     VStack(alignment: .leading, spacing: 8) {
                         if !setup.winePrepared {
-                            Button("Install Wine from publisher…") { setup.prepareWine(diagnostics: diagnostics) }
+                            Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
                                     [.supportedHost, .diskSpace].contains($0.prerequisite) && $0.status != .passed
                                 }))
                                 .accessibilityIdentifier("welcome-install-wine")
-                            Text("Downloads and verifies the pinned Sikarugir engine and template. You can do this before obtaining Apple's DMG or installing Rosetta.")
+                            Text("Gamekit downloads and verifies everything needed for Wine. You can do this before obtaining Apple's DMG or installing Rosetta.")
                                 .font(.callout).foregroundStyle(.secondary)
                         } else {
                             Text("Wine is prepared and verified. Finish Apple's graphics step to make it available to Steam.")
                                 .font(.callout).accessibilityIdentifier("welcome-wine-prepared")
                         }
-                        Link("Get Apple Game Porting Toolkit (Apple Developer sign-in)", destination: PrerequisiteGuidance.graphics)
+                        Link("Get GPTK from Apple (free Developer account required)", destination: PrerequisiteGuidance.graphics)
                             .accessibilityIdentifier("welcome-download-graphics")
                         Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
                             .buttonStyle(.borderedProminent)
@@ -63,7 +60,7 @@ struct WelcomeSetupView: View {
                             }))
                             .accessibilityIdentifier("welcome-install-runtime")
                         if report.checks.contains(where: { $0.prerequisite == .rosetta && $0.status != .passed }) {
-                            Text("Finish Rosetta installation in Terminal and Refresh checks before installing graphics.")
+                            Text("Wait for macOS to finish installing Rosetta; Gamekit checks again automatically before enabling graphics setup.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                     }
@@ -119,13 +116,7 @@ struct WelcomeSetupView: View {
             }
             Link("About Rosetta", destination: PrerequisiteGuidance.rosetta)
         case .runtime:
-            HStack(spacing: 12) {
-                Link("Wine publisher", destination: PrerequisiteGuidance.wine)
-                    .accessibilityIdentifier("welcome-download-wine")
-                Link("Template publisher", destination: PrerequisiteGuidance.template)
-                    .accessibilityIdentifier("welcome-download-template")
-                Link("Verified recipe", destination: PrerequisiteGuidance.guide)
-            }
+            EmptyView()
         case .graphicsPayload:
             Text("Gamekit verifies and installs this from the Apple DMG you choose above.")
                 .font(.callout).foregroundStyle(.secondary)
@@ -148,8 +139,6 @@ struct WelcomeSetupView: View {
 
 enum PrerequisiteGuidance {
     static let rosetta = URL(string: "https://support.apple.com/en-us/102527")!
-    static let wine = (try? RuntimeSetupRecipe.bundled().engine.url) ?? guide
-    static let template = (try? RuntimeSetupRecipe.bundled().template.url) ?? guide
     static let graphics = URL(string: "https://developer.apple.com/download/all/?q=Game%20Porting%20Toolkit")!
     static let guide = URL(string: "https://github.com/EndofLineTech/gamekit/blob/dev/docs/runtime-revision.md")!
 
@@ -167,8 +156,8 @@ enum PrerequisiteGuidance {
         switch value {
         case .supportedHost: "This prototype is validated for Apple silicon and macOS 27."
         case .rosetta: "Let macOS download and install Rosetta when requested. Approve Apple's installation prompt if it appears."
-        case .runtime: "Choose the validated runtime app with its packaged dependencies. A generic Wine app is not interchangeable."
-        case .graphicsPayload: "Restore the unchanged D3DMetal 4.0b2 payload from the validated setup guide, then refresh."
+        case .runtime: "Use Install Wine below; Gamekit downloads and verifies the required files for you."
+        case .graphicsPayload: "A free Apple Developer account is required to download GPTK 4.0 beta 2. Select its DMG below and Gamekit installs the verified graphics."
         case .diskSpace: "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."
         }
     }
