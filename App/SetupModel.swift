@@ -187,7 +187,7 @@ final class SetupModel: ObservableObject {
         guard !isBusy, !selectionLocked, winePrepared else { return }
         let panel = NSOpenPanel()
         panel.title = "Choose the Apple Game Porting Toolkit evaluation DMG"
-        panel.message = "Sign in at Apple Developer and download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
+        panel.message = "Sign in with a free Apple Developer account to download the pinned 4.0 beta 2 image first. Gamekit verifies its exact bytes; it does not download or redistribute Apple's payload."
         panel.allowedContentTypes = [.diskImage]
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let appleDMG = panel.url,
