@@ -57,7 +57,8 @@ manifest does not assert that release acceptance or reboot testing has passed.
    Existing runtimes, explicit selections and Wine prefixes are left in place.
    Gamekit does not bundle Wine or Apple's evaluation graphics, or enter Apple
    credentials for you. You can close and reopen Welcome or use **Launcher setup
-   and recovery** for the full controls in **Settings → Launchers**.
+   and recovery** for the full controls in **Settings → Launchers**, where
+   **Install Wine** is also available near the top.
 4. Click **Refresh checks** after any required system install. When all checks pass,
    click **Install Steam**; Gamekit downloads and validates Valve's installer.
    Existing configured installations open to the library instead of repeating
