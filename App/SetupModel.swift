@@ -141,12 +141,10 @@ final class SetupModel: ObservableObject {
             return
         }
         problem = nil
-        rosettaInstruction = "macOS is requesting Rosetta. Approve Apple's installation prompt if it appears; Gamekit will check when installation finishes."
-        guard NSWorkspace.shared.open(probe) else {
-            rosettaInstruction = nil
-            problem = "macOS did not open the Rosetta request. Retry the request or follow Apple's Rosetta instructions."
-            return
-        }
+        rosettaInstruction = "Checking Rosetta installation. Approve Apple's installation prompt if it appears; Gamekit will check when it finishes."
+        // Launch Services can report false while macOS is presenting the Rosetta
+        // installer. Only the actual Intel execution probe can confirm failure.
+        _ = NSWorkspace.shared.open(probe)
         rosettaRequestPending = true
         Task { [self] in
             defer { rosettaRequestPending = false }
