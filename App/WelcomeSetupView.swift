@@ -31,7 +31,7 @@ struct WelcomeSetupView: View {
                 Text("1. Install Wine").font(.headline)
                 Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(setup.winePrepared || setup.isBusy || setup.selectionLocked || !hostAndStorageReady || allRuntimeChecksReady)
+                    .disabled(!setup.canPrepareWine)
                     .accessibilityIdentifier("welcome-install-wine")
                 if setup.winePrepared {
                     Label("Wine is prepared and verified. Next, install Apple's graphics.", systemImage: "checkmark.circle.fill")

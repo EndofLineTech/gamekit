@@ -27,6 +27,7 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists)
         XCTAssertTrue(app.buttons["settings-Launchers"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["settings-heading"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["settings-install-wine"].isHittable, "Recovery keeps Install Wine visible")
     }
 
     func testWelcomeRefreshEnablesGuardedSteamInstallWithoutStartingIt() throws {

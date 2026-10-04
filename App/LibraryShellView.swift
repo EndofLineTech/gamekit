@@ -846,6 +846,23 @@ struct LibraryShellView: View {
                                 Label("Set up Windows Steam", systemImage: "square.and.arrow.down").font(.headline)
                                 Text("Choose a validated runtime and complete the setup checks below. After installation, browse your managed library and install games in Windows Steam.")
                                     .foregroundStyle(.secondary)
+                                Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(!setup.canPrepareWine)
+                                    .accessibilityIdentifier("settings-install-wine")
+                                if setup.winePrepared {
+                                    Label("Wine is prepared and verified. Add Apple graphics to complete the runtime.", systemImage: "checkmark.circle.fill")
+                                        .accessibilityIdentifier("settings-wine-prepared")
+                                } else if setup.isReady {
+                                    Text("The selected Wine runtime and graphics are already ready.")
+                                        .font(.callout).foregroundStyle(.secondary)
+                                } else {
+                                    Text("Gamekit downloads and verifies Wine. No publisher links or manual Wine download are needed.")
+                                        .font(.callout).foregroundStyle(.secondary)
+                                }
+                                if let status = setup.runtimeSetupStatus {
+                                    Text(status).font(.callout).accessibilityIdentifier("settings-wine-status")
+                                }
                             }
                         }
                     }

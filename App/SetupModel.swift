@@ -30,6 +30,16 @@ final class SetupModel: ObservableObject {
     var isReady: Bool { report?.prerequisites == .ready }
     var isBusy: Bool { owner != nil }
     var canExecute: Bool { isReady && !isBusy }
+    var canPrepareWine: Bool {
+        guard !isBusy, !selectionLocked, !winePrepared, let checks = report?.checks else { return false }
+        let hostReady = [Prerequisite.supportedHost, .diskSpace].allSatisfy { prerequisite in
+            checks.contains { $0.prerequisite == prerequisite && $0.status == .passed }
+        }
+        let runtimeReady = [Prerequisite.runtime, .graphicsPayload].allSatisfy { prerequisite in
+            checks.contains { $0.prerequisite == prerequisite && $0.status == .passed }
+        }
+        return hostReady && !runtimeReady
+    }
     var actions: SteamActionPolicy {
         .init(ready: isReady, installation: record?.installation, files: files, snapshot: snapshot,
               lifecycle: lifecycleState, hasReceipt: selectionLocked, busy: isBusy, metadataValid: metadataValid)
