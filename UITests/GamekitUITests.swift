@@ -7,7 +7,8 @@ final class GamekitUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "invalid-runtime", "--ui-test-wizard"]
         app.launch(); defer { app.terminate() }
-        XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
+        let wizard = app.windows["Gamekit"].sheets.firstMatch
+        XCTAssertTrue(wizard.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.descendants(matching: .any)["welcome-prerequisite-runtime"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.links["welcome-download-wine"].exists)
@@ -16,6 +17,8 @@ final class GamekitUITests: XCTestCase {
         XCTAssertFalse(app.buttons["welcome-choose-runtime"].exists)
         XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
         XCTAssertEqual(app.buttons["welcome-install-wine"].label, "Install Wine")
+        XCTAssertTrue(app.buttons["welcome-install-wine"].isHittable, "Install Wine belongs in the visible first-run area")
+        XCTAssertTrue(wizard.frame.contains(app.buttons["welcome-install-wine"].frame))
         XCTAssertTrue(app.buttons["welcome-install-runtime"].exists)
         XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
         XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
