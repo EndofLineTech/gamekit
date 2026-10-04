@@ -27,54 +27,45 @@ struct WelcomeSetupView: View {
                     .disabled(setup.isBusy)
                     .accessibilityIdentifier("welcome-refresh")
             }
-            if let problem = setup.problem {
-                Label(problem, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                    .accessibilityIdentifier("welcome-check-problem")
-            }
-            if let report = setup.report {
-                ForEach(report.checks, id: \.prerequisite) { check in
-                    prerequisite(check)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("1. Install Wine").font(.headline)
+                Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(setup.winePrepared || setup.isBusy || setup.selectionLocked || !hostAndStorageReady || allRuntimeChecksReady)
+                    .accessibilityIdentifier("welcome-install-wine")
+                if setup.winePrepared {
+                    Label("Wine is prepared and verified. Next, install Apple's graphics.", systemImage: "checkmark.circle.fill")
+                        .accessibilityIdentifier("welcome-wine-prepared")
+                } else if allRuntimeChecksReady {
+                    Text("The selected Wine runtime and graphics are already ready.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text("Gamekit downloads and verifies Wine for you. This works before Rosetta or Apple's DMG is available.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-                if report.checks.contains(where: { ($0.prerequisite == .runtime || $0.prerequisite == .graphicsPayload) && $0.status != .passed }) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if !setup.winePrepared {
-                            Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
-                                    [.supportedHost, .diskSpace].contains($0.prerequisite) && $0.status != .passed
-                                }))
-                                .accessibilityIdentifier("welcome-install-wine")
-                            Text("Gamekit downloads and verifies everything needed for Wine. You can do this before obtaining Apple's DMG or installing Rosetta.")
-                                .font(.callout).foregroundStyle(.secondary)
-                        } else {
-                            Text("Wine is prepared and verified. Finish Apple's graphics step to make it available to Steam.")
-                                .font(.callout).accessibilityIdentifier("welcome-wine-prepared")
-                        }
-                        Link("Get GPTK from Apple (free Developer account required)", destination: PrerequisiteGuidance.graphics)
-                            .accessibilityIdentifier("welcome-download-graphics")
-                        Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!setup.winePrepared || setup.isBusy || setup.selectionLocked || report.checks.contains(where: {
-                                [.supportedHost, .rosetta, .diskSpace].contains($0.prerequisite) && $0.status != .passed
-                            }))
-                            .accessibilityIdentifier("welcome-install-runtime")
-                        if report.checks.contains(where: { $0.prerequisite == .rosetta && $0.status != .passed }) {
-                            Text("Wait for macOS to finish installing Rosetta; Gamekit checks again automatically before enabling graphics setup.")
-                                .font(.callout).foregroundStyle(.secondary)
-                        }
-                    }
+                if let status = setup.runtimeSetupStatus {
+                    Text(status).font(.callout).accessibilityIdentifier("welcome-runtime-installation-status")
                 }
-            } else if setup.problem == nil {
-                ProgressView("Checking your Mac…")
-                    .accessibilityIdentifier("welcome-checking")
             }
-            if let status = setup.runtimeSetupStatus {
-                Text(status).font(.callout).accessibilityIdentifier("welcome-runtime-installation-status")
+            if rosettaMissing {
+                Button("Install Rosetta with macOS…") { setup.requestRosetta(diagnostics: diagnostics) }
+                    .disabled(setup.isBusy || setup.rosettaRequestPending)
+                    .accessibilityIdentifier("welcome-install-rosetta")
+                if let instruction = setup.rosettaInstruction {
+                    Text(instruction).font(.callout).accessibilityIdentifier("welcome-rosetta-instruction")
+                }
             }
-            if setup.selectionLocked {
-                Text("Stop the managed Steam session before changing runtimes.")
-                    .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("2. Add Apple graphics").font(.headline)
+                Link("Get GPTK from Apple (free Developer account required)", destination: PrerequisiteGuidance.graphics)
+                    .accessibilityIdentifier("welcome-download-graphics")
+                Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
+                    .disabled(!setup.winePrepared || setup.isBusy || setup.selectionLocked || !graphicsSetupReady || allRuntimeChecksReady)
+                    .accessibilityIdentifier("welcome-install-runtime")
+                if rosettaMissing {
+                    Text("Wait for macOS to finish installing Rosetta; Gamekit checks again automatically before enabling graphics setup.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             }
             Divider()
             Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
@@ -86,6 +77,47 @@ struct WelcomeSetupView: View {
             if let status = installation.status {
                 Text(status).font(.callout).accessibilityIdentifier("welcome-installation-status")
             }
+            if let problem = setup.problem {
+                Label(problem, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("welcome-check-problem")
+            }
+            if let report = setup.report {
+                Text("Prerequisite details").font(.headline)
+                ForEach(report.checks, id: \.prerequisite) { check in
+                    prerequisite(check)
+                }
+            } else if setup.problem == nil {
+                ProgressView("Checking your Mac…")
+                    .accessibilityIdentifier("welcome-checking")
+            }
+            if setup.selectionLocked {
+                Text("Stop the managed Steam session before changing runtimes.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var rosettaMissing: Bool {
+        setup.report?.checks.contains { $0.prerequisite == .rosetta && $0.status != .passed } ?? false
+    }
+
+    private var hostAndStorageReady: Bool {
+        guard let checks = setup.report?.checks else { return false }
+        return [.supportedHost, .diskSpace].allSatisfy { requirement in
+            checks.contains { $0.prerequisite == requirement && $0.status == .passed }
+        }
+    }
+
+    private var graphicsSetupReady: Bool {
+        guard let checks = setup.report?.checks else { return false }
+        return hostAndStorageReady && checks.contains { $0.prerequisite == .rosetta && $0.status == .passed }
+    }
+
+    private var allRuntimeChecksReady: Bool {
+        guard let checks = setup.report?.checks else { return false }
+        return [.runtime, .graphicsPayload].allSatisfy { requirement in
+            checks.contains { $0.prerequisite == requirement && $0.status == .passed }
         }
     }
 
@@ -108,12 +140,6 @@ struct WelcomeSetupView: View {
     @ViewBuilder private func resources(for prerequisite: Prerequisite) -> some View {
         switch prerequisite {
         case .rosetta:
-            Button("Install Rosetta with macOS…") { setup.requestRosetta(diagnostics: diagnostics) }
-                .disabled(setup.isBusy || setup.rosettaRequestPending)
-                .accessibilityIdentifier("welcome-install-rosetta")
-            if let instruction = setup.rosettaInstruction {
-                Text(instruction).font(.callout).accessibilityIdentifier("welcome-rosetta-instruction")
-            }
             Link("About Rosetta", destination: PrerequisiteGuidance.rosetta)
         case .runtime:
             EmptyView()
@@ -156,8 +182,8 @@ enum PrerequisiteGuidance {
         switch value {
         case .supportedHost: "This prototype is validated for Apple silicon and macOS 27."
         case .rosetta: "Let macOS download and install Rosetta when requested. Approve Apple's installation prompt if it appears."
-        case .runtime: "Use Install Wine below; Gamekit downloads and verifies the required files for you."
-        case .graphicsPayload: "A free Apple Developer account is required to download GPTK 4.0 beta 2. Select its DMG below and Gamekit installs the verified graphics."
+        case .runtime: "Use Install Wine above; Gamekit downloads and verifies the required files for you."
+        case .graphicsPayload: "A free Apple Developer account is required to download GPTK 4.0 beta 2. Select its DMG above and Gamekit installs the verified graphics."
         case .diskSpace: "Keep at least 15 GiB free on the app-data volume. Review old archives and free space, then refresh."
         }
     }
