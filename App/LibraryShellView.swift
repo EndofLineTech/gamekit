@@ -863,6 +863,19 @@ struct LibraryShellView: View {
                                 if let status = setup.runtimeSetupStatus {
                                     Text(status).font(.callout).accessibilityIdentifier("settings-wine-status")
                                 }
+                                Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
+                                    installation.start(diagnostics: diagnostics, setup: setup, recoveryRetry: setup.actions.retry)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(installation.running || !(setup.actions.install || setup.actions.retry))
+                                .accessibilityIdentifier("settings-quick-install-steam")
+                                if !(setup.actions.install || setup.actions.retry), let reason = setup.steamInstallBlocker {
+                                    Text(reason).font(.callout).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("settings-quick-steam-blocker")
+                                }
+                                if let status = installation.status {
+                                    Text(status).font(.callout).accessibilityIdentifier("settings-quick-steam-status")
+                                }
                             }
                         }
                     }
