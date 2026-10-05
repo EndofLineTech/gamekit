@@ -34,6 +34,7 @@ struct LibraryShellView: View {
     @State private var settingsSidebarVisible = true
     @State private var wizardOffered = false
     @State private var showSetupWizard = false
+    @State private var wizardComplete = false
     @State private var query = ""
     @State private var filter: LibraryInstallationFilter = .all
     @State private var selectedGameID: UInt32?
@@ -117,24 +118,27 @@ struct LibraryShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gamekitFocusSearch)) { _ in focusSearch() }
         .onChange(of: installation.installedSuccessfully) { _, completed in
             if completed {
-                showSetupWizard = false
-                if destination == .settings && category == .launchers { destination = .all }
+                if !showSetupWizard && destination == .settings && category == .launchers { destination = .all }
             }
         }
         .onChange(of: setup.checkedAt) { _, _ in offerSetupWizard() }
         .onChange(of: setup.problem) { _, _ in offerSetupWizard() }
-        .sheet(isPresented: $showSetupWizard) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Welcome to Gamekit")
-                        .font(.largeTitle.bold()).accessibilityIdentifier("welcome-heading")
-                    WelcomeSetupView(openLaunchers: {
-                        showSetupWizard = false
-                        NotificationCenter.default.post(name: .gamekitOpenLauncherSetup, object: nil)
-                    }, browseLibrary: { showSetupWizard = false })
+        .sheet(isPresented: $showSetupWizard, onDismiss: {
+            if setup.isReady && !wizardComplete {
+                Task {
+                    do {
+                        try await SetupWizardCompletionStore(root: AppStorageLocations.metadata).markComplete()
+                        wizardComplete = true
+                    } catch { /* Keep the existing receipt and allow Settings-based recovery. */ }
                 }
-                .padding(28)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }) {
+            ScrollView {
+                SetupWizardView(openLaunchers: {
+                    showSetupWizard = false
+                    NotificationCenter.default.post(name: .gamekitOpenLauncherSetup, object: nil)
+                }, dismiss: { showSetupWizard = false }, completedPrerequisites: { wizardComplete = true })
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minWidth: 650, idealWidth: 710, minHeight: 500, idealHeight: 640)
         }
@@ -640,13 +644,15 @@ struct LibraryShellView: View {
                      : "Try another search or clear the filters.")
                     .foregroundStyle(.secondary)
                 Button(favoritesEmpty ? "Browse all games" : ubisoftEmpty ? "Manage Ubisoft Connect"
-                       : initial && setup.record?.installation != .installed ? "Set up Gamekit" : initial ? "Manage Windows Steam" : "Clear filters") {
+                       : initial && setup.record?.installation != .installed && !wizardComplete ? "Set up Gamekit"
+                       : initial ? "Manage Windows Steam" : "Clear filters") {
                     if favoritesEmpty { destination = .all }
-                    else if initial && setup.record?.installation != .installed { showSetupWizard = true }
+                    else if initial && setup.record?.installation != .installed && !wizardComplete { showSetupWizard = true }
                     else if initial { openSettings(.launchers) }
                     else { query = ""; filter = .all }
                 }
-                .accessibilityIdentifier(initial && setup.record?.installation != .installed && !ubisoftEmpty ? "open-setup-wizard" : "empty-library-action")
+                .accessibilityIdentifier(initial && setup.record?.installation != .installed && !wizardComplete && !ubisoftEmpty
+                    ? "open-setup-wizard" : "empty-library-action")
             }
         }
     }
@@ -658,10 +664,24 @@ struct LibraryShellView: View {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--metadata-root") && !arguments.contains("--ui-test-wizard") { return }
         #endif
-        guard !wizardOffered, setup.checkedAt != nil || setup.problem != nil,
+        guard setup.checkedAt != nil || setup.problem != nil else { return }
+        if setup.isReady && !wizardComplete && !showSetupWizard {
+            Task {
+                do {
+                    try await SetupWizardCompletionStore(root: AppStorageLocations.metadata).markComplete()
+                    wizardComplete = true
+                } catch { /* Preserve an unreadable receipt; setup can still be used manually. */ }
+            }
+        }
+        guard !wizardOffered, !setup.isReady,
               setup.record?.installation != .installed, ubisoft.installation != .installed else { return }
         wizardOffered = true
-        showSetupWizard = true
+        Task {
+            do {
+                wizardComplete = try await SetupWizardCompletionStore(root: AppStorageLocations.metadata).isComplete()
+                if !wizardComplete { showSetupWizard = true }
+            } catch { showSetupWizard = true }
+        }
     }
 
     private var inspector: some View {

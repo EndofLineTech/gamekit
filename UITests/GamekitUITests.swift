@@ -10,18 +10,14 @@ final class GamekitUITests: XCTestCase {
         let wizard = app.windows["Gamekit"].sheets.firstMatch
         XCTAssertTrue(wizard.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.descendants(matching: .any)["welcome-prerequisite-runtime"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.links["welcome-download-wine"].exists)
-        XCTAssertFalse(app.links["welcome-download-template"].exists)
-        XCTAssertTrue(app.links["welcome-download-graphics"].exists)
-        XCTAssertFalse(app.buttons["welcome-choose-runtime"].exists)
-        XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
-        XCTAssertEqual(app.buttons["welcome-install-wine"].label, "Install Wine")
-        XCTAssertTrue(app.buttons["welcome-install-wine"].isHittable, "Install Wine belongs in the visible first-run area")
-        XCTAssertTrue(wizard.frame.contains(app.buttons["welcome-install-wine"].frame))
-        XCTAssertTrue(app.buttons["welcome-install-runtime"].exists)
-        XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
-        XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'free Apple Developer account'")).firstMatch.exists)
+        let next = app.buttons["wizard-next"]
+        XCTAssertTrue(next.isEnabled)
+        next.click()
+        XCTAssertTrue(app.staticTexts["1. Install Rosetta"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["wizard-prerequisite-rosetta"].exists)
+        XCTAssertTrue(next.isEnabled, "Detected Rosetta enables the next step")
+        app.buttons["wizard-back"].click()
         let manage = app.buttons["welcome-open-launchers"]
         manage.click()
         XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists)
@@ -30,24 +26,36 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(app.buttons["settings-install-wine"].isHittable, "Recovery keeps Install Wine visible")
     }
 
-    func testWelcomeRefreshEnablesGuardedSteamInstallWithoutStartingIt() throws {
+    func testWizardGatesNextAndRecordsCompletionBeforeOfferingLaunchers() async throws {
         let root = try temporaryRoot()
         let app = XCUIApplication()
-        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready-after-refresh", "--ui-test-wizard"]
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "wizard-ready-after-refresh", "--ui-test-wizard"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.windows["Gamekit"].sheets.firstMatch.waitForExistence(timeout: 15))
-        let welcome = app.staticTexts["welcome-heading"]
-        XCTAssertTrue(welcome.waitForExistence(timeout: 15))
-        let install = app.buttons["welcome-install-steam"]
-        XCTAssertFalse(install.isEnabled)
-        XCTAssertTrue(app.staticTexts["welcome-steam-blocker"].exists)
-        let refresh = app.buttons["welcome-refresh"]
-        refresh.click()
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
+        XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
+        let next = app.buttons["wizard-next"]
+        next.click()
+        XCTAssertTrue(app.staticTexts["1. Install Rosetta"].waitForExistence(timeout: 10))
+        XCTAssertFalse(next.isEnabled)
+        app.buttons["wizard-refresh"].click()
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
-        XCTAssertTrue(install.isHittable, "Ready users can see Install Steam without scrolling through setup")
-        XCTAssertFalse(app.staticTexts["welcome-steam-blocker"].exists)
+        next.click()
+        XCTAssertTrue(app.staticTexts["2. Prepare Wine"].waitForExistence(timeout: 10))
+        XCTAssertTrue(next.isEnabled, "Already-ready fixture does not download Wine again")
+        next.click()
+        XCTAssertTrue(app.staticTexts["3. Add Apple graphics"].waitForExistence(timeout: 10))
+        XCTAssertTrue(next.isEnabled)
+        next.click()
+        XCTAssertTrue(app.staticTexts["4. Choose your launchers"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["wizard-install-steam"].isEnabled)
+        XCTAssertTrue(app.buttons["wizard-install-ubisoft"].exists)
+        let recorded = try await SetupWizardCompletionStore(root: root).isComplete()
+        XCTAssertTrue(recorded)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists, "Completed prerequisites do not reopen the wizard")
     }
 
     func testReadyLauncherSetupShowsSteamActionBesideWineStatus() throws {
@@ -72,11 +80,28 @@ final class GamekitUITests: XCTestCase {
         app.launchArguments = ["--metadata-root", try temporaryRoot().path, "--ui-test-scenario", "fresh-missing-rosetta", "--ui-test-wizard"]
         app.launch(); defer { app.terminate() }
         XCTAssertTrue(app.staticTexts["welcome-heading"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.buttons["welcome-install-rosetta"].exists)
-        XCTAssertEqual(app.buttons["welcome-install-rosetta"].label, "Install Rosetta with macOS…")
-        XCTAssertTrue(app.buttons["welcome-install-wine"].isEnabled)
-        XCTAssertFalse(app.buttons["welcome-install-runtime"].isEnabled)
-        XCTAssertFalse(app.buttons["welcome-install-steam"].isEnabled)
+        app.buttons["wizard-next"].click()
+        XCTAssertTrue(app.staticTexts["1. Install Rosetta"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["wizard-next"].isEnabled)
+    }
+
+    func testAlreadyReadyPrerequisitesSkipFirstRunWizard() async throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready", "--ui-test-wizard"]
+        app.launch(); defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists)
+        let store = try SetupWizardCompletionStore(root: root)
+        for _ in 0..<20 {
+            if try await store.isComplete() { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let recorded = try await store.isComplete()
+        XCTAssertTrue(recorded, "A previously ready account is marked complete without showing setup")
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.staticTexts["library-heading"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.windows["Gamekit"].sheets.firstMatch.exists)
     }
 
     func testInspectorSummarizesSavedChoicesAndGatesManagedGameFiles() async throws {

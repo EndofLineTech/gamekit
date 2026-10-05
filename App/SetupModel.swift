@@ -317,10 +317,12 @@ final class SetupModel: ObservableObject {
         case "invalid-runtime": missing = [.runtime, .graphicsPayload]
         case "ready", "ready-with-delay", "queued-game-launch": missing = []
         case "ready-after-refresh": missing = fixtureReads == 1 ? [.rosetta] : []
+        case "wizard-ready-after-refresh": missing = fixtureReads == 1 ? [.rosetta] : []
         default: return nil
         }
         return .init(checks: [Prerequisite.supportedHost, .rosetta, .runtime, .graphicsPayload, .diskSpace].map {
-            .init(prerequisite: $0, status: missing.contains($0) ? .failed : .passed,
+            .init(prerequisite: $0, status: scenario == "wizard-ready-after-refresh" && fixtureReads == 1 && $0 == .rosetta
+                ? .unknown : missing.contains($0) ? .failed : .passed,
                   detail: missing.contains($0) ? "UI test: prerequisite unavailable" : "UI test: prerequisite passed")
         })
         #else
