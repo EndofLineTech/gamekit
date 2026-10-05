@@ -48,7 +48,9 @@ manifest does not assert that release acceptance or reboot testing has passed.
 2. Click **Install Wine** to download and verify the pinned
    Sikarugir engine and template. This step can run before Rosetta is installed
    and before you have Apple's image. Wine is prepared in your own Application
-   Support, and is not selected or used to launch Steam before graphics is ready.
+    Support, and is not selected or used to launch Steam before graphics is ready.
+   A prepared Wine download is not the complete selected runtime; the detailed
+   Wine and graphics checks below must pass before Steam can be installed.
 3. Sign in with a **free Apple Developer account** and download the listed **Game Porting Toolkit 4.0
    beta 2** DMG yourself. Once Wine and Rosetta are ready, click **Choose Apple
    DMG and install graphics…**, select the original outer Apple download (or its

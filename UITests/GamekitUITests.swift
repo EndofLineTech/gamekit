@@ -40,10 +40,12 @@ final class GamekitUITests: XCTestCase {
         XCTAssertTrue(welcome.waitForExistence(timeout: 15))
         let install = app.buttons["welcome-install-steam"]
         XCTAssertFalse(install.isEnabled)
+        XCTAssertTrue(app.staticTexts["welcome-steam-blocker"].exists)
         let refresh = app.buttons["welcome-refresh"]
         refresh.click()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        XCTAssertFalse(app.staticTexts["welcome-steam-blocker"].exists)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
     }
 

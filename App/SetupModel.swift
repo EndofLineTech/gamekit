@@ -25,6 +25,8 @@ final class SetupModel: ObservableObject {
     @Published private(set) var availableGraphicsBackends: Set<GraphicsBackend> = [.automatic, .metal3]
     @Published private(set) var sharedFullscreenSpace = false
     private var owner: UUID?
+    private var completedRuntimeSetup = false
+    private var keptRuntimeSelectionMessage: String?
     private var fixtureReads = 0
     private var refreshCount = 0
     var isReady: Bool { report?.prerequisites == .ready }
@@ -43,6 +45,24 @@ final class SetupModel: ObservableObject {
     var actions: SteamActionPolicy {
         .init(ready: isReady, installation: record?.installation, files: files, snapshot: snapshot,
               lifecycle: lifecycleState, hasReceipt: selectionLocked, busy: isBusy, metadataValid: metadataValid)
+    }
+    var steamInstallBlocker: String? {
+        if isBusy { return "Setup checks are still running. Please wait for the result." }
+        guard let report else { return problem ?? "Prerequisite checks have not completed. Choose Refresh checks." }
+        let outstanding = report.checks.filter { $0.status != .passed }
+        if !outstanding.isEmpty {
+            return "Steam needs: " + outstanding.map { "\(PrerequisiteGuidance.title($0.prerequisite)) — \($0.detail)" }.joined(separator: "; ")
+        }
+        if !metadataValid { return "Saved setup state could not be verified. Refresh checks or open local diagnostics." }
+        if snapshot?.complete != true { return "Steam process ownership could not be checked. Refresh checks before installing." }
+        if snapshot?.processes.isEmpty == false { return "A managed session is active. Stop it before installing Steam." }
+        if files.prefixExists && record == nil {
+            return "An existing Steam prefix has no installation record. Open Launcher setup and recovery; Gamekit will not overwrite it."
+        }
+        if record?.installation == .installed { return "Steam is already installed. Open it from Launcher setup and recovery." }
+        if files.prefixExists && !actions.retry { return "An existing Steam setup needs recovery before installation can continue." }
+        if !actions.install && !actions.retry { return "Review the saved Steam setup under Launcher setup and recovery." }
+        return nil
     }
 
     func begin(_ description: String) -> UUID? {
@@ -83,12 +103,31 @@ final class SetupModel: ObservableObject {
                 let actual = try await detector.detect(selected, selection: selected.profile.identity)
                 let validated = fixtureReport() ?? actual
                 await refreshFacts(during: token)
-                winePrepared = (try? await RuntimeSetup(root: AppStorageLocations.metadata).hasPreparedWine()) ?? false
+                winePrepared = validated.prerequisites == .ready ? false
+                    : ((try? await RuntimeSetup(root: AppStorageLocations.metadata).hasPreparedWine()) ?? false)
                 report = validated
                 checkedAt = Date()
                 diagnostics.environmentRefreshID = UUID()
-            } catch { problem = AppFailure.message(error); report = nil }
+                end(token)
+                finishRuntimeSetupRefresh()
+            } catch {
+                problem = AppFailure.message(error); report = nil
+                end(token)
+                finishRuntimeSetupRefresh()
+            }
         }
+    }
+
+    private func finishRuntimeSetupRefresh() {
+        guard completedRuntimeSetup else { return }
+        if let keptRuntimeSelectionMessage {
+            runtimeSetupStatus = keptRuntimeSelectionMessage + " Current selection: "
+                + (steamInstallBlocker ?? "checks passed; review your selected runtime before installing Steam.")
+            return
+        }
+        if actions.install { runtimeSetupStatus = "Runtime checks passed. Install Steam is available." }
+        else if actions.retry { runtimeSetupStatus = "Runtime checks passed. Use Retry Steam setup to continue the saved installation." }
+        else { runtimeSetupStatus = "Runtime was assembled, but Steam is not ready: " + (steamInstallBlocker ?? "Refresh checks or open launcher recovery.") }
     }
 
     func refreshFacts(lifecycle: SteamLifecycleState? = nil, during token: UUID? = nil) async {
@@ -213,12 +252,17 @@ final class SetupModel: ObservableObject {
                 let current = try await settings.layout()
                 let fallback = current.dataRoot.appendingPathComponent(current.profile.bundlePath)
                 if current.bundle == fallback && current.profile.revision == .original {
+                    keptRuntimeSelectionMessage = nil
                     try await settings.select(nil, revision: .original)
                 } else {
-                    runtimeSetupStatus = "\(prepared.lastPathComponent) is ready. Your existing runtime selection was kept; choose the new app explicitly if you want to switch."
+                    keptRuntimeSelectionMessage = "\(prepared.lastPathComponent) is ready. Your existing runtime selection was kept; choose the new app explicitly if you want to switch."
+                    runtimeSetupStatus = keptRuntimeSelectionMessage
                 }
                 layout = try await settings.layout(); selectionRevision = UUID()
-                if runtimeSetupStatus?.contains("existing runtime selection") != true { runtimeSetupStatus = "\(prepared.lastPathComponent) is ready. Refreshing checks…" }
+                completedRuntimeSetup = true
+                if runtimeSetupStatus?.contains("existing runtime selection") != true {
+                    runtimeSetupStatus = "Apple graphics assembled. Checking the selected runtime and Steam prerequisites…"
+                }
                 end(token); refresh(diagnostics: diagnostics)
             } catch {
                 runtimeSetupStatus = nil

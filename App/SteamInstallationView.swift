@@ -133,7 +133,11 @@ struct SteamInstallationView: View {
                 Label("Setup and recovery", systemImage: "square.and.arrow.down").font(.headline)
                 Text(model.status ?? savedStatus).accessibilityIdentifier("installation-status")
                 if model.running { ProgressView().controlSize(.small).accessibilityLabel("Installation operation in progress") }
-                if !setup.isReady && !model.running { Text("Installation and retry become available after prerequisite checks pass.").font(.caption).foregroundStyle(.secondary) }
+                if !model.running && !setup.actions.install && !setup.actions.retry,
+                   let reason = setup.steamInstallBlocker {
+                    Text(reason).font(.caption).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings-steam-blocker")
+                }
                 HStack {
                     Button("Install Steam") { model.start(diagnostics: diagnostics, setup: setup) }
                         .disabled(model.running || !setup.actions.install).accessibilityIdentifier("install-steam")
@@ -204,7 +208,8 @@ struct SteamInstallationView: View {
     private var savedStatus: String {
         guard setup.metadataValid else { return "Saved state is not verified yet. Refresh checks or inspect local diagnostics." }
         guard let record = setup.record else {
-            return setup.files.prefixExists ? "An unregistered prefix exists. Gamekit will not adopt or overwrite it." : "Choose a validated runtime, then install Windows Steam."
+            if setup.files.prefixExists { return "An unregistered prefix exists. Gamekit will not adopt or overwrite it." }
+            return setup.isReady ? "Ready to install Windows Steam." : "Complete runtime setup, then install Windows Steam."
         }
         switch record.installation {
         case .installed: return "Steam is installed. Use Launch Windows Steam above."

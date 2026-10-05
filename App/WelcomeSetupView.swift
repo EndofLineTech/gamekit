@@ -33,12 +33,12 @@ struct WelcomeSetupView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!setup.canPrepareWine)
                     .accessibilityIdentifier("welcome-install-wine")
-                if setup.winePrepared {
-                    Label("Wine is prepared and verified. Next, install Apple's graphics.", systemImage: "checkmark.circle.fill")
-                        .accessibilityIdentifier("welcome-wine-prepared")
-                } else if allRuntimeChecksReady {
+                if allRuntimeChecksReady {
                     Text("The selected Wine runtime and graphics are already ready.")
                         .font(.callout).foregroundStyle(.secondary)
+                } else if setup.winePrepared {
+                    Label("Wine files are downloaded and verified. This preparation is separate from the complete runtime checked below; Steam needs every check to pass.", systemImage: "checkmark.circle.fill")
+                        .accessibilityIdentifier("welcome-wine-prepared")
                 } else {
                     Text("Gamekit downloads and verifies Wine for you. This works before Rosetta or Apple's DMG is available.")
                         .font(.callout).foregroundStyle(.secondary)
@@ -74,6 +74,10 @@ struct WelcomeSetupView: View {
             .buttonStyle(.borderedProminent)
             .disabled(installation.running || setup.isBusy || !(setup.actions.install || setup.actions.retry))
             .accessibilityIdentifier("welcome-install-steam")
+            if !(setup.actions.install || setup.actions.retry), let reason = setup.steamInstallBlocker {
+                Text(reason).font(.callout).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("welcome-steam-blocker")
+            }
             if let status = installation.status {
                 Text(status).font(.callout).accessibilityIdentifier("welcome-installation-status")
             }
