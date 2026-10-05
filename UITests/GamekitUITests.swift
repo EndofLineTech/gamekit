@@ -45,7 +45,25 @@ final class GamekitUITests: XCTestCase {
         refresh.click()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed)
+        XCTAssertTrue(install.isHittable, "Ready users can see Install Steam without scrolling through setup")
         XCTAssertFalse(app.staticTexts["welcome-steam-blocker"].exists)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
+    }
+
+    func testReadyLauncherSetupShowsSteamActionBesideWineStatus() throws {
+        let root = try temporaryRoot()
+        let app = XCUIApplication()
+        app.launchArguments = ["--metadata-root", root.path, "--ui-test-scenario", "ready"]
+        app.launch(); defer { app.terminate() }
+        let settings = app.buttons["nav-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 15))
+        settings.click()
+        app.buttons["settings-Launchers"].click()
+        XCTAssertTrue(app.staticTexts["The selected Wine runtime and graphics are already ready."].waitForExistence(timeout: 10))
+        let install = app.buttons["settings-quick-install-steam"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: install)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed)
+        XCTAssertTrue(install.isHittable)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("Environments/steam").path))
     }
 

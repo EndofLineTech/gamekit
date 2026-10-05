@@ -27,6 +27,7 @@ struct WelcomeSetupView: View {
                     .disabled(setup.isBusy)
                     .accessibilityIdentifier("welcome-refresh")
             }
+            if allRuntimeChecksReady { steamStep }
             VStack(alignment: .leading, spacing: 8) {
                 Text("1. Install Wine").font(.headline)
                 Button("Install Wine") { setup.prepareWine(diagnostics: diagnostics) }
@@ -55,31 +56,20 @@ struct WelcomeSetupView: View {
                     Text(instruction).font(.callout).accessibilityIdentifier("welcome-rosetta-instruction")
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("2. Add Apple graphics").font(.headline)
-                Link("Get GPTK from Apple (free Developer account required)", destination: PrerequisiteGuidance.graphics)
-                    .accessibilityIdentifier("welcome-download-graphics")
-                Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
-                    .disabled(!setup.winePrepared || setup.isBusy || setup.selectionLocked || !graphicsSetupReady || allRuntimeChecksReady)
-                    .accessibilityIdentifier("welcome-install-runtime")
-                if rosettaMissing {
-                    Text("Wait for macOS to finish installing Rosetta; Gamekit checks again automatically before enabling graphics setup.")
-                        .font(.callout).foregroundStyle(.secondary)
+            if !allRuntimeChecksReady {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("2. Add Apple graphics").font(.headline)
+                    Link("Get GPTK from Apple (free Developer account required)", destination: PrerequisiteGuidance.graphics)
+                        .accessibilityIdentifier("welcome-download-graphics")
+                    Button("Choose Apple DMG and install graphics…") { setup.prepareRuntime(diagnostics: diagnostics) }
+                        .disabled(!setup.winePrepared || setup.isBusy || setup.selectionLocked || !graphicsSetupReady)
+                        .accessibilityIdentifier("welcome-install-runtime")
+                    if rosettaMissing {
+                        Text("Wait for macOS to finish installing Rosetta; Gamekit checks again automatically before enabling graphics setup.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                 }
-            }
-            Divider()
-            Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
-                installation.start(diagnostics: diagnostics, setup: setup, recoveryRetry: setup.actions.retry)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(installation.running || setup.isBusy || !(setup.actions.install || setup.actions.retry))
-            .accessibilityIdentifier("welcome-install-steam")
-            if !(setup.actions.install || setup.actions.retry), let reason = setup.steamInstallBlocker {
-                Text(reason).font(.callout).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("welcome-steam-blocker")
-            }
-            if let status = installation.status {
-                Text(status).font(.callout).accessibilityIdentifier("welcome-installation-status")
+                steamStep
             }
             if let problem = setup.problem {
                 Label(problem, systemImage: "exclamationmark.triangle")
@@ -98,6 +88,26 @@ struct WelcomeSetupView: View {
             if setup.selectionLocked {
                 Text("Stop the managed Steam session before changing runtimes.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var steamStep: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(allRuntimeChecksReady ? "Next: Install Windows Steam" : "3. Install Windows Steam")
+                .font(.headline)
+            Button(setup.actions.retry ? "Retry Steam setup" : "Install Steam") {
+                installation.start(diagnostics: diagnostics, setup: setup, recoveryRetry: setup.actions.retry)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(installation.running || setup.isBusy || !(setup.actions.install || setup.actions.retry))
+            .accessibilityIdentifier("welcome-install-steam")
+            if !(setup.actions.install || setup.actions.retry), let reason = setup.steamInstallBlocker {
+                Text(reason).font(.callout).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("welcome-steam-blocker")
+            }
+            if let status = installation.status {
+                Text(status).font(.callout).accessibilityIdentifier("welcome-installation-status")
             }
         }
     }
