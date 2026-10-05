@@ -38,34 +38,37 @@ manifest does not assert that release acceptance or reboot testing has passed.
 
 ## First setup
 
-1. Gamekit opens a **Welcome to Gamekit** setup sheet before the library if no
-   managed launcher is installed. It checks this Mac, Rosetta, the pinned Wine
-   runtime, Apple Game Porting Toolkit D3DMetal graphics and storage. For a
-   missing Rosetta installation, click **Install Rosetta with macOS…**. Gamekit
-   opens its signed Intel-only helper through macOS, which requests Rosetta from
-   Apple. Approve the macOS installation dialog if it appears; Gamekit rechecks
-   automatically. No Terminal command or manual Rosetta download is required.
-2. Click **Install Wine** to download and verify the pinned
-   Sikarugir engine and template. This step can run before Rosetta is installed
-   and before you have Apple's image. Wine is prepared in your own Application
-    Support, and is not selected or used to launch Steam before graphics is ready.
-   A prepared Wine download is not the complete selected runtime; the detailed
-   Wine and graphics checks below must pass before Steam can be installed.
-3. Sign in with a **free Apple Developer account** and download the listed **Game Porting Toolkit 4.0
-   beta 2** DMG yourself. Once Wine and Rosetta are ready, click **Choose Apple
-   DMG and install graphics…**, select the original outer Apple download (or its
-   nested evaluation DMG), and wait while Gamekit verifies the outer and nested
-   SHA-256 digests and assembles a separate complete runtime.
-   Existing runtimes, explicit selections and Wine prefixes are left in place.
-   Gamekit does not bundle Wine or Apple's evaluation graphics, or enter Apple
-   credentials for you. You can close and reopen Welcome or use **Launcher setup
-   and recovery** for the full controls in **Settings → Launchers**, where
-   **Install Wine** and the guarded **Install Steam** action are also available
-   near the top, beside the selected runtime's readiness status.
-4. Click **Refresh checks** after any required system install. When all checks pass,
-   click **Install Steam**; Gamekit downloads and validates Valve's installer.
-   Existing configured installations open to the library instead of repeating
-   first-run guidance.
+Gamekit opens a **Welcome to Gamekit** wizard on an unconfigured Mac. It explains
+the prerequisites before asking you to continue. Each step has a **Next** button
+that becomes available only after the corresponding prerequisite is detected:
+
+1. **Rosetta:** The Rosetta step requests installation through macOS if it is
+   missing. Approve Apple's system prompt and provide your Mac credentials if
+   asked. Gamekit rechecks Intel execution automatically; no Terminal command or
+   manual Rosetta download is needed.
+2. **Wine:** When you enter this step, Gamekit automatically downloads and
+   verifies the pinned Sikarugir engine and template. A verified Wine preparation
+   is not yet the complete runtime; Apple graphics come next. Failed downloads
+   can be retried without changing an existing runtime or Wine prefix.
+3. **Apple graphics:** Sign in with a **free Apple Developer account** and
+   download **Game Porting Toolkit 4.0 beta 2**. Follow the link in the wizard,
+   then choose your downloaded original outer DMG (or its nested evaluation DMG).
+   Gamekit verifies the pinned images and assembles a separate runtime. **Next**
+   becomes available only when the selected runtime, graphics, Rosetta, host and
+   storage checks all pass.
+4. **Launchers:** After completing prerequisites, optionally install **Windows
+   Steam** or **Ubisoft Connect**, or choose **Finish** without installing either.
+   You can install launchers later from **Settings → Launchers**. Each launcher
+   obtains its own verified installer; neither your sign-in nor game downloads
+   are performed by Gamekit.
+
+The wizard does not automatically reappear after the prerequisites have been
+verified and completion saved, even if you skip launcher installation. Existing
+configured installations also open directly to the library. **Browse library**
+can dismiss an unfinished wizard; it reappears on a later launch until setup is
+complete. **Launcher setup and recovery** opens the full controls in **Settings
+→ Launchers**. Gamekit does not bundle Wine or Apple's evaluation graphics, and
+does not enter Apple credentials or accept system prompts for you.
 
 For previously prepared runtimes, use **Settings → Launchers → Choose runtime…**
 instead of downloading them again. Under **Settings → Launchers**, you can also:
