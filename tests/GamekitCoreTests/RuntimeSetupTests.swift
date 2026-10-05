@@ -59,6 +59,11 @@ struct RuntimeSetupTests {
         #expect(result.resolvingSymlinksInPath() == parent.appendingPathComponent("Gamekit/" + recipe.runtimeBundlePath).resolvingSymlinksInPath())
         let layout = RuntimeLayout(dataRoot: parent.appendingPathComponent("Gamekit"), bundle: result)
         #expect(try await RuntimeDetector().detect(layout, selection: layout.profile.identity).prerequisites == .ready)
+        let settings = RuntimeSettingsStore(store: try EnvironmentStore(root: parent.appendingPathComponent("Gamekit")))
+        try await settings.select(nil, revision: .original)
+        let selected = try await settings.layout()
+        #expect(selected.bundle == result)
+        #expect(try await RuntimeDetector().detect(selected, selection: selected.profile.identity).prerequisites == .ready)
         #expect(try sourceHashes() == originalHashes)
         #expect(try FileManager.default.contentsOfDirectory(atPath: downloads.path).isEmpty)
         await #expect(throws: RuntimeSetupError.alreadyInstalled) { try await resumed.install(appleDMG: apple) }
